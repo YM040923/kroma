@@ -1,0 +1,16 @@
+{
+  "browse.allGenres": "全部类型",
+  "browse.count.movies": "{count} 部电影",
+  "browse.count.movies_one": "{count} 部电影",
+  "browse.count.series": "{count} 部剧集",
+  "browse.count.series_one": "{count} 部剧集",
+  "browse.genres": "类型",
+  "browse.jumpToLetter": "跳到 {letter}",
+  "browse.letterNav": "跳到某个字母",
+  "browse.library": "媒体库",
+  "browse.sort.added": "最近添加",
+  "browse.sort.rating": "评分",
+  "browse.sort.release": "上映日期",
+  "browse.sort.title": "标题（A-Z）",
+  "browse.sortBy": "排序方式"
+}

@@ -1,0 +1,13 @@
+{
+  "vocab.abbreviations": "Dr、Mr、Mrs、Ms、St、Jr、Sr、vs、Prof、Lt、Col、Gen、Sgt、Capt",
+  "vocab.articles": "the、a、an",
+  "vocab.episode": "episode、ep、剧集、集",
+  "vocab.movie": "film、films、movie、movies、电影",
+  "vocab.numbers": "two、three、four、five、six、seven、eight、nine、ten",
+  "vocab.season": "season、季",
+  "vocab.show": "series、show、shows、剧集",
+  "vocab.theme.christmas": "christmas、xmas、santa claus、圣诞",
+  "vocab.theme.heist": "heist、robbery、bank job、劫案、盗窃",
+  "vocab.theme.summer": "summer、vacation、road trip、beach、夏天、公路",
+  "vocab.theme.trueStory": "true story、true events、real events、biopic、真实事件"
+}

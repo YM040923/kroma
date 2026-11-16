@@ -1,0 +1,10 @@
+{
+  "connection.directOfferAction": "直连",
+  "connection.directOfferDetail": "直连可跳过绕行互联网的路径。浏览器会请求访问你的本地网络。",
+  "connection.directOfferDismiss": "不再提示",
+  "connection.directOfferFailed": "服务器未在其局域网地址上响应。",
+  "connection.directOfferTitle": "你与服务器处于同一网络",
+  "connection.directRoute": "直连（{host}）",
+  "connection.offline": "离线",
+  "connection.reconnecting": "正在重连…"
+}

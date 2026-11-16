@@ -1,0 +1,10 @@
+{
+  "passkey.authFailed": "通行密钥登录失败",
+  "passkey.ceremonyExpired": "通行密钥请求已过期，请重试",
+  "passkey.defaultName": "通行密钥",
+  "passkey.notFound": "未找到通行密钥",
+  "passkey.originInvalid": "通行密钥需要安全（HTTPS）连接",
+  "passkey.originMissing": "缺少请求来源",
+  "passkey.registerFailed": "无法注册通行密钥",
+  "passkey.startFailed": "无法发起通行密钥请求"
+}

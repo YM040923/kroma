@@ -1,0 +1,18 @@
+{
+  "permissions.library": "媒体库",
+  "permissions.libraryHint": "扫描、媒体库、元数据",
+  "permissions.playback": "播放",
+  "permissions.playbackHint": "观看目录并续播",
+  "permissions.reportsManage": "管理报告",
+  "permissions.reportsManageHint": "处理用户提交的问题报告",
+  "permissions.requestAuto": "自动批准",
+  "permissions.requestAutoHint": "该账户的请求跳过审批队列",
+  "permissions.requestCreate": "请求",
+  "permissions.requestCreateHint": "搜索 TMDB 并请求电影/剧集",
+  "permissions.requestManage": "请求管理",
+  "permissions.requestManageHint": "批准/拒绝请求，管理下载",
+  "permissions.settings": "设置",
+  "permissions.settingsHint": "服务器配置",
+  "permissions.users": "用户",
+  "permissions.usersHint": "管理账户并邀请用户"
+}

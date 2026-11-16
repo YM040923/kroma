@@ -1,0 +1,17 @@
+{
+  "rematch.action": "修正匹配",
+  "rematch.applyFailed": "无法更新匹配。",
+  "rematch.confidence": "可信度 {score}%",
+  "rematch.confidenceValue": "{score}%",
+  "rematch.current": "当前",
+  "rematch.groupLikely": "可能匹配",
+  "rematch.groupOther": "其他结果",
+  "rematch.loadFailed": "无法加载 TMDB 建议。",
+  "rematch.noResults": "此次搜索没有 TMDB 结果。",
+  "rematch.parsedAs": "识别为 {title}",
+  "rematch.reset": "恢复自动匹配",
+  "rematch.search": "搜索",
+  "rematch.searchPlaceholder": "在 TMDB 搜索其他片名",
+  "rematch.title": "修正 TMDB 匹配",
+  "rematch.tmdbId": "TMDB #{id}"
+}

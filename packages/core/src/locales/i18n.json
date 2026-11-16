@@ -3,6 +3,7 @@
   "source": "fr",
   "fallback": "en",
   "locales": {
-    "en": { "stage": "stable" }
+    "en": { "stage": "stable" },
+    "zh-Hans": { "stage": "beta" }
   }
 }

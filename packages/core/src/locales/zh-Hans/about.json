@@ -1,0 +1,18 @@
+{
+  "about.branch": "分支",
+  "about.buildDate": "构建于",
+  "about.commit": "提交",
+  "about.cpu": "CPU",
+  "about.cpuCores": "{count} 个核心",
+  "about.cpuCores_one": "{count} 个核心",
+  "about.memory": "内存",
+  "about.memoryFree": "共 {total} GB，可用 {free} GB",
+  "about.memorySize": "{gb} GB",
+  "about.platform": "平台",
+  "about.privacyBody": "此 App 不收集任何数据。我们没有账户体系，也没有分析和追踪：它只与你配置的服务器通信，并只显示该服务器提供的内容。你可以让自己的服务器以匿名方式计入全球 KROMA 安装数，若所有者不开启则不会被计入。",
+  "about.privacyTitle": "隐私",
+  "about.privacyUrl": "完整政策：kroma.tv/privacy",
+  "about.repository": "代码仓库",
+  "about.title": "关于",
+  "about.version": "版本"
+}

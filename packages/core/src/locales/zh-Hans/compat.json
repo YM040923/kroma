@@ -1,0 +1,9 @@
+{
+  "compat.clientOutdated": "此 App 版本为 {client}，服务器 {server} 已不再支持它。请更新 App 后继续。",
+  "compat.clientOutdatedTitle": "此 App 需要更新",
+  "compat.howToUpdateMobile": "请从 App Store 或 Google Play 更新 KROMA。",
+  "compat.howToUpdateTv": "请从电视的应用商店或你当初安装的来源更新 KROMA。",
+  "compat.howToUpdateWeb": "请刷新页面。若仍然显示此提示，说明网页版是独立于服务器安装的，需要单独更新。",
+  "compat.reload": "刷新",
+  "compat.serverOutdated": "你的服务器（v{server}）版本低于此 App（v{client}）所需的版本。请更新服务器以避免问题。"
+}
