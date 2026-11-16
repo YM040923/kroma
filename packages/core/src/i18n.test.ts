@@ -35,8 +35,11 @@ describe('normalizeLocale', () => {
   });
 
   it('accepts every endonym the catalogs spell, so the two cannot drift apart', () => {
+    // A regional locale (zh-Hans above zh) names itself under its language, the
+    // same key `localeLabel` reads; the catalog only ever holds `lang.<language>`.
     for (const { code } of LOCALES) {
-      expect(normalizeLocale(translate(code, `lang.${code}`))).toBe(code);
+      const language = String(code).split('-')[0] ?? code;
+      expect(normalizeLocale(translate(code, `lang.${language}` as never))).toBe(code);
     }
   });
 

@@ -7,9 +7,27 @@
 
 import type { Locale, Translate } from '@kromatv/i18n';
 
-const BYTE_UNITS: Record<Locale, readonly string[]> = {
+// A language this table has no row for reads its language prefix, then English.
+// Every locale in the app's set is one of these keys today, but a language a
+// fork adds is not, and a missing row used to take the page down on its first
+// byte size rather than falling back.
+function row<T>(table: Record<string, T>, locale: Locale): T {
+  const exact = table[locale];
+  if (exact !== undefined) {
+    return exact;
+  }
+  const [language] = String(locale).toLowerCase().split('-');
+  return table[language ?? 'en'] ?? (table.en as T);
+}
+
+const BYTE_UNITS: Record<string, readonly string[]> = {
   fr: ['o', 'Ko', 'Mo', 'Go', 'To', 'Po'],
   en: ['B', 'KB', 'MB', 'GB', 'TB', 'PB'],
+  // Chinese scales in the same 1024 steps and its readers know the Latin
+  // symbols, which is what the app's other surfaces already show.
+  zh: ['B', 'KB', 'MB', 'GB', 'TB', 'PB'],
+  ja: ['B', 'KB', 'MB', 'GB', 'TB', 'PB'],
+  ko: ['B', 'KB', 'MB', 'GB', 'TB', 'PB'],
 };
 
 const DATES = new Map<Locale, Intl.DateTimeFormat | null>();
@@ -32,8 +50,14 @@ function relativeFormat(locale: Locale): Intl.RelativeTimeFormat | null {
   RELATIVE.set(locale, made);
   return made;
 }
-const DECIMAL_SEPARATOR: Record<Locale, string> = { fr: ',', en: '.' };
-const GROUP_SEPARATOR: Record<Locale, string> = { fr: '\u202F', en: ',' };
+const DECIMAL_SEPARATOR: Record<string, string> = { fr: ',', en: '.', zh: '.', ja: '.', ko: '.' };
+const GROUP_SEPARATOR: Record<string, string> = {
+  fr: '\u202F',
+  en: ',',
+  zh: ',',
+  ja: ',',
+  ko: ',',
+};
 
 function built<T>(make: () => T): T | null {
   try {
@@ -72,8 +96,10 @@ function groupDigits(n: number, locale: Locale): string {
   for (let at = head; at < whole.length; at += 3) {
     groups.push(whole.slice(at, at + 3));
   }
-  const tail = fraction ? `${DECIMAL_SEPARATOR[locale]}${fraction.slice(0, 3)}` : '';
-  return `${n < 0 ? '-' : ''}${groups.join(GROUP_SEPARATOR[locale])}${tail}`;
+  const tail = fraction
+    ? `${row(DECIMAL_SEPARATOR, locale)}${fraction.slice(0, 3)}`
+    : '';
+  return `${n < 0 ? '-' : ''}${groups.join(row(GROUP_SEPARATOR, locale))}${tail}`;
 }
 
 /** A count with the locale's grouping: `1 064` in French, `1,064` in English. */
@@ -123,7 +149,7 @@ function pad(n: number): string {
 export function decimal(n: number, locale: Locale, digits = 1): string {
   return (
     numberFormat(locale, digits)?.format(n) ??
-    n.toFixed(digits).replace('.', DECIMAL_SEPARATOR[locale])
+    n.toFixed(digits).replace('.', row(DECIMAL_SEPARATOR, locale))
   );
 }
 
@@ -146,8 +172,8 @@ export function formatClock(date: Date): string {
 /** A byte size in the locale's units: `1,5 Go` in French, `1.5 GB` in English.
  *  Zero and negatives render as the smallest unit rather than empty. */
 export function formatBytes(bytes: number, locale: Locale): string {
-  const units = BYTE_UNITS[locale];
-  const smallest = units[0] as string;
+  const units = row(BYTE_UNITS, locale);
+  const smallest = units[0] ?? 'B';
   if (!bytes || bytes < 0) {
     return `0 ${smallest}`;
   }
