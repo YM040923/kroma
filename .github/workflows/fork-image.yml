@@ -49,6 +49,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # A registry name is lowercase only, and this owner keeps its capitals
+      # (YM040923), so the image name is folded down before it is used.
+      - name: Resolve image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}:${{ inputs.tag || 'fork' }}" >> "$GITHUB_OUTPUT"
+
       # server/Dockerfile is the from-source build: it compiles the web SPA with
       # bun and the Rust server with cargo, then assembles a runtime image. The
       # commit metadata is passed as build args because .git is not in the
@@ -60,7 +66,7 @@ jobs:
           file: server/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/kroma:${{ inputs.tag || 'fork' }}
+          tags: ${{ steps.image.outputs.name }}
           build-args: |
             KROMA_GIT_HASH=${{ github.sha }}
             KROMA_GIT_HASH_FULL=${{ github.sha }}
