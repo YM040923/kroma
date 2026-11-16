@@ -1,0 +1,19 @@
+{
+  "nav.vpn": "VPN",
+  "vpnBandwidth.bypassed": "{total} 经由网桥不承载的下载客户端传输。",
+  "vpnBandwidth.direction": "方向",
+  "vpnBandwidth.down": "已下载",
+  "vpnBandwidth.empty": "还没有记录。数据从有下载开始统计。",
+  "vpnBandwidth.gap": "没有数据离开隧道，但本时段内网桥有 {duration} 处于断开状态。",
+  "vpnBandwidth.inTunnel": "经隧道",
+  "vpnBandwidth.leaked": "网桥未加密时，有 {total} 的未受保护流量通过。",
+  "vpnBandwidth.noBridge": "未配置 WireGuard 网桥，因此这些流量都没有走隧道。",
+  "vpnBandwidth.noEngine": "未安装下载模块，因此没有流量经网桥，无可统计。",
+  "vpnBandwidth.otherClient": "其他客户端",
+  "vpnBandwidth.outsideTunnel": "隧道之外",
+  "vpnBandwidth.sealed": "整个时段网桥保持加密，因此以下每个字节都经由隧道。",
+  "vpnBandwidth.throughTunnel": "{total} 经隧道",
+  "vpnBandwidth.title": "隧道带宽",
+  "vpnBandwidth.up": "已上传",
+  "vpnBandwidth.window": "时间范围"
+}
