@@ -14,6 +14,7 @@ pub mod input;
 pub mod playlist;
 pub mod probe;
 pub mod program;
+pub mod remote;
 pub mod storyboard;
 pub mod stream;
 pub mod subtitles;

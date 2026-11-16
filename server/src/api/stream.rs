@@ -81,6 +81,11 @@ pub struct StreamQuery {
 
 /// `GET /api/items/:id/stream` (optional `?file=<fileId>`) → range-streamed
 /// original file. Without `?file`, the item's default/best file is served.
+///
+/// A file whose path is an `http(s)://` URL — a `.strm` pointing at a cloud
+/// drive — is served from its origin, the client's `Range` forwarded, rather
+/// than opened on disk. The player's User-Agent is relayed, because a cloud
+/// drive signs the link to whoever asked for it.
 pub async fn stream_item(
     State(state): State<SharedState>,
     MediaViewer(viewer): MediaViewer,
@@ -94,6 +99,12 @@ pub async fn stream_item(
         .ok_or_else(visibility::out_of_scope)?;
     let sink = byte_sink(&state, &headers, &addr);
     Ok(match pick_file_path(&item, q.file.as_deref()) {
+        Some(path) if kroma_media::remote::is_remote(&path) => {
+            let user_agent = headers
+                .get(header::USER_AGENT)
+                .and_then(|value| value.to_str().ok());
+            kroma_media::remote::stream_remote(&path, &headers, user_agent, sink).await
+        }
         Some(path) => stream_file(std::path::Path::new(&path), &headers, sink).await,
         None => json_error(StatusCode::NOT_FOUND, "demo item has no media"),
     })

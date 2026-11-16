@@ -76,9 +76,27 @@ pub(super) fn scan_root(
             continue;
         }
         let path = entry.path();
-        if !has_video_extension(&path) {
+        let is_strm = path
+            .extension()
+            .and_then(std::ffi::OsStr::to_str)
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("strm"));
+        if !is_strm && !has_video_extension(&path) {
             continue;
         }
+        // A `.strm` holds one line: the URL the entry streams from. The path the
+        // catalog carries is that URL, not the file on disk, so playback fetches
+        // the origin and the file's own id stays put when the link is rewritten.
+        let streamed = if is_strm {
+            match read_strm_url(&path) {
+                Some(url) => Some(url),
+                None => {
+                    debug!(path = %path.display(), "a .strm holds no usable URL; skipped");
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
         let rel = path.trim_prefix(root).to_string_lossy().replace('\\', "/");
         // Build the absolute path by joining the resolved root with the relative
         // path no extra stat / symlink resolution per file.
@@ -89,12 +107,6 @@ pub(super) fn scan_root(
             None => (None, None),
         };
 
-        let container = path
-            .extension()
-            .and_then(std::ffi::OsStr::to_str)
-            .unwrap_or("")
-            .to_ascii_lowercase();
-
         let file_name = path
             .file_name()
             .and_then(std::ffi::OsStr::to_str)
@@ -102,9 +114,23 @@ pub(super) fn scan_root(
         let edition = detect_edition(file_name);
 
         let file = MediaFile {
-            id: short_hash(&abs.to_string_lossy()),
+            // A streamed entry is identified by what it points at, so rewriting
+            // the URL inside the `.strm` keeps the same catalog row (and its
+            // watch state, collections and request link) instead of orphaning it.
+            id: {
+                let by_url = streamed.clone();
+                let by_path = abs.to_string_lossy();
+                short_hash(by_url.as_deref().unwrap_or(&by_path))
+            },
             rel_path: Some(rel),
-            container,
+            container: if is_strm {
+                "strm".to_string()
+            } else {
+                path.extension()
+                    .and_then(std::ffi::OsStr::to_str)
+                    .unwrap_or("")
+                    .to_ascii_lowercase()
+            },
             duration_ms: None,
             video: None,
             audio: None,
@@ -115,7 +141,10 @@ pub(super) fn scan_root(
             probed: false,
             unreadable: None,
             edition_id: None,
-            abs_path: Some(abs.to_string_lossy().to_string()),
+            abs_path: Some(match streamed {
+                Some(url) => url,
+                None => abs.to_string_lossy().to_string(),
+            }),
         };
         index_parsed(
             naming::parse(root, &path),
@@ -207,6 +236,28 @@ fn walk_threads() -> usize {
 fn is_pruned_dir(name: &std::ffi::OsStr) -> bool {
     let n = name.to_string_lossy();
     n == "@eaDir" || n.starts_with('.')
+}
+
+/// The URL a `.strm` names. The format every Kodi/Jellyfin/Emby client reads is
+/// one line holding the URL; a file may carry more lines in practice, so the
+/// first non-empty one that looks like a URL wins and anything else is ignored.
+fn read_strm_url(path: &Path) -> Option<String> {
+    // A `.strm` is a few hundred bytes at most. Anything larger is not one, and
+    // reading it into memory would be the wrong response to a mislabelled file.
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.len() > 64 * 1024 {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&bytes);
+    // A BOM from a Windows-authored file would otherwise hide the scheme.
+    let text = text.trim_start_matches('\u{feff}');
+    text.lines()
+        .map(str::trim)
+        .find(|line| {
+            let lower = line.to_ascii_lowercase();
+            lower.starts_with("http://") || lower.starts_with("https://")
+        })
+        .map(str::to_string)
 }
 
 // `stat` one file (run inside the parallel walk pool): (size, mtime-as-unix-secs).

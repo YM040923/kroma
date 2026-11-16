@@ -236,3 +236,65 @@ fn scan_root_untitled_movie_gets_placeholder_title() {
     assert_eq!(scan.items.len(), 1);
     assert_eq!(scan.items.values().next().unwrap().title, "Untitled");
 }
+
+#[test]
+fn a_strm_is_indexed_by_the_url_it_holds() {
+    let root_dir = temp_scan_dir();
+    let root = root_dir.path();
+    std::fs::write(
+        root.join("Dune (2021).strm"),
+        b"https://example.test/drive/dune.mkv\n",
+    )
+    .unwrap();
+
+    let scan = scan_into("lib1", root);
+
+    assert!(scan.movie_seen);
+    assert_eq!(scan.items.len(), 1);
+    let item = scan.items.values().next().unwrap();
+    assert_eq!(item.title, "Dune");
+    assert_eq!(item.year, Some(2021));
+    let file = &item.files[0];
+    assert_eq!(file.container, "strm");
+    assert_eq!(
+        file.abs_path.as_deref(),
+        Some("https://example.test/drive/dune.mkv"),
+        "the catalog carries the URL, not the .strm on disk"
+    );
+    assert_eq!(
+        file.id,
+        super::short_hash("https://example.test/drive/dune.mkv"),
+        "the row is identified by the target, so rewriting the URL keeps it"
+    );
+}
+
+#[test]
+fn a_strm_without_a_url_is_not_indexed() {
+    let root_dir = temp_scan_dir();
+    let root = root_dir.path();
+    std::fs::write(root.join("Broken (2020).strm"), b"not a url\n").unwrap();
+
+    let scan = scan_into("lib1", root);
+
+    assert_eq!(scan.items.len(), 0, "a .strm that names nothing is skipped");
+}
+
+#[test]
+fn a_strm_tolerates_a_bom_and_leading_blank_lines() {
+    let root_dir = temp_scan_dir();
+    let root = root_dir.path();
+    std::fs::write(
+        root.join("Arrival (2016).strm"),
+        "\u{feff}\n\n   https://example.test/a.mkv   \nhttps://example.test/ignored.mkv\n".as_bytes(),
+    )
+    .unwrap();
+
+    let scan = scan_into("lib1", root);
+
+    let item = scan.items.values().next().unwrap();
+    assert_eq!(
+        item.files[0].abs_path.as_deref(),
+        Some("https://example.test/a.mkv"),
+        "the first URL wins, trimmed, with the BOM stripped"
+    );
+}

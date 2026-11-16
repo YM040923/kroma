@@ -19,6 +19,10 @@ tokio-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+# Relaying a cloud drive's bytes: a `.strm` entry is fetched from its origin a
+# range at a time rather than opened on disk. rustls, never native-tls, as above.
+reqwest = { workspace = true, features = ["rustls-tls", "stream"] }
+futures-util = { workspace = true }
 # The scratch dir the one-time hardware-decode head-to-head writes its frame in.
 tempfile = { workspace = true }
 # The unix second a live session started, which the admin screen sorts on.
