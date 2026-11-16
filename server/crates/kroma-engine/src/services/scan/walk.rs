@@ -113,6 +113,17 @@ pub(super) fn scan_root(
             .unwrap_or("");
         let edition = detect_edition(file_name);
 
+        // A bridge that manages a cloud drive writes what ffprobe would have
+        // learnt beside the `.strm`, because this server's ffprobe only accepts
+        // the `file` protocol and the entry's path is a URL. Reading it here
+        // means those entries arrive fully described and the probe pass, which
+        // could only ever fail on them, leaves them alone.
+        let sidecar = if is_strm {
+            read_sidecar(&path)
+        } else {
+            None
+        };
+
         let file = MediaFile {
             // A streamed entry is identified by what it points at, so rewriting
             // the URL inside the `.strm` keeps the same catalog row (and its
@@ -131,15 +142,28 @@ pub(super) fn scan_root(
                     .unwrap_or("")
                     .to_ascii_lowercase()
             },
-            duration_ms: None,
-            video: None,
-            audio: None,
-            audio_tracks: Vec::new(),
-            subtitles: Vec::new(),
-            size,
+            duration_ms: sidecar.as_ref().and_then(|s| s.duration_ms),
+            video: sidecar.as_ref().and_then(|s| s.video.clone()),
+            audio: sidecar.as_ref().and_then(|s| s.audio.clone()),
+            audio_tracks: sidecar
+                .as_ref()
+                .map(|s| s.audio_tracks.clone())
+                .unwrap_or_default(),
+            subtitles: sidecar
+                .as_ref()
+                .map(|s| s.subtitles.clone())
+                .unwrap_or_default(),
+            // A `.strm` is a few bytes and says nothing about the film; the
+            // sidecar's size is the one a player cares about.
+            size: sidecar
+                .as_ref()
+                .and_then(|s| s.size)
+                .or(size),
             edition,
-            probed: false,
-            unreadable: None,
+            // A sidecar is a verdict from a reader that could open the URL, so
+            // the entry is described and the probe pass must not retry it.
+            probed: sidecar.is_some(),
+            unreadable: sidecar.as_ref().and_then(|s| s.unreadable.clone()),
             edition_id: None,
             abs_path: Some(match streamed {
                 Some(url) => url,
@@ -258,6 +282,47 @@ fn read_strm_url(path: &Path) -> Option<String> {
             lower.starts_with("http://") || lower.starts_with("https://")
         })
         .map(str::to_string)
+}
+
+/// What a bridge learnt about a streamed entry, kept beside it as
+/// `<name>.info.json`. The shape is ffprobe's own: `format.duration` in seconds
+/// and `streams` with `codec_type`, so a bridge can write it straight from the
+/// probe it already ran instead of inventing a format for this server.
+#[derive(Debug, Default, serde::Deserialize)]
+struct Sidecar {
+    #[serde(default)]
+    duration_ms: Option<u64>,
+    #[serde(default)]
+    size: Option<u64>,
+    #[serde(default)]
+    video: Option<kroma_domain::VideoStream>,
+    #[serde(default)]
+    audio: Option<kroma_domain::AudioStream>,
+    #[serde(default)]
+    audio_tracks: Vec<kroma_domain::AudioStream>,
+    #[serde(default)]
+    subtitles: Vec<kroma_domain::SubtitleTrack>,
+    #[serde(default)]
+    unreadable: Option<String>,
+}
+
+/// `<stem>.info.json` beside the `.strm`, or nothing. A malformed sidecar is a
+/// bridge bug, not an entry to drop: the entry still plays, it just arrives
+/// undescribed and the probe pass fails it the way it always did.
+fn read_sidecar(strm: &Path) -> Option<Sidecar> {
+    let sidecar = strm.with_extension("info.json");
+    let bytes = std::fs::read(&sidecar).ok()?;
+    if bytes.len() > 512 * 1024 {
+        debug!(path = %sidecar.display(), "an .info.json is implausibly large; ignored");
+        return None;
+    }
+    match serde_json::from_slice::<Sidecar>(&bytes) {
+        Ok(sidecar) => Some(sidecar),
+        Err(error) => {
+            debug!(path = %sidecar.display(), %error, "an .info.json could not be read; ignored");
+            None
+        }
+    }
 }
 
 // `stat` one file (run inside the parallel walk pool): (size, mtime-as-unix-secs).

@@ -298,3 +298,82 @@ fn a_strm_tolerates_a_bom_and_leading_blank_lines() {
         "the first URL wins, trimmed, with the BOM stripped"
     );
 }
+
+#[test]
+fn a_strm_with_a_sidecar_arrives_described_and_probed() {
+    let root_dir = temp_scan_dir();
+    let root = root_dir.path();
+    std::fs::write(
+        root.join("Dune (2021).strm"),
+        b"https://example.test/drive/dune.mkv\n",
+    )
+    .unwrap();
+    // What a bridge writes: duration in ms, size in bytes, one video stream.
+    std::fs::write(
+        root.join("Dune (2021).info.json"),
+        br#"{
+            "duration_ms": 9330000,
+            "size": 21474836480,
+            "video": { "codec": "hevc", "width": 3840, "height": 2160, "hdr": true },
+            "audio": { "codec": "eac3", "channels": 6, "language": "eng" },
+            "audio_tracks": [ { "codec": "eac3", "channels": 6, "language": "eng" } ],
+            "subtitles": [ { "language": "eng", "codec": "subrip", "title": "English" } ]
+        }"#,
+    )
+    .unwrap();
+
+    let scan = scan_into("lib1", root);
+
+    let item = scan.items.values().next().unwrap();
+    let file = &item.files[0];
+    assert!(
+        file.probed,
+        "a described entry must not be handed to a probe that cannot open a URL"
+    );
+    assert_eq!(file.duration_ms, Some(9_330_000));
+    assert_eq!(file.size, Some(21_474_836_480));
+    let video = file.video.as_ref().expect("the sidecar named a video stream");
+    assert_eq!(video.codec, "hevc");
+    assert_eq!(video.width, Some(3840));
+    assert_eq!(file.audio_tracks.len(), 1, "the audio tracks survive");
+    assert_eq!(file.subtitles.len(), 1, "the subtitle tracks survive");
+}
+
+#[test]
+fn a_strm_without_a_sidecar_stays_unprobed() {
+    let root_dir = temp_scan_dir();
+    let root = root_dir.path();
+    std::fs::write(
+        root.join("Arrival (2016).strm"),
+        b"https://example.test/a.mkv\n",
+    )
+    .unwrap();
+
+    let scan = scan_into("lib1", root);
+
+    let file = &scan.items.values().next().unwrap().files[0];
+    assert!(!file.probed, "nothing described it, so a later pass may try");
+    assert_eq!(file.duration_ms, None);
+}
+
+#[test]
+fn a_malformed_sidecar_is_ignored_rather_than_failing_the_scan() {
+    let root_dir = temp_scan_dir();
+    let root = root_dir.path();
+    std::fs::write(
+        root.join("Solaris (1972).strm"),
+        b"https://example.test/s.mkv\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("Solaris (1972).info.json"), b"{ not json").unwrap();
+
+    let scan = scan_into("lib1", root);
+
+    let file = &scan.items.values().next().unwrap().files[0];
+    assert!(!file.probed, "an unreadable sidecar describes nothing");
+    assert_eq!(
+        file.abs_path.as_deref(),
+        Some("https://example.test/s.mkv"),
+        "the entry itself still indexed"
+    );
+}

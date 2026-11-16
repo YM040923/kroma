@@ -23,13 +23,36 @@ use crate::ByteMeter;
 /// server does. Local media providers (a cloud-drive bridge on `127.0.0.1`, a dev
 /// NAS) answer over a self-signed certificate often enough that a verify-on
 /// client would refuse every stream with no way for an operator to say otherwise.
-fn client() -> Result<reqwest::Client, String> {
+///
+/// `follow` is off when a redirect is what we want to hand the player: following
+/// it here would pull the bytes through this server, which is the opposite of
+/// what `prefer_redirect` asks for.
+fn client(follow: bool) -> Result<reqwest::Client, String> {
+    let policy = if follow {
+        reqwest::redirect::Policy::limited(10)
+    } else {
+        reqwest::redirect::Policy::none()
+    };
     reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
-        .redirect(reqwest::redirect::Policy::limited(10))
+        .redirect(policy)
         .connect_timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|error| format!("could not build the range client: {error}"))
+}
+
+/// A `302` carrying the origin's own link: the player fetches it itself, so the
+/// bytes never pass through this server. `no-store` keeps a player (and any
+/// proxy in front of it) from pinning a link that expires.
+fn redirect_response(target: &str) -> Response {
+    let mut resp = Response::new(Body::empty());
+    *resp.status_mut() = StatusCode::FOUND;
+    let headers = resp.headers_mut();
+    if let Ok(location) = HeaderValue::from_str(target) {
+        headers.insert(header::LOCATION, location);
+    }
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    resp
 }
 
 /// Is this catalog path something to fetch over HTTP rather than open on disk?
@@ -45,13 +68,22 @@ pub fn is_remote(path: &str) -> bool {
 /// `user_agent` is what the origin sees. Cloud drives sign a download link to the
 /// client that asked for it, so relaying the *player's* UA rather than the
 /// server's decides between a playable file and a `403`.
+///
+/// `prefer_redirect` asks the origin for a link the player can follow itself. A
+/// cloud drive behind a bridge answers `302` and the bytes never touch this
+/// server, which is the whole point: a household's upstream cannot carry a 4K
+/// stream, and a proxy turns one viewer into one copy of the film through the
+/// box. The origin's redirect is handed back as it is; only when the origin
+/// insists on sending bytes (a link that needs a Cookie, an `f=3` style URL) does
+/// this fall back to relaying them.
 pub async fn stream_remote<M: ByteMeter>(
     url: &str,
     req_headers: &HeaderMap,
     user_agent: Option<&str>,
+    prefer_redirect: bool,
     meter: M,
 ) -> Response {
-    let client = match client() {
+    let client = match client(prefer_redirect) {
         Ok(client) => client,
         Err(error) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, &error),
     };
@@ -76,6 +108,21 @@ pub async fn stream_remote<M: ByteMeter>(
             );
         }
     };
+
+    // A redirect the player can follow itself: the bytes go straight from the
+    // origin to it. `Location` is the only header that matters; the player's own
+    // UA (and range) travel with its next request, which is what a cloud drive
+    // bound the link to.
+    if prefer_redirect {
+        if let Some(location) = upstream.headers().get(header::LOCATION) {
+            if let Ok(target) = location.to_str() {
+                if target.starts_with("http://") || target.starts_with("https://") {
+                    tracing::debug!(url, target, "remote media hands the player a redirect");
+                    return redirect_response(target);
+                }
+            }
+        }
+    }
 
     let status = upstream.status();
     if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
@@ -151,5 +198,18 @@ mod tests {
         assert!(!is_remote("/media/film.mkv"));
         assert!(!is_remote("C:\\media\\film.mkv"));
         assert!(!is_remote("rtsp://example.test/a"));
+    }
+
+    #[tokio::test]
+    async fn a_redirect_is_handed_to_the_player_rather_than_followed() {
+        // A bridge answers with a location on the cloud CDN; the answer must be
+        // that location, not the bytes behind it.
+        let resp = redirect_response("https://cdn.example.test/film.mkv?sig=abc");
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(
+            resp.headers().get(header::LOCATION).unwrap(),
+            "https://cdn.example.test/film.mkv?sig=abc"
+        );
+        assert_eq!(resp.headers().get(header::CACHE_CONTROL).unwrap(), "no-store");
     }
 }
