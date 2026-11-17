@@ -6,7 +6,7 @@
 //! The routes live at the ROOT, because that is where Jellyfin clients look
 //! (`/Users/AuthenticateByName`, `/Videos/{id}/stream`), not under `/api`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
@@ -39,17 +39,19 @@ pub fn routes() -> Router<SharedState> {
         .route("/Users/{user_id}/GroupingOptions", get(grouping_options))
         .route("/Users/{user_id}/Items", get(items))
         .route("/Users/{user_id}/Items/Latest", get(latest))
-        .route("/Users/{user_id}/Items/Resume", get(empty_items))
+        .route("/Users/{user_id}/Items/Resume", get(resume_items))
         .route("/Users/{user_id}/Items/Root", get(items_root))
+        .route("/Users/{user_id}/PlayedItems/{id}", post(mark_played).delete(unmark_played))
+        .route("/Users/{user_id}/FavoriteItems/{id}", post(mark_favorite).delete(unmark_favorite))
         .route("/Users/{user_id}/Items/{id}", get(item_detail))
         .route("/Users/{user_id}/Items/{id}/Similar", get(similar))
         .route("/UserViews", get(user_views))
         .route("/UserViews/GroupingOptions", get(grouping_options))
         .route("/Items", get(items))
         .route("/Items/Latest", get(latest))
-        .route("/Items/Resume", get(empty_items))
+        .route("/Items/Resume", get(resume_items))
         .route("/Items/Root", get(items_root))
-        .route("/UserItems/Resume", get(empty_items))
+        .route("/UserItems/Resume", get(resume_items))
         .route("/Items/{id}", get(item_detail))
         .route("/Items/{id}/Similar", get(similar))
         .route("/Items/Counts", get(item_counts))
@@ -75,9 +77,9 @@ pub fn routes() -> Router<SharedState> {
         .route("/Items/{id}/Images/{kind}/{index}", get(image_index))
         .route("/Videos/{id}/stream", get(stream))
         .route("/Videos/{id}/stream.{ext}", get(stream))
-        .route("/Sessions/Playing", post(no_content))
-        .route("/Sessions/Playing/Progress", post(no_content))
-        .route("/Sessions/Playing/Stopped", post(no_content))
+        .route("/Sessions/Playing", post(playback_progress))
+        .route("/Sessions/Playing/Progress", post(playback_progress))
+        .route("/Sessions/Playing/Stopped", post(playback_progress))
         .route("/Sessions/Capabilities", post(no_content))
         .route("/Sessions/Capabilities/Full", post(no_content))
         .route("/QuickConnect/Enabled", get(quick_connect_enabled))
@@ -315,7 +317,9 @@ async fn item_detail(
     let wanted = id.clone();
     if let Some(detail) = query(&state.db, move |pool| db::get_show(&pool, &wanted)).await? {
         crate::api::visibility::gate_show(&state, &user, &detail.show.id).await?;
-        return Ok(Json(series_detail_dto(&state, &detail.show)));
+        return Ok(Json(
+            with_user_data(&state, &user, series_detail_dto(&state, &detail.show)).await?,
+        ));
     }
     let item = query(&state.db, move |pool| db::get_item(&pool, &id))
         .await?
@@ -323,20 +327,23 @@ async fn item_detail(
     crate::api::visibility::gate_item(&state, &user, &item.id).await?;
     if let Some(show_id) = item.show_id.clone() {
         let show = query(&state.db, move |pool| db::get_show(&pool, &show_id)).await?;
-        return Ok(Json(episode_detail_dto(
+        let dto = episode_detail_dto(
             &state,
             &headers,
             &item,
             show.as_ref().map(|d| &d.show),
             &access,
-        )));
+        );
+        return Ok(Json(with_user_data(&state, &user, dto).await?));
     }
-    Ok(Json(movie_detail_dto(
-        &state,
-        &headers,
-        &item,
-        &access,
-    )))
+    Ok(Json(
+        with_user_data(
+            &state,
+            &user,
+            movie_detail_dto(&state, &headers, &item, &access),
+        )
+        .await?,
+    ))
 }
 
 async fn similar(
@@ -431,6 +438,185 @@ async fn notifications_summary(
         "MaxUnreadCount": 0,
         "UnreadCountsByType": {},
         "UnreadCountsByLevel": {},
+    })))
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "PascalCase", default)]
+struct JellyfinProgressBody {
+    item_id: String,
+    position_ticks: i64,
+}
+
+async fn playback_progress(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Json(body): Json<JellyfinProgressBody>,
+) -> Result<StatusCode, Response> {
+    let (user, _) = user_of(&state, &headers, &params).await?;
+    if body.item_id.is_empty() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    crate::api::visibility::gate_item(&state, &user, &body.item_id).await?;
+    let item = query(&state.db, {
+        let id = body.item_id.clone();
+        move |pool| db::get_item(&pool, &id)
+    })
+    .await?;
+    let position_ms = (body.position_ticks / 10_000).max(0);
+    let played_percent = crate::services::settings::played_percent(&state.settings);
+    let uid = user.id.clone();
+    let item_id = body.item_id;
+    let duration = item.as_ref().and_then(|item| item.duration_ms.map(|ms| ms as i64));
+    query(&state.db, move |pool| {
+        db::save_progress(&pool, &uid, &item_id, position_ms, duration, played_percent)
+    })
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn mark_played(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(path): Path<HashMap<String, String>>,
+) -> Result<StatusCode, Response> {
+    let (user, _) = user_of(&state, &headers, &params).await?;
+    let id = path.get("id").cloned().unwrap_or_default();
+    crate::api::visibility::gate_item(&state, &user, &id).await?;
+    let uid = user.id.clone();
+    query(&state.db, move |pool| db::mark_watched(&pool, &uid, &id)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn unmark_played(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(path): Path<HashMap<String, String>>,
+) -> Result<StatusCode, Response> {
+    let (user, _) = user_of(&state, &headers, &params).await?;
+    let id = path.get("id").cloned().unwrap_or_default();
+    crate::api::visibility::gate_item(&state, &user, &id).await?;
+    let uid = user.id.clone();
+    query(&state.db, move |pool| db::unmark_watched(&pool, &uid, &id)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn mark_favorite(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(path): Path<HashMap<String, String>>,
+) -> Result<StatusCode, Response> {
+    let (user, _) = user_of(&state, &headers, &params).await?;
+    let id = path.get("id").cloned().unwrap_or_default();
+    crate::api::visibility::gate_item(&state, &user, &id).await?;
+    let uid = user.id.clone();
+    query(&state.db, move |pool| db::add_to_list(&pool, &uid, &id)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn unmark_favorite(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(path): Path<HashMap<String, String>>,
+) -> Result<StatusCode, Response> {
+    let (user, _) = user_of(&state, &headers, &params).await?;
+    let id = path.get("id").cloned().unwrap_or_default();
+    crate::api::visibility::gate_item(&state, &user, &id).await?;
+    let uid = user.id.clone();
+    query(&state.db, move |pool| db::remove_from_list(&pool, &uid, &id)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn apply_user_data(
+    state: &SharedState,
+    user: &User,
+    items: &mut [Value],
+) -> Result<(), Response> {
+    if items.is_empty() {
+        return Ok(());
+    }
+    let uid = user.id.clone();
+    let watched: HashSet<String> = query(&state.db, {
+        let uid = uid.clone();
+        move |pool| db::list_watched(&pool, &uid)
+    })
+    .await?
+    .into_iter()
+    .collect();
+    let favorites: HashSet<String> = query(&state.db, {
+        let uid = uid.clone();
+        move |pool| db::list_my_list(&pool, &uid)
+    })
+    .await?
+    .into_iter()
+    .collect();
+    let progress: HashMap<String, (i64, Option<i64>)> = query(&state.db, {
+        let uid = uid.clone();
+        move |pool| db::list_progress(&pool, &uid)
+    })
+    .await?
+    .into_iter()
+    .map(|entry| (entry.item_id, (entry.position_ms, entry.duration_ms)))
+    .collect();
+    for item in items.iter_mut() {
+        let Some(id) = item.get("Id").and_then(Value::as_str).map(str::to_string) else {
+            continue;
+        };
+        let played = watched.contains(&id);
+        let (position_ms, duration_ms) = progress.get(&id).copied().unwrap_or((0, None));
+        let mut user_data = json!({
+            "Played": played,
+            "PlaybackPositionTicks": position_ms * 10_000,
+            "PlayCount": if played { 1 } else { 0 },
+            "IsFavorite": favorites.contains(&id),
+        });
+        if let Some(duration_ms) = duration_ms.filter(|duration| *duration > 0) {
+            if position_ms > 0 {
+                user_data["PlayedPercentage"] =
+                    json!(position_ms as f64 / duration_ms as f64 * 100.0);
+            }
+        }
+        item["UserData"] = user_data;
+    }
+    Ok(())
+}
+
+async fn with_user_data(
+    state: &SharedState,
+    user: &User,
+    item: Value,
+) -> Result<Value, Response> {
+    let mut items = vec![item];
+    apply_user_data(state, user, &mut items).await?;
+    items.pop().ok_or_else(|| json_error(StatusCode::NOT_FOUND, "item not found"))
+}
+
+async fn resume_items(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(_path): Path<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    let (user, _) = user_of(&state, &headers, &params).await?;
+    let played_percent = crate::services::settings::played_percent(&state.settings);
+    let uid = user.id.clone();
+    let rows = query(&state.db, move |pool| {
+        db::continue_watching(&pool, &uid, played_percent)
+    })
+    .await?;
+    let mut items: Vec<Value> = rows
+        .iter()
+        .map(|row| movie_dto(&state, &row.item))
+        .collect();
+    apply_user_data(&state, &user, &mut items).await?;
+    Ok(Json(json!({
+        "Items": items,
+        "TotalRecordCount": items.len(),
     })))
 }
 
@@ -675,7 +861,7 @@ async fn items(
     Query(params): Query<HashMap<String, String>>,
     Path(_params): Path<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
-    user_of(&state, &headers, &params).await?;
+    let (user, _) = user_of(&state, &headers, &params).await?;
     let parent = params.get("ParentId").cloned().unwrap_or_default();
     let include = params.get("IncludeItemTypes").cloned().unwrap_or_default();
     let search = params
@@ -735,7 +921,8 @@ async fn items(
         }
     }
     let total = out.len();
-    let page: Vec<Value> = out.into_iter().skip(skip).take(limit).collect();
+    let mut page: Vec<Value> = out.into_iter().skip(skip).take(limit).collect();
+    apply_user_data(&state, &user, &mut page).await?;
     Ok(Json(json!({
         "Items": page,
         "TotalRecordCount": total,
@@ -757,14 +944,15 @@ async fn latest(
     Query(params): Query<HashMap<String, String>>,
     Path(_params): Path<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
-    user_of(&state, &headers, &params).await?;
+    let (user, _) = user_of(&state, &headers, &params).await?;
     let all = query(&state.db, |pool| db::list_items(&pool, None)).await?;
-    let latest: Vec<Value> = all
+    let mut latest: Vec<Value> = all
         .into_iter()
         .filter(|i| matches!(i.kind, Kind::Movie) && i.show_id.is_none())
         .take(20)
         .map(|item| movie_dto(&state, &item))
         .collect();
+    apply_user_data(&state, &user, &mut latest).await?;
     Ok(Json(Value::Array(latest)))
 }
 
