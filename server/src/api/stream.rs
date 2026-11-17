@@ -100,14 +100,34 @@ pub async fn stream_item(
         .await
         .ok_or_else(visibility::out_of_scope)?;
     let sink = byte_sink(&state, &headers, &addr);
+    let range = headers
+        .get(header::RANGE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
     Ok(match pick_file_path(&item, q.file.as_deref()) {
         Some(path) if kroma_media::remote::is_remote(&path) => {
+            tracing::info!(
+                item_id = %item.id,
+                mode = "remote",
+                url = %path,
+                range = ?range,
+                "media stream"
+            );
             let user_agent = headers
                 .get(header::USER_AGENT)
                 .and_then(|value| value.to_str().ok());
             kroma_media::remote::stream_remote(&path, &headers, user_agent, true, sink).await
         }
-        Some(path) => stream_file(std::path::Path::new(&path), &headers, sink).await,
+        Some(path) => {
+            tracing::info!(
+                item_id = %item.id,
+                mode = "local",
+                path = %path,
+                range = ?range,
+                "media stream"
+            );
+            stream_file(std::path::Path::new(&path), &headers, sink).await
+        }
         None => json_error(StatusCode::NOT_FOUND, "demo item has no media"),
     })
 }

@@ -20,6 +20,8 @@ function deriveChrome(
   upNext: UpNextData,
   panelCovers: boolean,
   over = false,
+  nearBottom = true,
+  playing = false,
 ) {
   const settingsOpen =
     nav.overlay === 'settings' || nav.overlay === 'audio' || nav.overlay === 'subtitles';
@@ -27,7 +29,17 @@ function deriveChrome(
   // Whether the picture is on the card, not HOW it got there: which hold the
   // card takes is the surface's business (see lib/surface-shrink).
   const settingsShrink = settingsOpen && !panelCovers;
-  const peekVisible = !over && nav.revealed && hasUpNext(upNext) && !settingsShrink && !nav.overlay;
+  // The peek is a paused-time affordance: while the film is rolling it would
+  // sit over the picture at the bottom, which is exactly the bar a viewer does
+  // not want there.
+  const peekVisible =
+    !over &&
+    nav.revealed &&
+    hasUpNext(upNext) &&
+    !settingsShrink &&
+    !nav.overlay &&
+    nearBottom &&
+    !playing;
   const chromeShown = !over && nav.revealed && !nav.overlay;
   return { settingsOpen, sheetOpen, settingsShrink, peekVisible, chromeShown };
 }

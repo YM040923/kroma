@@ -176,12 +176,15 @@ function usePlayerRoot({
   });
 
   const panel = useMemo(() => panelGeometry(stageSize.width), [stageSize.width]);
+  const [nearBottom, setNearBottom] = useState(false);
 
   const { settingsOpen, sheetOpen, settingsShrink, peekVisible, chromeShown } = deriveChrome(
     nav,
     upNext,
     panel.covers,
     ending.over,
+    nearBottom || !flags.pointer,
+    c.playing,
   );
   const settings = usePanelSlide(settingsOpen);
   const initialView = initialSettingsView(nav.overlay);
@@ -194,11 +197,30 @@ function usePlayerRoot({
     setTransportHeight((prev) => (prev === height || height <= 0 ? prev : height));
   }, []);
   const transport = transportHeight || px(TRANSPORT_HEIGHT);
-  const bottomInset = peekVisible ? PEEK_HEIGHT : px(28);
+  // Reserve the peek's height whenever there is something to peek at, so the
+  // transport does not jump when the pointer reaches the bottom edge.
+  const bottomInset = hasUpNext(upNext) && !ending.over ? PEEK_HEIGHT : px(28);
   const clearance = bottomInset + transport + px(SKIP_GAP);
   const introLift = chromeShown ? clearance : px(SKIP_REST);
   const cueClearance = chromeShown ? clearance : 0;
-  const input = playerInputHandlers(nav, c, flags, locked);
+  const baseInput = playerInputHandlers(nav, c, flags, locked);
+  const input = {
+    ...baseInput,
+    onPointerMove: (e: { nativeEvent?: { pointerType?: string; clientY?: number } }) => {
+      baseInput.onPointerMove(e);
+      const pointer = e?.nativeEvent?.pointerType;
+      if (pointer && pointer !== 'mouse') {
+        setNearBottom(true);
+        return;
+      }
+      const y = e?.nativeEvent?.clientY;
+      const height =
+        typeof window !== 'undefined' ? window.innerHeight : Dimensions.get('window').height;
+      if (typeof y === 'number' && height > 0) {
+        setNearBottom(y >= height - 96);
+      }
+    },
+  };
 
   const { openOverlay } = nav;
   const openSheet = useCallback(() => openOverlay('sheet'), [openOverlay]);

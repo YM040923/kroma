@@ -7,7 +7,7 @@ const FrameContext = createContext<RefObject<HTMLDivElement | null> | null>(null
 export function FullscreenFrame({ children }: Readonly<{ children: ReactNode }>) {
   const ref = useRef<HTMLDivElement>(null);
   return (
-    <div ref={ref}>
+    <div ref={ref} style={{ width: '100%', height: '100%' }}>
       <FrameContext.Provider value={ref}>{children}</FrameContext.Provider>
     </div>
   );

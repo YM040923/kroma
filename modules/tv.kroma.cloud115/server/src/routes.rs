@@ -59,7 +59,7 @@ async fn play<S: HostCtx + Clone + Send + Sync + 'static>(
         .resolve(&config.cookie, &query.pc, ua, config.options.link_ttl_secs)
         .await
     {
-        Ok(link) if link.needs_cookie => {
+        Ok(resolved) if resolved.link.needs_cookie => {
             // An `f=3` link only works with the account's cookie attached to every
             // byte request, which a redirect cannot carry and a player will not
             // send. Saying so beats handing out a link that fails on the first
@@ -70,7 +70,29 @@ async fn play<S: HostCtx + Clone + Send + Sync + 'static>(
                 "该文件（多见于 ISO/BDMV 原盘）的直链要求携带 Cookie，无法直接 302 播放",
             )
         }
-        Ok(link) => redirect_to(&link.url),
+        Ok(resolved) => {
+            let cached = resolved.cached;
+            let link = resolved.link;
+            tracing::info!(
+                pick_code = %query.pc,
+                mode = "302",
+                cached,
+                url = %link.url,
+                "115 direct playback"
+            );
+            let url = link.url.clone();
+            let _ = crate::store::patch(|stored| {
+                stored.last_play_error.clear();
+                stored.last_play_at = crate::events::unix_now();
+                stored.last_play_mode = "302".into();
+                stored.last_play_url = url.clone();
+                stored.play_count = stored.play_count.saturating_add(1);
+                if !cached {
+                    stored.sign_count = stored.sign_count.saturating_add(1);
+                }
+            });
+            redirect_to(&url)
+        }
         Err(error) if error.cookie_expired() => {
             remember_play_failure("115 登录已失效，请更新 Cookie");
             json_error(StatusCode::BAD_GATEWAY, "115 登录已失效，请更新 Cookie")
@@ -354,6 +376,11 @@ struct StatusView {
     gate_ok: Option<bool>,
     indexed_dirs: usize,
     last_play_error: String,
+    last_play_at: i64,
+    last_play_mode: String,
+    last_play_url: String,
+    play_count: u64,
+    sign_count: u64,
 }
 
 async fn status<S: HostCtx + Clone + Send + Sync + 'static>(State(_host): State<S>) -> Json<StatusView> {
@@ -380,6 +407,11 @@ async fn status<S: HostCtx + Clone + Send + Sync + 'static>(State(_host): State<
         gate_ok: incr.gate_ok,
         indexed_dirs: stored.dirs.len(),
         last_play_error: stored.last_play_error,
+        last_play_at: stored.last_play_at,
+        last_play_mode: stored.last_play_mode,
+        last_play_url: stored.last_play_url,
+        play_count: stored.play_count,
+        sign_count: stored.sign_count,
     })
 }
 

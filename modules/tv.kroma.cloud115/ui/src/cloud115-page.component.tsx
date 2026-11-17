@@ -94,6 +94,16 @@ const READONLY_TEXT: CSSProperties = {
   color: 'var(--kroma-text)',
 };
 
+const LINK_TEXT: CSSProperties = {
+  marginTop: 6,
+  font: 'var(--type-meta)',
+  fontFamily: 'var(--font-mono)',
+  color: 'var(--kroma-text-muted)',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+
 const SAVE_BAR: CSSProperties = {
   position: 'sticky',
   bottom: 0,
@@ -129,6 +139,7 @@ export function Cloud115Settings() {
   const [saved, setSaved] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loaded = useRef(false);
   const [picker, setPicker] = useState<{ at: number; mode: 'remote' | 'local' } | null>(null);
@@ -553,6 +564,61 @@ export function Cloud115Settings() {
         </Surface>
       </Section.Root>
 
+      <Section.Root mt={28}>
+        <Section.Header>
+          <Section.Title>{t('cloud115.playLog')}</Section.Title>
+        </Section.Header>
+        <Text variant="meta" color="textDim" mt={-8} mb={16}>
+          {t('cloud115.playLogHint')}
+        </Text>
+        <Surface elevated border="border" pad="none" px={22} py={20}>
+          <Row wrap gapX={24} gapY={8}>
+            <Stat label={t('cloud115.playMode')} value={status.lastPlayMode || '—'} />
+            <Stat label={t('cloud115.playRequests')} value={status.playCount} />
+            <Stat label={t('cloud115.signCount')} value={status.signCount} />
+            <Stat
+              label={t('cloud115.cacheHits')}
+              value={Math.max(0, status.playCount - status.signCount)}
+            />
+            <Stat
+              label={t('cloud115.lastPlay')}
+              value={
+                status.lastPlayAt
+                  ? new Date(status.lastPlayAt * 1000).toLocaleString()
+                  : t('cloud115.never')
+              }
+            />
+          </Row>
+          {status.lastPlayUrl ? (
+            <Row between gap={12} mt={14} center>
+              <Box minW={0} shrink={1}>
+                <Text variant="meta" color="textDim">
+                  {t('cloud115.lastLink')}
+                </Text>
+                <div style={LINK_TEXT} title={status.lastPlayUrl}>
+                  {status.lastPlayUrl}
+                </div>
+              </Box>
+              <Button
+                label={copiedLink ? t('cloud115.copied') : t('cloud115.playCopy')}
+                icon="copy"
+                variant="ghost"
+                size="sm"
+                onPress={() => {
+                  void navigator.clipboard
+                    .writeText(status.lastPlayUrl)
+                    .then(() => {
+                      setCopiedLink(true);
+                      setTimeout(() => setCopiedLink(false), 1500);
+                    })
+                    .catch(() => setError(t('cloud115.copyFailed')));
+                }}
+              />
+            </Row>
+          ) : null}
+        </Surface>
+      </Section.Root>
+
       {picker !== null ? (
         <FolderPicker
           mode={picker.mode}
@@ -599,13 +665,15 @@ function SummaryStat({ label, value }: Readonly<{ label: string; value: string }
   );
 }
 
-function Stat({ label, value }: Readonly<{ label: string; value: number }>) {
+function Stat({ label, value }: Readonly<{ label: string; value: number | string }>) {
   return (
     <Row gap={8} center>
       <Text variant="meta" color="textDim">
         {label}
       </Text>
-      <Text variant="cardTitle">{value.toLocaleString()}</Text>
+      <Text variant="cardTitle">
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </Text>
     </Row>
   );
 }

@@ -75,6 +75,11 @@ export const CloudStatusView = z.object({
   gateOk: z.boolean().nullish(),
   indexedDirs: z.number(),
   lastPlayError: z.string(),
+  lastPlayAt: z.number().default(0),
+  lastPlayMode: z.string().default(''),
+  lastPlayUrl: z.string().default(''),
+  playCount: z.number().default(0),
+  signCount: z.number().default(0),
 });
 export type CloudStatusView = z.infer<typeof CloudStatusView>;
 

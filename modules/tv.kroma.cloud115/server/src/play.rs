@@ -29,6 +29,12 @@ struct Cached {
     until: Instant,
 }
 
+/// A link handed to a player, and whether this call had to sign a new one.
+pub struct Resolved {
+    pub link: DownloadLink,
+    pub cached: bool,
+}
+
 pub struct Links {
     entries: Mutex<HashMap<String, Cached>>,
 }
@@ -50,13 +56,16 @@ impl Links {
         pick_code: &str,
         ua: &str,
         ttl_secs: u64,
-    ) -> Result<DownloadLink, ApiError> {
+    ) -> Result<Resolved, ApiError> {
         let key = format!("{}\n{ua}", pick_code.trim().to_ascii_lowercase());
         {
             let mut entries = self.entries.lock().await;
             if let Some(cached) = entries.get(&key) {
                 if cached.until > Instant::now() {
-                    return Ok(cached.link.clone());
+                    return Ok(Resolved {
+                        link: cached.link.clone(),
+                        cached: true,
+                    });
                 }
                 entries.remove(&key);
             }
@@ -76,7 +85,7 @@ impl Links {
             link: link.clone(),
             until,
         });
-        Ok(link)
+        Ok(Resolved { link, cached: false })
     }
 
     /// For the admin page: how many links are held, and how long the soonest

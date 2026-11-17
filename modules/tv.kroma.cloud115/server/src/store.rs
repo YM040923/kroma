@@ -54,6 +54,12 @@ pub struct Stored {
     /// film refused to start instead of leaving it to the module log.
     pub last_play_error: String,
     pub last_play_at: i64,
+    /// The last successful play: how it played and which link it handed out.
+    pub last_play_mode: String,
+    pub last_play_url: String,
+    /// Play requests answered, and how many of those had to sign a fresh link.
+    pub play_count: u64,
+    pub sign_count: u64,
 }
 
 fn path() -> PathBuf {
