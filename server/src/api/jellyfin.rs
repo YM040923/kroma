@@ -46,6 +46,12 @@ pub fn routes() -> Router<SharedState> {
         .route("/Sessions/Playing", post(no_content))
         .route("/Sessions/Playing/Progress", post(no_content))
         .route("/Sessions/Playing/Stopped", post(no_content))
+        .route("/Sessions/Capabilities", post(no_content))
+        .route("/Sessions/Capabilities/Full", post(no_content))
+        .route("/QuickConnect/Enabled", get(quick_connect_enabled))
+        .route("/DisplayPreferences/{id}", get(display_preferences))
+        .route("/Users/{user_id}/Items/Resume", get(empty_items))
+        .route("/Shows/NextUp", get(empty_items))
 }
 
 #[derive(Deserialize, Default)]
@@ -64,26 +70,25 @@ fn token_of(headers: &HeaderMap, query: &HashMap<String, String>) -> Option<Stri
             }
         }
     }
-    if let Some(value) = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-    {
-        let value = value.trim();
-        let rest = value
-            .strip_prefix("MediaBrowser ")
-            .or_else(|| value.strip_prefix("Bearer "))
-            .unwrap_or(value);
-        let token = rest
-            .split(',')
-            .find_map(|part| part.trim().strip_prefix("Token="))
-            .map(|t| t.trim_matches('"').to_string())
-            .or_else(|| {
-                rest.starts_with('"')
-                    .then(|| rest.trim_matches('"').to_string())
-            })
-            .unwrap_or_else(|| rest.to_string());
-        if !token.is_empty() && !token.contains(' ') {
-            return Some(token);
+    for name in ["authorization", "x-emby-authorization"] {
+        if let Some(value) = headers.get(name).and_then(|v| v.to_str().ok()) {
+            let value = value.trim();
+            let rest = value
+                .strip_prefix("MediaBrowser ")
+                .or_else(|| value.strip_prefix("Bearer "))
+                .unwrap_or(value);
+            let token = rest
+                .split(',')
+                .find_map(|part| part.trim().strip_prefix("Token="))
+                .map(|t| t.trim_matches('"').to_string())
+                .or_else(|| {
+                    rest.starts_with('"')
+                        .then(|| rest.trim_matches('"').to_string())
+                })
+                .unwrap_or_else(|| rest.to_string());
+            if !token.is_empty() && !token.contains(' ') {
+                return Some(token);
+            }
         }
     }
     query
@@ -589,4 +594,33 @@ fn redirect(target: &str) -> Result<Response, Response> {
 
 async fn no_content() -> StatusCode {
     StatusCode::NO_CONTENT
+}
+
+async fn quick_connect_enabled() -> Json<Value> {
+    Json(json!(false))
+}
+
+async fn display_preferences(Path(id): Path<String>) -> Json<Value> {
+    Json(json!({
+        "Id": id,
+        "CustomPrefs": {},
+        "SortBy": "SortName",
+        "SortOrder": "Ascending",
+        "RememberIndexing": false,
+        "RememberSorting": false,
+        "ScrollDirection": "Vertical",
+        "ShowBackdrop": true,
+        "ShowSidebar": true,
+        "Client": "kroma",
+    }))
+}
+
+async fn empty_items(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(_params): Path<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(json!({ "Items": [], "TotalRecordCount": 0 })))
 }
