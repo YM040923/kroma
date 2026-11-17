@@ -1,4 +1,12 @@
-import { type StyleScope, sharedStyle, styles, useStyleScope } from '#ui/core';
+import {
+  activeTheme,
+  groundShade,
+  type StyleScope,
+  type Theme,
+  sharedStyle,
+  styles,
+  useStyleScope,
+} from '#ui/core';
 
 // The ends of the rail: the fade signalling more content, plus the pointer's
 // paging control. A CSS mask over the row would fade to whatever is behind it,
@@ -11,7 +19,6 @@ import { FOCUS_BLEED } from '#ui/components/organisms/virtual/clip';
 import { FADE, SETTLE_MS } from '#ui/components/organisms/virtual/strip-motion';
 
 import { useStyles } from '#ui/core/styles';
-import { SHADE, shade } from '#ui/core/tokens';
 import { gradient } from '#ui/lib/css';
 import { ease } from '#ui/lib/ease';
 import { GlideView } from '#ui/lib/glide-view.component';
@@ -46,19 +53,23 @@ const FADE_CURVE = [
   [1, 1],
 ] as const;
 
-function scrim(start: boolean, fade: number): string {
+function scrim(start: boolean, fade: number, theme: Theme): string {
   const stops = FADE_CURVE.map(
     ([t, visible]) =>
-      `${shade(Number((1 - visible).toFixed(2)))} ${Math.round(FOCUS_BLEED + t * fade)}px`,
+      `${groundShade(Number((1 - visible).toFixed(2)), theme)} ${Math.round(FOCUS_BLEED + t * fade)}px`,
   );
-  return `linear-gradient(to ${start ? 'right' : 'left'}, ${SHADE.full} 0px, ${stops.join(', ')})`;
+  return `linear-gradient(to ${start ? 'right' : 'left'}, ${groundShade(1, theme)} 0px, ${stops.join(', ')})`;
 }
 
 // `RailEdge` isn't memoised and mounts twice, so recomputing on every D-pad
 // scroll would remap the curve needlessly.
 
 function scrimStyle(start: boolean, fade: number, scope: StyleScope): ViewStyle {
-  return sharedStyle(`rail-edge:scrim:${start}:${fade}`, gradient(scrim(start, fade)), scope);
+  return sharedStyle(
+    `rail-edge:scrim:${start}:${fade}`,
+    gradient(scrim(start, fade, activeTheme(scope.theme))),
+    scope,
+  );
 }
 
 /** One end of the row: the fade over the row's last tiles, plus the pointer's

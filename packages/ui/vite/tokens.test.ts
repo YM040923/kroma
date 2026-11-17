@@ -35,7 +35,12 @@ describe('tokensCss', () => {
     expect(css).toContain('[data-theme="light"]');
 
     const media = css.split('@media (prefers-color-scheme: light) {')[1] ?? '';
-    expect(media).toContain(':root:not([data-theme]),\n  [data-kroma-theme]:not([data-theme]) {');
+    // The document and every scope that states no ground of its own: the
+    // latter only while the document is unstamped too, so a scope inside a
+    // stamped dark page does not follow the device back to light.
+    expect(media).toContain(
+      ':root:not([data-theme]),\n  html:not([data-theme]) [data-kroma-theme]:not([data-theme]) {',
+    );
     expect(media).toContain(`--kroma-bg: ${lightColors.bg.toLowerCase()};`);
     expect(media).not.toContain('[data-theme="dark"]');
   });
@@ -61,8 +66,9 @@ describe('tokensCss', () => {
   it('leaves the dark palette as the bare-root default', () => {
     const css = tokensCss();
     expect(css).toContain(':root,\n[data-kroma-theme],\n[data-theme="dark"] {');
-    // Dark once, then light twice: the attribute and the unstamped query.
-    expect(css.match(/--kroma-bg: /g)).toHaveLength(3);
+    // Dark once, then light three times: the attribute, a scope following a
+    // light document, and the unstamped query.
+    expect(css.match(/--kroma-bg: /g)).toHaveLength(4);
   });
 
   it('scopes a ground to any element, so a subtree can hold its own', () => {
@@ -78,10 +84,10 @@ describe('tokensCss', () => {
     expect(light).toContain(`--kroma-bg: ${lightColors.bg.toLowerCase()};`);
   });
 
-  it('emits each elevation once per ground, never a fourth ground-free copy', () => {
+  it('emits each elevation once per scope that names it, never a ground-free copy', () => {
     const css = tokensCss();
     expect(css.split(':root,\n')[0]).not.toContain('--shadow-card:');
-    expect(css.match(/--shadow-card: /g)).toHaveLength(3);
+    expect(css.match(/--shadow-card: /g)).toHaveLength(4);
   });
 
   it('spells the irregular names the stylesheets already consume', () => {

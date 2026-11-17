@@ -1,5 +1,6 @@
 {
   "appearance.dark": "深色",
+  "appearance.desc": "默认跟随系统，也可以固定为浅色或深色。",
   "appearance.light": "浅色",
   "appearance.system": "跟随系统",
   "appearance.title": "外观"

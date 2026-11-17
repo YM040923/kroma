@@ -52,7 +52,13 @@ const REPO = fileURLToPath(new URL('../../..', import.meta.url));
 export const SOURCE_ROOTS = sourceRoots(REPO);
 
 // Derived from the accent wash at runtime, so no source spells them out for the scan.
-const DERIVED = Object.values(WASH_ALPHA).map((step) => `accentWash/${step}`);
+// The rail edge fades to the page ground in the same runtime-derived stops, for
+// the light ground as well as the dark one.
+const RAIL_FADE_STEPS = [0, 3, 16, 41, 68, 90, 99, 100].map((step) => `bg/${step}`);
+const DERIVED = [
+  ...Object.values(WASH_ALPHA).map((step) => `accentWash/${step}`),
+  ...RAIL_FADE_STEPS,
+];
 
 const split = (combo: string) => combo.split('/') as [string, string];
 
@@ -156,10 +162,17 @@ export function tokensCss(roots: readonly string[] = SOURCE_ROOTS): string {
     // comes last so it wins at equal specificity.
     rule(':root,\n[data-kroma-theme],\n[data-theme="dark"]', ground(colors, shadow)),
     rule('[data-theme="light"]', light),
-    // `:not([data-theme])` only: the query must not repaint a root that already said dark.
+    // A scope that states no ground of its own follows the document's, which a
+    // prerendered page can stamp before hydration to honour a stored mode.
+    rule('html[data-theme="light"] [data-kroma-theme]:not([data-theme])', light),
+    // `:not([data-theme])` only: the query must not repaint a root that already
+    // said dark, on the document or on the scope inside it.
     media(
       '(prefers-color-scheme: light)',
-      rule(':root:not([data-theme]),\n[data-kroma-theme]:not([data-theme])', light),
+      rule(
+        ':root:not([data-theme]),\nhtml:not([data-theme]) [data-kroma-theme]:not([data-theme])',
+        light,
+      ),
     ),
     media('(prefers-reduced-motion: reduce)', rule(':root,\n[data-kroma-theme]', stillDurations())),
   ].join('\n\n');

@@ -48,7 +48,14 @@ const NAV_ACTIONS = (
 const loadCommandMenu = () =>
   import('#web/command-menu.component').then((menu) => menu.CommandMenu);
 
-const BROWSER_KIT = { formFactor: 'browser', ground: 'dark' } as const;
+const BROWSER_KIT = { formFactor: 'browser' } as const;
+
+// The shell is prerendered, so no server sees the visitor's cookie before the
+// page is sent. This runs ahead of the first paint instead: a stored ground is
+// on <html> immediately, and `system` writes nothing, leaving the token sheet's
+// media query in charge. ThemeHost keeps the attribute in step once React runs.
+const GROUND_SCRIPT =
+  "(function(){try{var m=/(?:^|;\\s*)kroma-theme=(light|dark)/.exec(document.cookie);if(m)document.documentElement.dataset.theme=m[1]}catch(e){}})()";
 
 const sDefinition = styles({
   toasts: { position: 'fixed', inset: 0, zIndex: 90, pointerEvents: 'none' },
@@ -104,11 +111,12 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
     // `lang` is the SSR default; LocaleProvider updates it client-side to match
     // the active locale (account preference → device → browser).
-    // The app is dark-only for now: an unstamped root is the `system` choice and
-    // would follow prefers-color-scheme into a light palette nothing here has
-    // been designed against.
-    <html lang="fr" data-theme={BROWSER_KIT.ground}>
+    // The ground is whatever ThemeSwitch stored: GROUND_SCRIPT stamps it before
+    // the first paint and ThemeHost keeps it there. An unstamped root is
+    // `system`, which the token sheet answers through prefers-color-scheme.
+    <html lang="fr">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: GROUND_SCRIPT }} />
         <HeadContent />
       </head>
       <body>

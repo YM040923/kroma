@@ -1,11 +1,11 @@
-// Preferences section: UI language and the background blur (the blur per
-// device) plus the preferred audio and subtitle languages. Each one is saved
+// Preferences section: appearance, UI language and the background blur (the blur
+// per device) plus the preferred audio and subtitle languages. Each one is saved
 // the moment it is chosen.
 
 import { LANG_NO_PREF, LOCALES, langName, langOptions, localeLabel } from '@kromatv/core';
 import { prefValue } from '@kromatv/core/react';
 import { useLocale, useSetLocale, useT } from '@kromatv/ui';
-import { ListRow, Select, Switch, Text } from '@kromatv/ui/kit';
+import { ListRow, Select, Switch, Text, ThemeSwitch } from '@kromatv/ui/kit';
 import { useMemo, useState } from 'react';
 import { PrefRow, useSave } from '#web/features/accounts/account/ui';
 import { useAuth } from '#web/shared/lib/auth';
@@ -77,6 +77,21 @@ export function PreferencesCard() {
               <Select.Item key={l.code} value={l.code} label={localeLabel(t, l)} />
             ))}
           </Select.Root>
+        }
+      />
+      <PrefRow
+        icon="sun"
+        label={t('appearance.title')}
+        desc={t('appearance.desc')}
+        control={
+          <ThemeSwitch
+            label={t('appearance.title')}
+            labels={{
+              system: t('appearance.system'),
+              light: t('appearance.light'),
+              dark: t('appearance.dark'),
+            }}
+          />
         }
       />
       <PrefRow

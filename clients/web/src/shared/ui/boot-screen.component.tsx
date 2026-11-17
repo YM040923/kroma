@@ -1,5 +1,4 @@
 import { KROMA_LOCKUP, lockupSvg } from '@kromatv/ui/lockup';
-import { colors } from '@kromatv/ui/tokens/colors';
 import type { ReactNode } from 'react';
 import { PAGE_RADIAL } from '#web/shared/ui/page';
 
@@ -7,12 +6,16 @@ const LOCKUP_HEIGHT = 38;
 const LOCKUP_WIDTH = Math.round(
   (LOCKUP_HEIGHT * (KROMA_LOCKUP.maX + KROMA_LOCKUP.maWidth)) / KROMA_LOCKUP.height,
 );
-const LOCKUP_SRC = `data:image/svg+xml,${encodeURIComponent(lockupSvg(colors.text))}`;
+// A mask, not an <img>: the mark takes the ground's ink from the token sheet,
+// so a light page never flashes the dark theme's near-white logo.
+const LOCKUP_MASK = `url("data:image/svg+xml,${encodeURIComponent(lockupSvg('#FFFFFF'))}")`;
 
 /** The rules behind {@link BootScreen}, for the document head. */
 export const BOOT_SCREEN_CSS =
   '.kroma-routes{display:contents}.kroma-boot{display:none}' +
-  `.kroma-routes:empty+.kroma-boot{display:flex;position:fixed;inset:0;align-items:center;justify-content:center;background-image:${PAGE_RADIAL}}`;
+  `.kroma-routes:empty+.kroma-boot{display:flex;position:fixed;inset:0;align-items:center;justify-content:center;background-image:${PAGE_RADIAL}}` +
+  `.kroma-boot-logo{width:${LOCKUP_WIDTH}px;height:${LOCKUP_HEIGHT}px;background-color:var(--kroma-text);` +
+  `-webkit-mask:${LOCKUP_MASK} center/contain no-repeat;mask:${LOCKUP_MASK} center/contain no-repeat}`;
 
 /** The routes, with the gate's lockup on the gate's ground in their place until
  * the first one renders: what the static shell paints before its script runs. */
@@ -21,7 +24,7 @@ export function BootScreen({ children }: Readonly<{ children: ReactNode }>) {
     <>
       <div className="kroma-routes">{children}</div>
       <div className="kroma-boot">
-        <img src={LOCKUP_SRC} alt="" width={LOCKUP_WIDTH} height={LOCKUP_HEIGHT} />
+        <div className="kroma-boot-logo" role="img" aria-label="KROMA" />
       </div>
     </>
   );
