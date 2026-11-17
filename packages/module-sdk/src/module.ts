@@ -54,6 +54,17 @@ export interface SlotContribution<Name extends SlotName = SlotName> {
  * does not exist. Adding a slot is a change to this map first.
  */
 export interface SlotProps {
+  /** Beside the watch and monitor actions of one title. The title's identity
+   *  is already resolved (TMDB), so whoever fills this answers "where can this
+   *  exact film be acquired", never "which film is this". `owned` says the
+   *  library already holds a playable copy. */
+  'title.detail.actions': {
+    kind: 'movie' | 'show';
+    tmdbId: number | null;
+    title: string;
+    year: number | null;
+    owned: boolean;
+  };
   /** The acquisition half of the admin request page: search for releases of
    *  this request and grab one. Everything about indexers, releases and
    *  downloads lives behind it. */

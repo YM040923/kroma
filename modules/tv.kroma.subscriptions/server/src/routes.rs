@@ -2,9 +2,11 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use kroma_module_sdk::host::{json_error, AuthUser, HostCtx};
 use kroma_module_sdk::domain::Permission;
+use kroma_module_sdk::host::{json_error, AuthUser, HostCtx};
+use kroma_module_sdk::http::Fetch;
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::store::{self, Item, Task};
 
@@ -20,11 +22,38 @@ struct TaskBody {
     enabled: bool,
 }
 
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct SourceBody {
+    url: String,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct SearchBody {
+    kind: String,
+    tmdb_id: i64,
+    title: String,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct SubscribeBody {
+    tmdb_id: i64,
+    title: String,
+    kind: String,
+    resource: String,
+    price: i64,
+}
+
 pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
     Router::new()
         .route("/subscriptions", get(list::<S>).post(create::<S>))
         .route("/subscriptions/{id}", put(update::<S>))
         .route("/subscriptions/{id}/scan", post(scan::<S>))
+        .route("/source", post(set_source::<S>))
+        .route("/search", post(search::<S>))
+        .route("/subscribe", post(subscribe::<S>))
 }
 
 fn require<S: HostCtx>(host: &S, user: &kroma_module_sdk::domain::User) -> Result<(), axum::response::Response> {
@@ -75,4 +104,73 @@ async fn scan<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>,
     task.status = "running-dry-run".into(); task.last_run_at = kroma_module_sdk::primitives::now_ms(); task.last_error.clear();
     store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
     Ok(Json(stored.items.into_iter().filter(|item| item.task_id == id).collect()))
+}
+
+async fn set_source<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser, Json(body): Json<SourceBody>) -> Result<Json<store::Stored>, axum::response::Response> {
+    require(&host, &user)?;
+    let url = body.url.trim().trim_end_matches('/').to_string();
+    if !url.is_empty() && !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err(json_error(StatusCode::BAD_REQUEST, "订阅源服务地址必须形如 http://172.17.0.1:8790"));
+    }
+    let mut stored = store::load();
+    stored.source_url = url;
+    store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
+    Ok(Json(stored))
+}
+
+async fn search<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser, Json(body): Json<SearchBody>) -> Result<Json<Value>, axum::response::Response> {
+    require(&host, &user)?;
+    let source = store::load().source_url;
+    if source.is_empty() {
+        return Err(json_error(StatusCode::BAD_REQUEST, "订阅源服务地址还没配置：在订阅页填上本机来源服务的地址"));
+    }
+    if body.tmdb_id <= 0 {
+        return Err(json_error(StatusCode::BAD_REQUEST, "缺少 TMDB 标识"));
+    }
+    let kind = if body.kind == "show" { "tv" } else { "movie" };
+    let url = format!("{source}/search?tmdb={}&type={kind}", body.tmdb_id);
+    let response = Fetch::default()
+        .purpose("subscription-source")
+        .max_time(180)
+        .get(&url)
+        .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &format!("订阅源服务连不上：{error}")))?;
+    let status = response.status;
+    let text = response.text();
+    if status != 200 {
+        let reason: String = text.trim().chars().take(300).collect();
+        return Err(json_error(StatusCode::BAD_GATEWAY, &format!("订阅源返回 HTTP {status}：{reason}")));
+    }
+    let value: Value = serde_json::from_str(&text).map_err(|_| json_error(StatusCode::BAD_GATEWAY, "订阅源返回的不是 JSON"))?;
+    Ok(Json(value))
+}
+
+async fn subscribe<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser, Json(body): Json<SubscribeBody>) -> Result<Json<Task>, axum::response::Response> {
+    require(&host, &user)?;
+    if body.tmdb_id <= 0 || body.title.trim().is_empty() || body.resource.trim().is_empty() {
+        return Err(json_error(StatusCode::BAD_REQUEST, "订阅缺少影片或资源信息"));
+    }
+    let mut stored = store::load();
+    if stored.tasks.iter().any(|task| task.tmdb_id == body.tmdb_id && task.resource == body.resource) {
+        return Err(json_error(StatusCode::CONFLICT, "这个资源已经加入订阅"));
+    }
+    let id = format!("sub-{}", kroma_module_sdk::primitives::now_ms());
+    let task = Task {
+        id,
+        name: body.title.trim().to_string(),
+        source: "madreel".into(),
+        monitor_path: String::new(),
+        target_path: String::new(),
+        failure_path: String::new(),
+        monitor_mode: "manual".into(),
+        enabled: true,
+        status: "pending".into(),
+        last_run_at: 0,
+        last_error: String::new(),
+        tmdb_id: body.tmdb_id,
+        resource: body.resource.trim().to_string(),
+        price: body.price,
+    };
+    stored.tasks.push(task.clone());
+    store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
+    Ok(Json(task))
 }

@@ -1,11 +1,15 @@
+import { AdminHostProvider, ModuleSlotProvider } from '@kromatv/module-sdk';
 import { CastProvider } from '@kromatv/ui';
 import { Box, classes, styles, useBreakpoint, useStyles } from '@kromatv/ui/kit';
 import { createFileRoute, Outlet } from '@tanstack/react-router';
+import { useMemo } from 'react';
 import { CatalogModalHosts } from '#web/features/catalog/modal-hosts.component';
 import { MobileTopbar, Sidebar } from '#web/features/catalog/sidebar.component';
 import { useNotificationStream } from '#web/features/notifications/use-notifications';
 import { CastBar } from '#web/features/playback/cast/cast-bar.component';
-import { isAuthed } from '#web/shared/lib/api';
+import { useModuleRegistry } from '#web/modules/module-host-provider.component';
+import { apiBase, isAuthed } from '#web/shared/lib/api';
+import { useAuth } from '#web/shared/lib/auth';
 import { deviceInfo } from '#web/shared/lib/device';
 import { useRequireAuth } from '#web/shared/lib/require-auth.hook';
 import { useSidebarCollapsed } from '#web/shared/lib/sidebar-collapsed.hook';
@@ -53,30 +57,37 @@ function AppLayout() {
   const step = useBreakpoint();
   const wide = step === 'lg' || step === 'tv';
   const [collapsed, setCollapsed] = useSidebarCollapsed();
+  const { client, user } = useAuth();
+  const registry = useModuleRegistry();
+  const adminHost = useMemo(() => ({ client, user, apiBase: apiBase() }), [client, user]);
   useNotificationStream();
   if (!(ready && authed)) {
     return null;
   }
   return (
-    <CastProvider client={webRuntime.client} enabled deviceName={BROWSER_LABEL}>
-      <Box row={wide} minH="100%">
-        {wide ? (
-          <Box w={collapsed ? RAIL_COLLAPSED : RAIL_WIDTH} shrink={0}>
-            <Sidebar collapsed={collapsed} onToggleCollapsed={() => setCollapsed(!collapsed)} />
+    <AdminHostProvider value={adminHost}>
+      <ModuleSlotProvider registry={registry}>
+        <CastProvider client={webRuntime.client} enabled deviceName={BROWSER_LABEL}>
+          <Box row={wide} minH="100%">
+            {wide ? (
+              <Box w={collapsed ? RAIL_COLLAPSED : RAIL_WIDTH} shrink={0}>
+                <Sidebar collapsed={collapsed} onToggleCollapsed={() => setCollapsed(!collapsed)} />
+              </Box>
+            ) : (
+              <MobileTopbar />
+            )}
+            <div className={classes(s.column)}>
+              <Outlet />
+            </div>
+            <CatalogModalHosts />
+            <CastBar />
+            <DirectOffer />
           </Box>
-        ) : (
-          <MobileTopbar />
-        )}
-        <div className={classes(s.column)}>
-          <Outlet />
-        </div>
-        <CatalogModalHosts />
-        <CastBar />
-        <DirectOffer />
-      </Box>
-      <Box z={CAST_PICKER_Z}>
-        <CastPicker />
-      </Box>
-    </CastProvider>
+          <Box z={CAST_PICKER_Z}>
+            <CastPicker />
+          </Box>
+        </CastProvider>
+      </ModuleSlotProvider>
+    </AdminHostProvider>
   );
 }

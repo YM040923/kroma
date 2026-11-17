@@ -1,4 +1,5 @@
 import { tmdbKindOf } from '@kromatv/client/discovery';
+import { ModuleSlot } from '@kromatv/module-sdk';
 import type { ItemId, SubjectId } from '@kromatv/client/media';
 import { formatRuntime } from '@kromatv/core';
 import { useT } from '@kromatv/ui';
@@ -98,7 +99,17 @@ export function TitleHero({
         )
       }
       adminAction={
-        <FollowState kind={view.kind === 'show' ? 'show' : 'movie'} tmdbId={view.tmdbId ?? null} />
+        <>
+          <ModuleSlot
+            name="title.detail.actions"
+            kind={view.kind === 'show' ? 'show' : 'movie'}
+            tmdbId={view.tmdbId}
+            title={view.title}
+            year={view.year}
+            owned={owned}
+          />
+          <FollowState kind={view.kind === 'show' ? 'show' : 'movie'} tmdbId={view.tmdbId ?? null} />
+        </>
       }
       back={back}
       onPlay={playable ? () => onPlay(playable.id) : undefined}

@@ -8,6 +8,13 @@
   "engines": { "server": ">=0.1.39" },
   "component": { "instances": 2, "cpuSeconds": 300 },
   "feRemote": { "module": "./remoteEntry.js" },
-  "permissions": { "net": { "connect": [{ "purpose": "subscription-source", "to": ["115.com", "*.115.com"], "ports": [443] }] }, "fs": { "read": ["module"], "write": ["module"] } },
+  "permissions": {
+    "net": {
+      "connect": [
+        { "purpose": "subscription-source", "to": ["172.17.0.1", "host.docker.internal"], "ports": [8790] }
+      ]
+    },
+    "fs": { "read": ["module"], "write": ["module"] }
+  },
   "dependencies": { "tv.kroma.cloud115": ">=0.3.2" }
 }

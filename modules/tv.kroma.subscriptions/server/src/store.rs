@@ -16,6 +16,12 @@ pub struct Task {
     pub status: String,
     pub last_run_at: i64,
     pub last_error: String,
+    /// The title this task was opened for, so a transfer never has to identify
+    /// the film again (the title page already resolved it).
+    pub tmdb_id: i64,
+    /// The chosen release on the source, as the source names it.
+    pub resource: String,
+    pub price: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -31,6 +37,9 @@ pub struct Item {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Stored {
+    /// Where releases are searched for. A local service that speaks the
+    /// source's own protocol; the module never talks to the site itself.
+    pub source_url: String,
     pub tasks: Vec<Task>,
     pub items: Vec<Item>,
 }
