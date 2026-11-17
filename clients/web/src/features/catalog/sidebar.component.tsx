@@ -81,6 +81,7 @@ export function Sidebar({
   onToggleCollapsed,
 }: Readonly<{ collapsed: boolean; onToggleCollapsed: () => void }>) {
   const s = useStyles(sDefinition);
+  const t = useT();
 
   const step = useBreakpoint();
   if (step !== 'lg' && step !== 'tv') {
@@ -89,10 +90,20 @@ export function Sidebar({
   return (
     <aside className={classes(s.sidebar)}>
       <SideNavCompactProvider compact={collapsed}>
-        <SideNav.Header compact={collapsed}>
-          <Logo size={24} />
+        <SideNav.Header
+          compact={collapsed}
+          toggle={
+            <IconButton
+              variant="ghost"
+              icon={collapsed ? 'chevron-right' : 'chevron-left'}
+              label={t(collapsed ? 'nav.expandSidebar' : 'nav.collapseSidebar')}
+              onPress={onToggleCollapsed}
+            />
+          }
+        >
+          <Logo size={collapsed ? 26 : 24} markOnly={collapsed} />
         </SideNav.Header>
-        <SidebarBody collapsed={collapsed} onToggleCollapsed={onToggleCollapsed} />
+        <SidebarBody collapsed={collapsed} />
       </SideNavCompactProvider>
     </aside>
   );
@@ -100,22 +111,16 @@ export function Sidebar({
 
 // The desktop aside's own scroll frame. In the phone sheet the frame is the
 // drawer's <Drawer.Panel>, which is why the two are separate.
-function SidebarBody({
-  collapsed,
-  onToggleCollapsed,
-}: Readonly<{ collapsed: boolean; onToggleCollapsed: () => void }>) {
+function SidebarBody({ collapsed }: Readonly<{ collapsed: boolean }>) {
   const s = useStyles(sDefinition);
   return (
     <ScrollView style={SIDE_NAV_FRAME} contentContainerStyle={s.scrollContent}>
-      <SidebarNav collapsed={collapsed} onToggleCollapsed={onToggleCollapsed} />
+      <SidebarNav collapsed={collapsed} />
     </ScrollView>
   );
 }
 
-function SidebarNav({
-  collapsed = false,
-  onToggleCollapsed,
-}: Readonly<{ collapsed?: boolean; onToggleCollapsed?: () => void }>) {
+function SidebarNav({ collapsed = false }: Readonly<{ collapsed?: boolean }>) {
   const t = useT();
   const s = useStyles(sDefinition);
   return (
@@ -145,16 +150,6 @@ function SidebarNav({
           <WhatsNewLink />
         </SideNav.Group>
         <Box style={s.accountArea}>
-          {onToggleCollapsed ? (
-            <Row justify={collapsed ? 'center' : 'flex-start'} px={collapsed ? 0 : 4} pb={4}>
-              <IconButton
-                variant="ghost"
-                icon={collapsed ? 'chevron-right' : 'chevron-left'}
-                label={t(collapsed ? 'nav.expandSidebar' : 'nav.collapseSidebar')}
-                onPress={onToggleCollapsed}
-              />
-            </Row>
-          ) : null}
           <UserChip compact={collapsed} />
           {collapsed ? null : (
             <Box px={4} pt={6}>

@@ -3,7 +3,6 @@ import {
   ConfirmHost,
   classes,
   KitProvider,
-  Row,
   styles,
   Toaster,
   useStyles,
@@ -30,6 +29,7 @@ import { BOOT_SCREEN_CSS, BootScreen } from '#web/shared/ui/boot-screen.componen
 import { CompatGate } from '#web/shared/ui/compat-gate.component';
 import { CommandMenuButton } from '#web/shared/ui/command-menu-button.component';
 import { NavActionsProvider } from '#web/shared/ui/nav-actions';
+import { ThemeButton } from '#web/shared/ui/theme-button.component';
 
 // Dev-only: lazy so the devtools bundle never ships in the packaged SPA.
 const ReactQueryDevtools = import.meta.env.DEV
@@ -39,10 +39,11 @@ const ReactQueryDevtools = import.meta.env.DEV
   : () => null;
 
 const NAV_ACTIONS = (
-  <Row gap={2}>
+  <>
+    <ThemeButton />
     <CommandMenuButton />
     <NotificationBell />
-  </Row>
+  </>
 );
 
 const loadCommandMenu = () =>

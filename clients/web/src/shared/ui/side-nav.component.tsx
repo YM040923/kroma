@@ -25,7 +25,11 @@ export function SideNavCompactProvider({
   return <CompactContext.Provider value={compact}>{children}</CompactContext.Provider>;
 }
 
-function Header({ children, compact = false }: Readonly<{ children: ReactNode; compact?: boolean }>) {
+function Header({
+  children,
+  compact = false,
+  toggle,
+}: Readonly<{ children: ReactNode; compact?: boolean; toggle?: ReactNode }>) {
   const actions = useNavActions();
   return (
     <Box
@@ -34,14 +38,28 @@ function Header({ children, compact = false }: Readonly<{ children: ReactNode; c
       align="center"
       justify={compact ? 'center' : undefined}
       between={!compact}
-      gap={compact ? 12 : 8}
+      gap={compact ? 10 : 8}
       pl={compact ? 8 : SIDE_NAV_BAND_X}
       pr={compact ? 8 : SIDE_NAV_GUTTER}
       pt={24}
       pb={16}
     >
       {children}
-      {actions}
+      {compact ? (
+        <>
+          {toggle}
+          <Box align="center" gap={2}>
+            {actions}
+          </Box>
+        </>
+      ) : (
+        <Box row align="center" gap={4}>
+          {toggle}
+          <Box row align="center" gap={2}>
+            {actions}
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }
