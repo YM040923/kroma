@@ -31,6 +31,7 @@ fn poll<S: HostCtx + Clone + Send + Sync + 'static>(_host: &S) -> anyhow::Result
     // Discovery is intentionally dry-run in the first slice. No 115 write or
     // paid acquisition happens until an item is explicitly executed.
     let _ = store::load();
+    routes::poll_transfers();
     Ok(())
 }
 

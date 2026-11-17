@@ -100,7 +100,76 @@ fn validate(body: &TaskBody) -> Result<(), String> {
 
 async fn list<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser) -> Result<Json<store::Stored>, axum::response::Response> {
     require(&host, &user)?;
+    poll_transfers();
     Ok(Json(store::load()))
+}
+
+/// Reads the source's asynchronous unlock/transfer jobs and folds their result
+/// back into the task: a 202 from `/unlock` is a started job, not a failure.
+pub(crate) fn poll_transfers() {
+    let mut stored = store::load();
+    let source = stored.source_url.clone();
+    if source.trim().is_empty() {
+        return;
+    }
+    let mut changed = false;
+    for task in stored.tasks.iter_mut() {
+        if task.job_id.is_empty() {
+            continue;
+        }
+        if !matches!(
+            task.status.as_str(),
+            "unlocking" | "running" | "transferring"
+        ) {
+            continue;
+        }
+        let Ok(job) = source_json(&source, &format!("/job/{}", task.job_id), None) else {
+            continue;
+        };
+        let status = job.get("status").and_then(Value::as_str).unwrap_or("");
+        match status {
+            "succeeded" => {
+                task.status = "done".into();
+                task.last_error.clear();
+                if let Some(price) = job
+                    .pointer("/result/unlocked/pricePaid")
+                    .and_then(Value::as_i64)
+                {
+                    task.price = price;
+                }
+                if let Some(link) = job
+                    .pointer("/result/unlocked/link")
+                    .and_then(Value::as_str)
+                {
+                    task.link = link.to_string();
+                }
+                task.last_run_at = kroma_module_sdk::primitives::now_ms();
+                changed = true;
+            }
+            "failed" => {
+                task.status = "failed".into();
+                task.last_error = job
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("转存失败")
+                    .chars()
+                    .take(200)
+                    .collect();
+                changed = true;
+            }
+            _ => {
+                let step = job.get("step").and_then(Value::as_str).unwrap_or("");
+                if !step.is_empty() && task.last_error != format!("进行中：{step}") {
+                    task.status = "running".into();
+                    task.last_error = format!("进行中：{step}");
+                    changed = true;
+                }
+            }
+        }
+    }
+    if changed {
+        let _ = store::save(&stored);
+    }
 }
 
 async fn create<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser, Json(body): Json<TaskBody>) -> Result<Json<Task>, axum::response::Response> {
@@ -287,7 +356,7 @@ fn source_json(source_url: &str, path: &str, body: Option<&Value>) -> Result<Val
     .map_err(|error| format!("订阅源服务连不上：{error}"))?;
     let status = response.status;
     let text = response.text();
-    if status != 200 {
+    if !(200..300).contains(&status) {
         let reason: String = text.trim().chars().take(300).collect();
         return Err(format!("订阅源返回 HTTP {status}：{reason}"));
     }
