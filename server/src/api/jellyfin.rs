@@ -28,25 +28,47 @@ pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/System/Info/Public", get(info_public))
         .route("/System/Info", get(info_public))
+        .route("/System/Ping", get(ping).post(ping))
+        .route("/System/Endpoint", get(endpoint))
         .route("/Branding/Configuration", get(branding))
+        .route("/Users/Public", get(users_public))
         .route("/Users/AuthenticateByName", post(authenticate))
         .route("/Users/Me", get(me))
         .route("/Users/{user_id}", get(me))
         .route("/Users/{user_id}/Views", get(views))
+        .route("/Users/{user_id}/GroupingOptions", get(grouping_options))
         .route("/Users/{user_id}/Items", get(items))
         .route("/Users/{user_id}/Items/Latest", get(latest))
+        .route("/Users/{user_id}/Items/Resume", get(empty_items))
+        .route("/Users/{user_id}/Items/Root", get(items_root))
         .route("/Users/{user_id}/Items/{id}", get(item_detail))
         .route("/Users/{user_id}/Items/{id}/Similar", get(similar))
         .route("/UserViews", get(user_views))
+        .route("/UserViews/GroupingOptions", get(grouping_options))
+        .route("/Items", get(items))
+        .route("/Items/Latest", get(latest))
+        .route("/Items/Resume", get(empty_items))
+        .route("/Items/Root", get(items_root))
+        .route("/UserItems/Resume", get(empty_items))
         .route("/Items/{id}", get(item_detail))
         .route("/Items/{id}/Similar", get(similar))
         .route("/Items/Counts", get(item_counts))
         .route("/Items/Filters", get(filters))
         .route("/Items/Filters2", get(filters))
+        .route("/Items/{id}/SpecialFeatures", get(empty_items))
+        .route("/Items/{id}/LocalTrailers", get(empty_items))
+        .route("/Items/{id}/Intros", get(empty_items))
+        .route("/Items/{id}/ThemeMedia", get(theme_media))
         .route("/Genres", get(genres))
+        .route("/Studios", get(empty_studios))
+        .route("/Persons", get(empty_people))
+        .route("/Search/Hints", get(search_hints))
+        .route("/Sessions", get(empty_sessions))
+        .route("/Library/VirtualFolders", get(virtual_folders))
         .route("/Notifications/{user_id}/Summary", get(notifications_summary))
         .route("/Shows/{id}/Seasons", get(seasons))
         .route("/Shows/{id}/Episodes", get(episodes))
+        .route("/Shows/{id}/Similar", get(similar))
         .route("/Items/{id}/PlaybackInfo", post(playback_info))
         .route("/Items/{id}/PlaybackInfo", get(playback_info))
         .route("/Items/{id}/Images/{kind}", get(image))
@@ -60,7 +82,6 @@ pub fn routes() -> Router<SharedState> {
         .route("/Sessions/Capabilities/Full", post(no_content))
         .route("/QuickConnect/Enabled", get(quick_connect_enabled))
         .route("/DisplayPreferences/{id}", get(display_preferences))
-        .route("/Users/{user_id}/Items/Resume", get(empty_items))
         .route("/Shows/NextUp", get(empty_items))
 }
 
@@ -258,6 +279,18 @@ async fn item_detail(
     let id = path.get("id").cloned().unwrap_or_default();
     if id.is_empty() {
         return Err(json_error(StatusCode::NOT_FOUND, "item not found"));
+    }
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    if let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) {
+        return Ok(Json(json!({
+            "Name": def.name,
+            "Id": def.id,
+            "ServerId": server_id(&state),
+            "Type": "CollectionFolder",
+            "CollectionType": library_type(def),
+            "IsFolder": true,
+            "ChildCount": 0,
+        })));
     }
     let wanted = id.clone();
     if let Some(detail) = query(&state.db, move |pool| db::get_show(&pool, &wanted)).await? {
@@ -620,7 +653,7 @@ async fn items(
     State(state): State<SharedState>,
     headers: HeaderMap,
     Query(params): Query<HashMap<String, String>>,
-    Path(_user_id): Path<String>,
+    Path(_params): Path<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
     let parent = params.get("ParentId").cloned().unwrap_or_default();
@@ -702,7 +735,7 @@ async fn latest(
     State(state): State<SharedState>,
     headers: HeaderMap,
     Query(params): Query<HashMap<String, String>>,
-    Path(_user_id): Path<String>,
+    Path(_params): Path<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
     let all = query(&state.db, |pool| db::list_items(&pool, None)).await?;
@@ -1019,4 +1052,174 @@ async fn empty_items(
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
     Ok(Json(json!({ "Items": [], "TotalRecordCount": 0 })))
+}
+
+async fn ping() -> StatusCode {
+    StatusCode::OK
+}
+
+async fn endpoint() -> Json<Value> {
+    Json(json!({ "IsLocal": true, "IsInNetwork": true }))
+}
+
+async fn users_public() -> Json<Value> {
+    Json(json!([]))
+}
+
+async fn items_root(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(_params): Path<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(json!({
+        "Name": "Media Folders",
+        "ServerId": server_id(&state),
+        "Id": "root",
+        "Type": "UserRootFolder",
+        "MediaType": "Unknown",
+        "IsFolder": true,
+    })))
+}
+
+async fn grouping_options(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(_params): Path<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let options: Vec<Value> = defs
+        .iter()
+        .map(|def| json!({ "Name": def.name, "Id": def.id }))
+        .collect();
+    Ok(Json(json!(options)))
+}
+
+async fn virtual_folders(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let folders: Vec<Value> = defs
+        .iter()
+        .map(|def| {
+            let kind = library_type(def);
+            json!({
+                "Name": def.name,
+                "Locations": def.folders,
+                "CollectionType": kind,
+                "LibraryOptions": {
+                    "ContentType": kind,
+                    "MetadataCountryCode": "",
+                    "PreferredMetadataLanguage": "",
+                },
+                "ItemId": def.id,
+                "PrimaryImageItemId": Value::Null,
+            })
+        })
+        .collect();
+    Ok(Json(json!(folders)))
+}
+
+async fn empty_people(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(
+        json!({ "Items": [], "TotalRecordCount": 0 }),
+    ))
+}
+
+async fn empty_studios(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(
+        json!({ "Items": [], "TotalRecordCount": 0 }),
+    ))
+}
+
+async fn empty_sessions(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(json!([])))
+}
+
+async fn theme_media(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(_params): Path<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(json!({
+        "OwnedMedia": [],
+        "MediaSourceId": Value::Null,
+        "TotalRecordCount": 0,
+    })))
+}
+
+async fn search_hints(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    let (user, _) = user_of(&state, &headers, &params).await?;
+    let term = params
+        .get("SearchTerm")
+        .map(|value| value.to_lowercase())
+        .unwrap_or_default();
+    if term.is_empty() {
+        return Ok(Json(
+            json!({ "SearchHints": [], "TotalRecordCount": 0 }),
+        ));
+    }
+    let mut items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+    let mut shows = query(&state.db, |pool| db::list_shows(&pool, None)).await?;
+    crate::api::visibility::keep_items(&user, &mut items);
+    crate::api::visibility::keep_shows(&user, &mut shows);
+    let mut hints = Vec::new();
+    for item in items
+        .iter()
+        .filter(|item| item.show_id.is_none() && item.title.to_lowercase().contains(&term))
+    {
+        hints.push(json!({
+            "ItemId": item.id,
+            "Id": item.id,
+            "Name": item.title,
+            "Type": "Movie",
+            "MediaType": "Video",
+            "ProductionYear": item.year,
+            "RunTimeTicks": ticks(item.duration_ms),
+        }));
+    }
+    for show in shows
+        .iter()
+        .filter(|show| show.title.to_lowercase().contains(&term))
+    {
+        hints.push(json!({
+            "ItemId": show.id,
+            "Id": show.id,
+            "Name": show.title,
+            "Type": "Series",
+            "MediaType": "Unknown",
+            "ProductionYear": show.year,
+        }));
+    }
+    Ok(Json(json!({
+        "SearchHints": hints,
+        "TotalRecordCount": hints.len(),
+    })))
 }
