@@ -37,6 +37,18 @@ pub struct IncrState {
     pub last_events: u64,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct HistoryEntry {
+    pub at: i64,
+    pub dirs: u64,
+    pub files: u64,
+    pub written: u64,
+    pub pruned: u64,
+    pub errors: u32,
+    pub truncated: bool,
+}
+
 /// What the module remembers between runs.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -60,6 +72,8 @@ pub struct Stored {
     /// Play requests answered, and how many of those had to sign a fresh link.
     pub play_count: u64,
     pub sign_count: u64,
+    /// The last few mirror runs, newest last.
+    pub history: Vec<HistoryEntry>,
 }
 
 fn path() -> PathBuf {

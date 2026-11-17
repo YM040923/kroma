@@ -255,6 +255,22 @@ async fn run<S: HostCtx>(
     report.finished_at = Some(unix_now());
     report.current.clear();
     publish(&report);
+    let summary = crate::store::HistoryEntry {
+        at: unix_now(),
+        dirs: report.dirs,
+        files: report.files,
+        written: report.written,
+        pruned: report.pruned,
+        errors: report.errors.len() as u32,
+        truncated: report.truncated,
+    };
+    let _ = crate::store::patch(move |stored| {
+        stored.history.push(summary);
+        let excess = stored.history.len().saturating_sub(20);
+        if excess > 0 {
+            stored.history.drain(0..excess);
+        }
+    });
     // A run that failed halfway has no business replacing the watcher's map: the
     // half it did not walk would look like it left the library.
     if !report.truncated && !dirs.is_empty() {

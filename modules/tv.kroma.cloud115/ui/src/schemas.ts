@@ -60,6 +60,17 @@ export const SyncReport = z.object({
 });
 export type SyncReport = z.infer<typeof SyncReport>;
 
+export const CloudHistoryEntry = z.object({
+  at: z.number(),
+  dirs: z.number(),
+  files: z.number(),
+  written: z.number(),
+  pruned: z.number(),
+  errors: z.number(),
+  truncated: z.boolean(),
+});
+export type CloudHistoryEntry = z.infer<typeof CloudHistoryEntry>;
+
 export const CloudStatusView = z.object({
   running: z.boolean(),
   report: SyncReport,
@@ -80,8 +91,19 @@ export const CloudStatusView = z.object({
   lastPlayUrl: z.string().default(''),
   playCount: z.number().default(0),
   signCount: z.number().default(0),
+  history: z.array(CloudHistoryEntry).default([]),
 });
 export type CloudStatusView = z.infer<typeof CloudStatusView>;
+
+export const CloudAccount = z.object({
+  total: z.number().default(0),
+  used: z.number().default(0),
+  remain: z.number().default(0),
+  totalText: z.string().default(''),
+  usedText: z.string().default(''),
+  remainText: z.string().default(''),
+});
+export type CloudAccount = z.infer<typeof CloudAccount>;
 
 export const SavedView = z.object({ saved: z.boolean(), errors: z.array(z.string()) });
 export const StartedView = z.object({ started: z.boolean() });

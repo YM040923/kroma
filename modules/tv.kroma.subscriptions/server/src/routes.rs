@@ -75,6 +75,7 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/subscriptions/{id}", put(update::<S>))
         .route("/subscriptions/{id}/scan", post(scan::<S>))
         .route("/source", post(set_source::<S>))
+        .route("/config", get(get_config::<S>).post(set_config::<S>))
         .route("/search", post(search::<S>))
         .route("/subscribe", post(subscribe::<S>))
         .route("/subscriptions/{id}/execute", post(execute::<S>))
@@ -83,6 +84,31 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
 
 fn require<S: HostCtx>(host: &S, user: &kroma_module_sdk::domain::User) -> Result<(), axum::response::Response> {
     host.require(user, Permission::SettingsManage)
+}
+
+async fn get_config<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser) -> Result<Json<Value>, axum::response::Response> {
+    require(&host, &user)?;
+    let source = store::load().source_url;
+    if source.trim().is_empty() {
+        return Err(json_error(StatusCode::BAD_REQUEST, "订阅源服务地址还没配置"));
+    }
+    source_json(&source, "/config", None)
+        .map(Json)
+        .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))
+}
+
+async fn set_config<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser, Json(body): Json<Value>) -> Result<Json<Value>, axum::response::Response> {
+    require(&host, &user)?;
+    if !body.is_object() {
+        return Err(json_error(StatusCode::BAD_REQUEST, "配置必须是一个对象"));
+    }
+    let source = store::load().source_url;
+    if source.trim().is_empty() {
+        return Err(json_error(StatusCode::BAD_REQUEST, "订阅源服务地址还没配置"));
+    }
+    source_json(&source, "/config", Some(&body))
+        .map(Json)
+        .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))
 }
 
 fn validate(body: &TaskBody) -> Result<(), String> {

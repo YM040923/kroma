@@ -23,6 +23,7 @@ import { useCloud115Api } from './api.hook';
 import type {
   BrowseEntry,
   BrowseView,
+  CloudAccount,
   CloudLibrary,
   CloudOptions,
   CloudStatusView,
@@ -129,6 +130,7 @@ export function Cloud115Settings() {
   const canManage = useCap('settings.manage');
 
   const [status, setStatus] = useState<CloudStatusView | null>(null);
+  const [account, setAccount] = useState<CloudAccount | null>(null);
   const [baseUrl, setBaseUrl] = useState('');
   const [cookie, setCookie] = useState('');
   const [hasCookie, setHasCookie] = useState(false);
@@ -173,6 +175,10 @@ export function Cloud115Settings() {
     };
     pull();
     const id = setInterval(pull, 3000);
+    api
+      .account()
+      .then(setAccount)
+      .catch(() => undefined);
     return () => clearInterval(id);
   }, [api, t]);
 
@@ -256,6 +262,10 @@ export function Cloud115Settings() {
       // The browser is the one side that knows the origin the server is reached
       // at; the .strm entries are built from it.
       await api.sync(window.location.origin);
+      api
+        .account()
+        .then(setAccount)
+        .catch(() => undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -296,6 +306,13 @@ export function Cloud115Settings() {
             <SummaryStat label={t('cloud115.indexedDirs')} value={String(status.indexedDirs)} />
             <SummaryStat label={t('cloud115.statLinks')} value={String(status.linkCache)} />
           </div>
+          {account ? (
+            <Row wrap gapX={32} gapY={8} mt={18}>
+              <Stat label={t('cloud115.spaceTotal')} value={account.totalText} />
+              <Stat label={t('cloud115.spaceUsed')} value={account.usedText} />
+              <Stat label={t('cloud115.spaceRemain')} value={account.remainText} />
+            </Row>
+          ) : null}
           <div style={{ ...GRID_ROW, marginTop: 24, marginBottom: 0 }}>
             <div style={CELL}>
               <Field.Root label={t('cloud115.cookie')} value={cookie} onValueChange={(value) => { setDirty(true); setCookie(value); }}>
@@ -544,6 +561,34 @@ export function Cloud115Settings() {
             <Stat label={t('cloud115.statCalls')} value={report.calls} />
             <Stat label={t('cloud115.statLinks')} value={status.linkCache} />
           </Row>
+          {status.history.length ? (
+            <>
+              <Text variant="cardTitle" mt={18}>
+                {t('cloud115.history')}
+              </Text>
+              <Box gap={6} mt={8}>
+                {[...status.history]
+                  .reverse()
+                  .slice(0, 10)
+                  .map((entry) => (
+                    <Row between wrap gap={12} key={entry.at}>
+                      <Text variant="meta" color="textDim">
+                        {new Date(entry.at * 1000).toLocaleString()}
+                      </Text>
+                      <Text variant="meta" color={entry.errors ? 'warning' : 'textDim'}>
+                        {t('cloud115.historyLine', {
+                          dirs: entry.dirs,
+                          files: entry.files,
+                          written: entry.written,
+                          pruned: entry.pruned,
+                          errors: entry.errors,
+                        })}
+                      </Text>
+                    </Row>
+                  ))}
+              </Box>
+            </>
+          ) : null}
           {report.truncated ? (
             <Text variant="meta" color="warning" mt={8}>
               {t('cloud115.truncated')}
@@ -770,12 +815,16 @@ export default function Cloud115Page() {
         <PageHeader.Title>{t('cloud115.title')}</PageHeader.Title>
         <PageHeader.Subtitle>{t('cloud115.subtitle')}</PageHeader.Subtitle>
         <PageHeader.Actions>
-          <StatusChip running={running} report={report} />
+          <Row gap={8} center>
+            <Button label={t('nav.cloud115Files')} size="sm" variant="glass" icon="folder" asChild>
+              <a href="/admin/cloud115-files" />
+            </Button>
+            <StatusChip running={running} report={report} />
+          </Row>
         </PageHeader.Actions>
       </PageHeader.Root>
 
       <Cloud115Settings />
-      <Cloud115Files />
     </>
   );
 }
@@ -783,7 +832,7 @@ export default function Cloud115Page() {
 /** A read-through of the drive, one folder at a time, so an operator can check
  *  what the mirror sees without opening 115 in another tab. Each folder costs
  *  one API call; the pacer applies. */
-function Cloud115Files() {
+export function Cloud115Files() {
   const t = useT();
   const api = useCloud115Api();
   const [trail, setTrail] = useState<{ cid: string; name: string }[]>([{ cid: '0', name: '' }]);

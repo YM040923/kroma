@@ -1,5 +1,6 @@
 {
   "nav.cloud115": "115 Cloud",
+  "nav.cloud115Files": "115 Drive",
   "cloud115.title": "115 Cloud",
   "cloud115.subtitle": "Mirror a 115 drive folder into your library and play it straight from the drive.",
   "cloud115.paused": "115 asked us to slow down. Every call is paused for another {seconds}s.",
@@ -39,6 +40,11 @@
   "cloud115.lastLink": "Last direct link",
   "cloud115.lastPlay": "Last played",
   "cloud115.playCopy": "Copy link",
+  "cloud115.history": "Scan history",
+  "cloud115.historyLine": "dirs {dirs} · files {files} · written {written} · pruned {pruned} · errors {errors}",
+  "cloud115.spaceTotal": "Total space",
+  "cloud115.spaceUsed": "Used",
+  "cloud115.spaceRemain": "Free",
   "cloud115.interval": "Gap between calls (ms)",
   "cloud115.budget": "Call budget per run",
   "cloud115.folderCap": "Entries per folder",

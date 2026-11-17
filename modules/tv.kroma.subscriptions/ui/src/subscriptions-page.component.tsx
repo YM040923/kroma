@@ -12,13 +12,15 @@ import {
 } from '@kromatv/ui/kit';
 import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import {
+  type SubscriptionConfig,
   type SubscriptionItem,
+  type SubscriptionPreference,
   type SubscriptionTask,
   type SubscriptionTaskInput,
   useSubscriptionsApi,
 } from './api.hook';
 
-type Tab = 'movie' | 'show' | 'source';
+type Tab = 'movie' | 'show' | 'source' | 'rules' | 'config';
 type StatusFilter = 'all' | 'active' | 'completed' | 'failed';
 type UpdatedFilter = 'all' | 'today' | 'week';
 
@@ -107,6 +109,13 @@ const FILTER_ROW: CSSProperties = {
 
 const TABS: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 18 };
 
+const FORM_GRID: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+  gap: 16,
+  marginTop: 16,
+};
+
 function statusKey(status: string): string {
   if (status === 'done' || status === 'succeeded') return 'subscriptions.statusDone';
   if (status === 'failed') return 'subscriptions.statusFailed';
@@ -126,6 +135,9 @@ export default function SubscriptionsPage() {
   const allowed = useCap('settings.manage');
   const [data, setData] = useState<ListView | null>(null);
   const [sourceUrl, setSourceUrl] = useState('');
+  const [config, setConfig] = useState<SubscriptionConfig | null>(null);
+  const [configBusy, setConfigBusy] = useState(false);
+  const [configSaved, setConfigSaved] = useState(false);
   const [tab, setTab] = useState<Tab>('movie');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [network, setNetwork] = useState<'all' | '115'>('all');
@@ -149,6 +161,10 @@ export default function SubscriptionsPage() {
 
   useEffect(() => {
     void load();
+    api
+      .config()
+      .then(setConfig)
+      .catch(() => undefined);
   }, [api]);
 
   const tasks = useMemo(() => {
@@ -234,10 +250,57 @@ export default function SubscriptionsPage() {
       const view = await api.source(sourceUrl.trim());
       setData(view);
       setSourceUrl(view.sourceUrl);
+      api
+        .config()
+        .then(setConfig)
+        .catch(() => undefined);
     } catch (reason) {
       setError(String(reason));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const updatePref = (patch: Partial<SubscriptionPreference>) =>
+    setConfig((current) =>
+      current ? { ...current, preference: { ...current.preference, ...patch } } : current,
+    );
+
+  const flashSaved = () => {
+    setConfigSaved(true);
+    setTimeout(() => setConfigSaved(false), 1500);
+  };
+
+  const saveRules = async () => {
+    if (!config) return;
+    setConfigBusy(true);
+    setError('');
+    try {
+      setConfig(await api.saveConfig({ preference: config.preference }));
+      flashSaved();
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setConfigBusy(false);
+    }
+  };
+
+  const saveConfigTab = async () => {
+    if (!config) return;
+    setConfigBusy(true);
+    setError('');
+    try {
+      setConfig(
+        await api.saveConfig({
+          targetCid: config.targetCid,
+          probeLimit: config.probeLimit,
+        }),
+      );
+      flashSaved();
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setConfigBusy(false);
     }
   };
 
@@ -256,6 +319,8 @@ export default function SubscriptionsPage() {
           [
             ['movie', 'subscriptions.movies'],
             ['show', 'subscriptions.shows'],
+            ['rules', 'subscriptions.rules'],
+            ['config', 'subscriptions.config'],
             ['source', 'subscriptions.settings'],
           ] as const
         ).map(([value, label]) => (
@@ -272,7 +337,120 @@ export default function SubscriptionsPage() {
         ))}
       </div>
 
-      {tab === 'source' ? (
+      {tab === 'rules' ? (
+        <Surface elevated border="border" pad="none" px={22} py={20} mt={20}>
+          <Text variant="meta" color="textDim">
+            {t('subscriptions.rulesHint')}
+          </Text>
+          {config ? (
+            <>
+              <div style={FORM_GRID}>
+                <NumberField
+                  label={t('subscriptions.minSize')}
+                  value={config.preference.minSizeGb}
+                  onChange={(value) => updatePref({ minSizeGb: value })}
+                />
+                <NumberField
+                  label={t('subscriptions.maxSize')}
+                  value={config.preference.maxSizeGb}
+                  onChange={(value) => updatePref({ maxSizeGb: value })}
+                />
+                <NumberField
+                  label={t('subscriptions.maxPoints')}
+                  value={config.preference.maxPoints}
+                  onChange={(value) => updatePref({ maxPoints: value })}
+                />
+              </div>
+              <SwitchRow
+                label={t('subscriptions.preferSub')}
+                checked={config.preference.preferSub}
+                onChange={(value) => updatePref({ preferSub: value })}
+              />
+              <SwitchRow
+                label={t('subscriptions.preferMkv')}
+                checked={config.preference.preferMkv}
+                onChange={(value) => updatePref({ preferMkv: value })}
+              />
+              <SwitchRow
+                label={t('subscriptions.penalizeOffline')}
+                checked={config.preference.penalizeOffline}
+                onChange={(value) => updatePref({ penalizeOffline: value })}
+              />
+              <Row gap={12} mt={16} center>
+                <Button
+                  label={t('subscriptions.saveRules')}
+                  variant="primary"
+                  size="sm"
+                  disabled={configBusy}
+                  onPress={() => void saveRules()}
+                />
+                {configSaved ? (
+                  <Text variant="meta" color="success">
+                    {t('subscriptions.configSaved')}
+                  </Text>
+                ) : null}
+              </Row>
+            </>
+          ) : (
+            <Text variant="meta" color="danger" mt={12}>
+              {t('subscriptions.configLoadFailed')}
+            </Text>
+          )}
+          {error ? (
+            <Text variant="meta" color="danger" mt={10}>
+              {error}
+            </Text>
+          ) : null}
+        </Surface>
+      ) : tab === 'config' ? (
+        <Surface elevated border="border" pad="none" px={22} py={20} mt={20}>
+          <Text variant="meta" color="textDim">
+            {t('subscriptions.configHint')}
+          </Text>
+          {config ? (
+            <>
+              <div style={FORM_GRID}>
+                <Field.Root
+                  label={t('subscriptions.targetCid')}
+                  value={config.targetCid}
+                  onValueChange={(value) => setConfig({ ...config, targetCid: value })}
+                >
+                  <Field.Input placeholder="3527…" />
+                  <Field.Hint>{t('subscriptions.targetCidHint')}</Field.Hint>
+                </Field.Root>
+                <NumberField
+                  label={t('subscriptions.probeLimit')}
+                  value={config.probeLimit}
+                  onChange={(value) => setConfig({ ...config, probeLimit: value })}
+                />
+              </div>
+              <Row gap={12} mt={16} center>
+                <Button
+                  label={t('subscriptions.saveConfig')}
+                  variant="primary"
+                  size="sm"
+                  disabled={configBusy}
+                  onPress={() => void saveConfigTab()}
+                />
+                {configSaved ? (
+                  <Text variant="meta" color="success">
+                    {t('subscriptions.configSaved')}
+                  </Text>
+                ) : null}
+              </Row>
+            </>
+          ) : (
+            <Text variant="meta" color="danger" mt={12}>
+              {t('subscriptions.configLoadFailed')}
+            </Text>
+          )}
+          {error ? (
+            <Text variant="meta" color="danger" mt={10}>
+              {error}
+            </Text>
+          ) : null}
+        </Surface>
+      ) : tab === 'source' ? (
         <Surface elevated border="border" pad="none" px={22} py={20} mt={20}>
           <Field.Root label={t('subscriptions.sourceUrl')} value={sourceUrl} onValueChange={setSourceUrl}>
             <Field.Input placeholder="http://172.17.0.1:8790" />
@@ -488,5 +666,18 @@ function NumberField({
     >
       <Field.Input />
     </Field.Root>
+  );
+}
+
+function SwitchRow({
+  label,
+  checked,
+  onChange,
+}: Readonly<{ label: string; checked: boolean; onChange: (value: boolean) => void }>) {
+  return (
+    <Row between gap={12} mt={12}>
+      <Text variant="body">{label}</Text>
+      <Switch checked={checked} onCheckedChange={onChange} label={label} />
+    </Row>
   );
 }

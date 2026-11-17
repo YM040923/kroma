@@ -25,6 +25,7 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/play", get(play::<S>))
         .route("/settings", get(get_settings::<S>).put(put_settings::<S>))
         .route("/status", get(status::<S>))
+        .route("/account", get(account::<S>))
         .route("/browse", get(browse::<S>))
         .route("/browse-local", get(browse_local::<S>))
         .route("/sync", post(sync::<S>))
@@ -32,7 +33,6 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
 
 // ---------------------------------------------------------------------------
 // Playback
-
 #[derive(Deserialize)]
 struct PlayQuery {
     pc: String,
@@ -133,6 +133,30 @@ fn redirect_to(target: &str) -> Response {
 
 fn require_settings<S: HostCtx>(host: &S, user: &kroma_module_sdk::domain::User) -> Result<(), Response> {
     host.require(user, Permission::SettingsManage)
+}
+
+async fn account<S: HostCtx + Clone + Send + Sync + 'static>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<serde_json::Value>, Response> {
+    require_settings(&host, &user)?;
+    let config = Config::load();
+    if config.cookie.trim().is_empty() {
+        return Err(json_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "115 的 Cookie 还没配置",
+        ));
+    }
+    match client::space(&config.cookie, client::MODULE_UA).await {
+        Ok(space) => Ok(Json(
+            serde_json::to_value(space).unwrap_or_default(),
+        )),
+        Err(error) if error.cookie_expired() => Err(json_error(
+            StatusCode::BAD_GATEWAY,
+            "115 登录已失效，请更新 Cookie",
+        )),
+        Err(error) => Err(json_error(StatusCode::BAD_GATEWAY, &error.to_string())),
+    }
 }
 
 #[derive(Serialize)]
@@ -381,6 +405,7 @@ struct StatusView {
     last_play_url: String,
     play_count: u64,
     sign_count: u64,
+    history: Vec<crate::store::HistoryEntry>,
 }
 
 async fn status<S: HostCtx + Clone + Send + Sync + 'static>(State(_host): State<S>) -> Json<StatusView> {
@@ -412,6 +437,7 @@ async fn status<S: HostCtx + Clone + Send + Sync + 'static>(State(_host): State<
         last_play_url: stored.last_play_url,
         play_count: stored.play_count,
         sign_count: stored.sign_count,
+        history: stored.history,
     })
 }
 

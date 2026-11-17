@@ -4,6 +4,7 @@
 import { moduleApiHook } from '@kromatv/module-sdk';
 import {
   BrowseView,
+  CloudAccount,
   CloudSettingsView,
   CloudStatusView,
   SavedView,
@@ -25,6 +26,7 @@ export const useCloud115Api = moduleApiHook((api) => ({
   settings: () => api.get('/settings', CloudSettingsView),
   save: (body: Cloud115Save) => api.put('/settings', body, SavedView),
   status: () => api.get('/status', CloudStatusView),
+  account: () => api.get('/account', CloudAccount),
   sync: (baseUrl: string) => api.post('/sync', { baseUrl }, StartedView),
   browse: (cid: string) => api.get(`/browse?cid=${encodeURIComponent(cid)}`, BrowseView),
   browseLocal: (path: string) => api.get(`/browse-local?path=${encodeURIComponent(path)}`, BrowseView),

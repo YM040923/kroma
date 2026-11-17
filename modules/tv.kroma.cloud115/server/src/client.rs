@@ -8,7 +8,7 @@
 //! including the ones a player triggers, so a running mirror cannot slip a burst
 //! past the drive by running beside playback.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use kroma_module_sdk::http::Fetch;
@@ -201,6 +201,49 @@ pub struct Page {
     pub total: i64,
     /// The folder's own chain of ancestors, when the drive sent it.
     pub path: Vec<(String, String)>,
+}
+
+/// The account's storage totals, as the drive reports them.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Space {
+    pub total: u64,
+    pub used: u64,
+    pub remain: u64,
+    pub total_text: String,
+    pub used_text: String,
+    pub remain_text: String,
+}
+
+pub async fn space(cookie: &str, ua: &str) -> Result<Space, ApiError> {
+    pacer().acquire().await.map_err(ApiError::network)?;
+    let (status, body) = call("GET", &format!("{WEB}/user/space"), cookie, ua, None)?;
+    pacer().note(status, errno_of(&body)).await;
+    let envelope = check(status, &body)?;
+    let pick = |path: &[&str]| -> (u64, String) {
+        let mut value = &envelope.data;
+        for part in path {
+            value = value.get(*part).unwrap_or(&Value::Null);
+        }
+        let size = value.get("size").and_then(Value::as_u64).unwrap_or(0);
+        let text = value
+            .get("size_format")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        (size, text)
+    };
+    let (total, total_text) = pick(&["all_total"]);
+    let (used, used_text) = pick(&["all_use"]);
+    let (remain, remain_text) = pick(&["all_remain"]);
+    Ok(Space {
+        total,
+        used,
+        remain,
+        total_text,
+        used_text,
+        remain_text,
+    })
 }
 
 /// List one page of a folder. `cid` is `"0"` for the root.

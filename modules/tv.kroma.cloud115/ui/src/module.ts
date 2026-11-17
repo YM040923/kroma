@@ -12,6 +12,11 @@ const cloud115Module = defineModule({
       component: lazy(() => import('./cloud115-page.component')),
       nav: { label: 'nav.cloud115', icon: 'cloud', section: 'system', requires: 'settings.manage' },
     },
+    {
+      path: 'cloud115-files',
+      component: lazy(() => import('./cloud115-files-page.component')),
+      nav: { label: 'nav.cloud115Files', icon: 'folder', section: 'system', requires: 'settings.manage' },
+    },
   ],
 });
 

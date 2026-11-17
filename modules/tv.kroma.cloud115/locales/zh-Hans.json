@@ -1,5 +1,6 @@
 {
   "nav.cloud115": "115 网盘",
+  "nav.cloud115Files": "115 网盘目录",
   "cloud115.title": "115 网盘",
   "cloud115.subtitle": "把 115 网盘目录镜像成媒体库里的 .strm，播放时直接走网盘直链。",
   "cloud115.paused": "115 要求降速，所有调用已暂停 {seconds} 秒。",
@@ -39,6 +40,11 @@
   "cloud115.lastLink": "上次直链",
   "cloud115.lastPlay": "上次播放",
   "cloud115.playCopy": "复制直链",
+  "cloud115.history": "扫描记录",
+  "cloud115.historyLine": "目录 {dirs} · 文件 {files} · 新写 {written} · 清理 {pruned} · 错误 {errors}",
+  "cloud115.spaceTotal": "总空间",
+  "cloud115.spaceUsed": "已用",
+  "cloud115.spaceRemain": "剩余",
   "cloud115.interval": "调用间隔（毫秒）",
   "cloud115.budget": "每轮调用上限",
   "cloud115.folderCap": "单目录条目上限",
