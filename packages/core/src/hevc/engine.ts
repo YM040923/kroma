@@ -102,6 +102,14 @@ export function selectEngine(item: MediaItem, env: PlayEnv): EngineDecision {
     return { kind: 'webos', aacMaster: !env.nativeHls };
   }
   const caps = env.safari ? SAFARI_CAPS : MSE_CAPS;
+  // A `.strm` entry is a redirect to a cloud drive: the bytes have no local
+  // file for ffmpeg to read, so this server's remux and transcode paths can
+  // never build a playlist for it. Direct is the only engine there is — the
+  // player fetches the redirect itself. Its container is recorded as `strm`,
+  // which no compatibility table accepts, so it has to be answered here.
+  if ((item.container ?? '').toLowerCase() === 'strm') {
+    return { kind: 'direct', aacMaster: false };
+  }
   // Prefer the probed runtime over the static table: modern Chromium
   // hardware-decodes HEVC in a bare `<video>` where available.
   if (plainCompatibleMp4(item, env.runtimeCaps ?? caps)) {

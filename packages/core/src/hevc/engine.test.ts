@@ -61,6 +61,14 @@ describe('selectEngine', () => {
     expect(selectEngine(item, WEB_CHROME)).toEqual({ kind: 'direct', aacMaster: false });
   });
 
+  it('routes a cloud-drive entry straight to the player, whatever it holds', () => {
+    // A `.strm` names a redirect: the server owns no file to remux, so the only
+    // engine is direct — the container is `strm` and no table accepts it.
+    const item = makeItem({ container: 'strm', videoCodec: 'hevc', audio: [] });
+    expect(selectEngine(item, WEB_CHROME)).toEqual({ kind: 'direct', aacMaster: false });
+    expect(selectEngine(item, WEB_SAFARI)).toEqual({ kind: 'direct', aacMaster: false });
+  });
+
   it('routes an MKV to web-mse (not direct) on Chrome', () => {
     const item = makeItem({
       container: 'mkv',
