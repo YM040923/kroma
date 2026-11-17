@@ -90,7 +90,7 @@
   "jobs.sections.personalize.name": "个性化栏目（AI）",
   "jobs.stats.report.desc": "每天发送一次本服务器的匿名使用数据，且仅在匿名统计开启时发送。手动运行会立即发送，并打印实际离开的字节。",
   "jobs.stats.report.name": "匿名统计",
-  "jobs.subscriptions.poll.desc": "每 15 分钟检查订阅任务的更新（发现与去重；不自动转存、不自动扣费）。",
+  "jobs.subscriptions.poll.desc": "每 15 分钟读取订阅任务的解锁/转存进度；不会自动发起新的扣费。",
   "jobs.subscriptions.poll.name": "订阅轮询",
   "jobs.status.cancelled": "已取消",
   "jobs.status.failed": "失败",

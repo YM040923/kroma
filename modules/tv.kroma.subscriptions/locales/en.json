@@ -16,7 +16,7 @@
   "subscriptions.sourceHint": "MADREEL today; Telegram groups and other drives later.",
   "subscriptions.sourceUrl": "Source service address",
   "subscriptions.sourceUrlHint": "The local search/unlock service, e.g. http://172.17.0.1:8790. This module never visits the source site itself.",
-  "subscriptions.subtitle": "Discover and deduplicate first; no automatic transfer or spending yet.",
+  "subscriptions.subtitle": "Choosing a release from a title and confirming it unlocks and transfers for real (points are spent); the final price comes from the unlock result.",
   "subscriptions.new": "New subscription task",
   "subscriptions.name": "Task name",
   "subscriptions.source": "Source",

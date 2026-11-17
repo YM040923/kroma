@@ -16,7 +16,7 @@
   "subscriptions.sourceHint": "目前接入 MADREEL；后续可加 TG 群组、其他网盘来源。",
   "subscriptions.sourceUrl": "来源服务地址",
   "subscriptions.sourceUrlHint": "本机搜索/解锁服务的地址，例如 http://172.17.0.1:8790。订阅模块不直接访问资源站。",
-  "subscriptions.subtitle": "先发现和去重，不自动转存、不自动扣费。",
+  "subscriptions.subtitle": "从影片页选择资源并二次确认后，会真实解锁并转存到 115（扣积分）；最终价格以解锁结果为准。",
   "subscriptions.new": "新建订阅任务",
   "subscriptions.name": "任务名称",
   "subscriptions.source": "订阅源",
