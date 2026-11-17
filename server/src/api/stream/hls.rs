@@ -45,6 +45,7 @@ pub async fn hls_master(
     let Some(item) = load_item(&state, &viewer, id).await else {
         return visibility::out_of_scope();
     };
+    tracing::info!(item_id = %item.id, mode = "hls", "media stream");
     let program = Program {
         id: &item.id,
         video: item.video.as_ref(),
@@ -87,7 +88,14 @@ pub async fn hls_master(
     let sink = byte_sink(&state, &headers, &addr);
     let opener = crate::api::media_ticket::opener(&state.media_ticket_key, &headers, &q.ticket);
     match program
-        .master(&state.hls, &abs, session, opener.as_deref(), &credential, sink)
+        .master(
+            &state.hls,
+            &abs,
+            session,
+            opener.as_deref(),
+            &credential,
+            sink,
+        )
         .await
     {
         Ok(resp) => match q.subtitle.as_deref() {
