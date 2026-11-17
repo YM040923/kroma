@@ -24,6 +24,7 @@ export interface SubscribeInput {
   tmdbId: number;
   title: string;
   resource: string;
+  index: number;
   price: number;
 }
 

@@ -19,9 +19,14 @@ pub struct Task {
     /// The title this task was opened for, so a transfer never has to identify
     /// the film again (the title page already resolved it).
     pub tmdb_id: i64,
+    pub kind: String,
     /// The chosen release on the source, as the source names it.
     pub resource: String,
+    /// The source's own position for that release, which its unlock takes.
+    pub resource_index: i64,
     pub price: i64,
+    /// The source's asynchronous job, once a transfer was asked for.
+    pub job_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

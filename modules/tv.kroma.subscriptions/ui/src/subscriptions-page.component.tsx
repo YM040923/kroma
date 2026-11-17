@@ -93,7 +93,7 @@ export default function SubscriptionsPage() {
 
       <Section.Root mt={26}>
         <Section.Header>
-          <Section.Title>{t('subscriptions.sourceUrl')}</Section.Title>
+          <Section.Title>{t('subscriptions.source')}</Section.Title>
         </Section.Header>
         <Surface elevated border="border" pad="none" px={22} py={20}>
           <Row wrap gap={14} align="flex-end">
@@ -173,6 +173,14 @@ export default function SubscriptionsPage() {
                   <Badge tone={task.status === 'running-dry-run' ? 'info' : 'neutral'}>
                     {task.status}
                   </Badge>
+                  {task.tmdbId > 0 ? (
+                    <Button
+                      label={t('subscriptions.execute')}
+                      size="sm"
+                      variant="primary"
+                      onPress={() => api.execute(task.id).then(load)}
+                    />
+                  ) : null}
                   <Button
                     label={t('subscriptions.scan')}
                     size="sm"

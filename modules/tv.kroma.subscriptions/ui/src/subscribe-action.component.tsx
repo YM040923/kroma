@@ -55,6 +55,7 @@ export function SubscribeAction({ kind, tmdbId, title, owned }: Props) {
         tmdbId,
         title,
         resource: candidate.fileName,
+        index: candidate.index,
         price: candidate.price,
       });
       setAdded((current) => new Set(current).add(candidate.fileName));

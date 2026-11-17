@@ -4,6 +4,7 @@
   "subscriptions.add": "Subscribe",
   "subscriptions.added": "Added",
   "subscriptions.dialogTitle": "Subscribe from a source",
+  "subscriptions.execute": "Start transfer",
   "subscriptions.free": "Free",
   "subscriptions.noResults": "No releases found.",
   "subscriptions.owned": "Already in the library, so there is nothing to transfer.",

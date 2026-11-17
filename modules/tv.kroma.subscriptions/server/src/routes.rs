@@ -43,6 +43,7 @@ struct SubscribeBody {
     title: String,
     kind: String,
     resource: String,
+    index: i64,
     price: i64,
 }
 
@@ -54,6 +55,8 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/source", post(set_source::<S>))
         .route("/search", post(search::<S>))
         .route("/subscribe", post(subscribe::<S>))
+        .route("/subscriptions/{id}/execute", post(execute::<S>))
+        .route("/subscriptions/{id}/job", get(job::<S>))
 }
 
 fn require<S: HostCtx>(host: &S, user: &kroma_module_sdk::domain::User) -> Result<(), axum::response::Response> {
@@ -154,7 +157,7 @@ async fn subscribe<S: HostCtx + Clone + Send + Sync + 'static>(State(host): Stat
         return Err(json_error(StatusCode::CONFLICT, "这个资源已经加入订阅"));
     }
     let id = format!("sub-{}", kroma_module_sdk::primitives::now_ms());
-    let task = Task {
+    let mut task = Task {
         id,
         name: body.title.trim().to_string(),
         source: "madreel".into(),
@@ -164,13 +167,102 @@ async fn subscribe<S: HostCtx + Clone + Send + Sync + 'static>(State(host): Stat
         monitor_mode: "manual".into(),
         enabled: true,
         status: "pending".into(),
-        last_run_at: 0,
+        last_run_at: kroma_module_sdk::primitives::now_ms(),
         last_error: String::new(),
         tmdb_id: body.tmdb_id,
+        kind: body.kind.clone(),
         resource: body.resource.trim().to_string(),
+        resource_index: body.index,
         price: body.price,
+        job_id: String::new(),
     };
+    start_transfer(&mut task, &stored.source_url, &body.kind);
     stored.tasks.push(task.clone());
     store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
     Ok(Json(task))
+}
+
+fn start_transfer(task: &mut Task, source_url: &str, kind: &str) {
+    if source_url.trim().is_empty() {
+        task.status = "pending".into();
+        task.last_error = "来源服务地址未配置".into();
+        return;
+    }
+    let payload = serde_json::json!({
+        "tmdb": task.tmdb_id,
+        "type": if kind == "show" { "tv" } else { "movie" },
+        "index": task.resource_index,
+        "transfer": true,
+    });
+    match source_json(source_url, "/unlock", Some(&payload)) {
+        Ok(value) => {
+            task.job_id = value
+                .get("jobId")
+                .or_else(|| value.get("id"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            task.status = "unlocking".into();
+            task.last_error.clear();
+        }
+        Err(reason) => {
+            task.status = "failed".into();
+            task.last_error = reason;
+        }
+    }
+}
+
+fn source_json(source_url: &str, path: &str, body: Option<&Value>) -> Result<Value, String> {
+    let url = format!("{}{path}", source_url.trim_end_matches('/'));
+    let fetch = Fetch::default().purpose("subscription-source").max_time(180);
+    let response = match body {
+        Some(body) => fetch.post_json(&url, body),
+        None => fetch.get(&url),
+    }
+    .map_err(|error| format!("订阅源服务连不上：{error}"))?;
+    let status = response.status;
+    let text = response.text();
+    if status != 200 {
+        let reason: String = text.trim().chars().take(300).collect();
+        return Err(format!("订阅源返回 HTTP {status}：{reason}"));
+    }
+    serde_json::from_str(&text).map_err(|_| "订阅源返回的不是 JSON".to_string())
+}
+
+async fn execute<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser, Path(id): Path<String>) -> Result<Json<Task>, axum::response::Response> {
+    require(&host, &user)?;
+    let mut stored = store::load();
+    let kind = stored
+        .tasks
+        .iter()
+        .find(|task| task.id == id)
+        .map(|task| if task.kind == "show" { "show" } else { "movie" })
+        .unwrap_or("movie");
+    let source = stored.source_url.clone();
+    let task = stored.tasks.iter_mut().find(|task| task.id == id).ok_or_else(|| json_error(StatusCode::NOT_FOUND, "订阅任务不存在"))?;
+    start_transfer(task, &source, kind);
+    let result = task.clone();
+    store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
+    Ok(Json(result))
+}
+
+async fn job<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser, Path(id): Path<String>) -> Result<Json<Value>, axum::response::Response> {
+    require(&host, &user)?;
+    let mut stored = store::load();
+    let source = stored.source_url.clone();
+    let task = stored.tasks.iter_mut().find(|task| task.id == id).ok_or_else(|| json_error(StatusCode::NOT_FOUND, "订阅任务不存在"))?;
+    if task.job_id.is_empty() {
+        return Err(json_error(StatusCode::CONFLICT, "这个订阅还没有转存任务"));
+    }
+    let value = source_json(&source, &format!("/job/{}", task.job_id), None)
+        .map_err(|reason| json_error(StatusCode::BAD_GATEWAY, &reason))?;
+    if let Some(state) = value.get("status").and_then(Value::as_str) {
+        task.status = state.to_string();
+    }
+    if let Some(error) = value.get("error").and_then(Value::as_str) {
+        task.last_error = error.to_string();
+    }
+    let result = value.clone();
+    store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
+    Ok(Json(result))
 }

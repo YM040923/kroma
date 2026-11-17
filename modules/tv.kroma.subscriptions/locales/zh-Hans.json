@@ -4,6 +4,7 @@
   "subscriptions.add": "订阅",
   "subscriptions.added": "已加入",
   "subscriptions.dialogTitle": "订阅来源",
+  "subscriptions.execute": "开始转存",
   "subscriptions.free": "免费",
   "subscriptions.noResults": "没有找到可用资源。",
   "subscriptions.owned": "已在媒体库，无需再转存。",

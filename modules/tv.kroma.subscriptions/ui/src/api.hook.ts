@@ -1,7 +1,7 @@
 import { moduleApiHook } from '@kromatv/module-sdk';
 import { z } from 'zod';
 
-const Task = z.object({ id: z.string(), name: z.string(), source: z.string(), monitorPath: z.string(), targetPath: z.string(), failurePath: z.string(), monitorMode: z.string(), enabled: z.boolean(), status: z.string(), lastRunAt: z.number(), lastError: z.string(), tmdbId: z.number().default(0), resource: z.string().default(''), price: z.number().default(0) });
+const Task = z.object({ id: z.string(), name: z.string(), source: z.string(), monitorPath: z.string(), targetPath: z.string(), failurePath: z.string(), monitorMode: z.string(), enabled: z.boolean(), status: z.string(), lastRunAt: z.number(), lastError: z.string(), tmdbId: z.number().default(0), kind: z.string().default(''), resource: z.string().default(''), resourceIndex: z.number().default(0), price: z.number().default(0), jobId: z.string().default('') });
 const Item = z.object({ key: z.string(), taskId: z.string(), title: z.string(), state: z.string(), lastError: z.string() });
 const View = z.object({ sourceUrl: z.string().default(''), tasks: z.array(Task), items: z.array(Item) });
 export type SubscriptionTask = z.infer<typeof Task>;
@@ -20,5 +20,6 @@ export const useSubscriptionsApi = moduleApiHook((api) => ({
   create: (body: SubscriptionTaskInput) => api.post('/subscriptions', body, Task),
   update: (id: string, body: SubscriptionTaskInput) => api.put(`/subscriptions/${id}`, body, Task),
   scan: (id: string) => api.post(`/subscriptions/${id}/scan`, {}, z.array(Item)),
+  execute: (id: string) => api.post(`/subscriptions/${id}/execute`, {}, Task),
   source: (url: string) => api.post('/source', { url }, View),
 }));
