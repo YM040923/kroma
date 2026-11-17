@@ -1,0 +1,42 @@
+{
+  "$schema": "https://modules.kroma.tv/schemas/3/manifest.json",
+  "schemaVersion": 3,
+  "id": "tv.kroma.cloud115",
+  "name": "115 Cloud",
+  "version": "0.3.2",
+  "description": "Mirror a 115 drive folder into the library as .strm entries and play them by redirecting to the drive's own link, so nothing streams through this server.",
+  "engines": {
+    "server": ">=0.1.39"
+  },
+  "component": {
+    "instances": 2,
+    "cpuSeconds": 300
+  },
+  "feRemote": {
+    "module": "./remoteEntry.js"
+  },
+  "permissions": {
+    "net": {
+      "connect": [
+        {
+          "purpose": "cloud-drive",
+          "to": [
+            "115.com",
+            "*.115.com",
+            "115cdn.net",
+            "*.115cdn.net",
+            "115cdn.com",
+            "*.115cdn.com",
+            "cdnfhnapwm.com",
+            "*.cdnfhnapwm.com"
+          ],
+          "ports": [443]
+        }
+      ]
+    },
+    "fs": {
+      "read": ["media", "module"],
+      "write": ["media", "module"]
+    }
+  }
+}

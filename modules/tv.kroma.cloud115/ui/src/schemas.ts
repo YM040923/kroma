@@ -1,0 +1,99 @@
+// This module's wire types. The shape is the one its Rust handlers answer with;
+// the core does not model 115, so it lives here.
+
+import { z } from 'zod';
+
+export const CloudLibrary = z.object({
+  remote: z.string(),
+  local: z.string(),
+});
+export type CloudLibrary = z.infer<typeof CloudLibrary>;
+
+export const CloudOptions = z.object({
+  intervalMs: z.number(),
+  linkTtlSecs: z.number(),
+  pageSize: z.number(),
+  maxCallsPerRun: z.number(),
+  maxEntriesPerFolder: z.number(),
+  probeEnabled: z.boolean(),
+  organizeEnabled: z.boolean(),
+  writePauseMs: z.number(),
+  watchEnabled: z.boolean(),
+  watchIntervalSecs: z.number(),
+  skipIso: z.boolean(),
+});
+export type CloudOptions = z.infer<typeof CloudOptions>;
+
+export const FolderView = z.object({
+  name: z.string(),
+  kind: z.string(),
+  folders: z.array(z.string()),
+});
+export type FolderView = z.infer<typeof FolderView>;
+
+export const CloudSettingsView = z.object({
+  hasCookie: z.boolean(),
+  baseUrl: z.string(),
+  libraries: z.array(CloudLibrary),
+  options: CloudOptions,
+  libraryFolders: z.array(FolderView),
+  resolvedLocal: z.array(z.string()),
+});
+export type CloudSettingsView = z.infer<typeof CloudSettingsView>;
+
+export const SyncReport = z.object({
+  startedAt: z.number().nullish(),
+  finishedAt: z.number().nullish(),
+  current: z.string(),
+  elapsedMs: z.number(),
+  dirs: z.number(),
+  files: z.number(),
+  written: z.number(),
+  kept: z.number(),
+  pruned: z.number(),
+  probed: z.number(),
+  pendingProbe: z.number(),
+  assets: z.number(),
+  calls: z.number(),
+  truncated: z.boolean(),
+  errors: z.array(z.string()),
+});
+export type SyncReport = z.infer<typeof SyncReport>;
+
+export const CloudStatusView = z.object({
+  running: z.boolean(),
+  report: SyncReport,
+  linkCache: z.number(),
+  soonestLinkSecs: z.number().nullish(),
+  pausedSecs: z.number().nullish(),
+  cookieSet: z.boolean(),
+  baseUrl: z.string(),
+  watchEnabled: z.boolean(),
+  watchIntervalSecs: z.number(),
+  lastPollAt: z.number(),
+  lastEvents: z.number(),
+  gateOk: z.boolean().nullish(),
+  indexedDirs: z.number(),
+  lastPlayError: z.string(),
+});
+export type CloudStatusView = z.infer<typeof CloudStatusView>;
+
+export const SavedView = z.object({ saved: z.boolean(), errors: z.array(z.string()) });
+export const StartedView = z.object({ started: z.boolean() });
+
+export const BrowseEntry = z.object({
+  name: z.string(),
+  isDir: z.boolean(),
+  cid: z.string().nullish(),
+  fid: z.string().nullish(),
+  pickCode: z.string(),
+  size: z.number(),
+});
+export type BrowseEntry = z.infer<typeof BrowseEntry>;
+
+export const BrowseView = z.object({
+  cid: z.string(),
+  total: z.number(),
+  entries: z.array(BrowseEntry),
+});
+export type BrowseView = z.infer<typeof BrowseView>;
