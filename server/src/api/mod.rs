@@ -25,6 +25,7 @@ mod host_jobs;
 mod images;
 mod inbound;
 mod invites;
+pub mod jellyfin;
 mod mail;
 mod media;
 pub mod media_ticket;
@@ -57,6 +58,8 @@ mod trailers;
 mod util;
 mod visibility;
 
+#[cfg(test)]
+mod it_account_identifiers;
 #[cfg(test)]
 mod it_accounts;
 #[cfg(test)]
@@ -94,6 +97,8 @@ mod it_handoff;
 #[cfg(test)]
 mod it_handoff_house;
 #[cfg(test)]
+mod it_home;
+#[cfg(test)]
 mod it_host_settings;
 #[cfg(test)]
 mod it_images;
@@ -104,23 +109,19 @@ mod it_library_visibility;
 #[cfg(test)]
 mod it_mail_relay;
 #[cfg(test)]
-mod it_account_identifiers;
-#[cfg(test)]
 mod it_media;
-#[cfg(test)]
-mod it_module_frontend;
 #[cfg(test)]
 mod it_media_bearer;
 #[cfg(test)]
 mod it_media_ticket;
 #[cfg(test)]
-mod it_home;
-#[cfg(test)]
-mod it_movie_cards;
-#[cfg(test)]
 mod it_member_reach;
 #[cfg(test)]
+mod it_module_frontend;
+#[cfg(test)]
 mod it_monitoring;
+#[cfg(test)]
+mod it_movie_cards;
 #[cfg(test)]
 mod it_network;
 #[cfg(test)]
@@ -170,13 +171,13 @@ mod it_server_restart;
 #[cfg(test)]
 mod it_server_status;
 #[cfg(test)]
-mod it_store_versions;
-#[cfg(test)]
 mod it_sso;
 #[cfg(test)]
 mod it_sso_account;
 #[cfg(test)]
 mod it_sso_admin;
+#[cfg(test)]
+mod it_store_versions;
 #[cfg(test)]
 mod it_stream_hls;
 #[cfg(test)]
@@ -320,7 +321,11 @@ pub fn router(state: SharedState, supervisor: Arc<Supervisor>) -> Router {
         .layer(from_fn_with_state(state.clone(), remote_art::serve_art))
         .layer(Extension(supervisor));
 
-    let mut app = Router::new().nest("/api", api);
+    let mut app = Router::new()
+        .nest("/api", api)
+        // Jellyfin clients address the server at the root, not under `/api`.
+        // Mounted before the module assets and the SPA fallback.
+        .merge(jellyfin::routes());
 
     // Installed modules' frontend (Module Federation) assets, served from
     // `<data>/modules/<id>/fe/` at `/modules/<id>/*`, same origin as the API and
@@ -473,7 +478,12 @@ mod tests {
     async fn a_missing_file_that_is_not_a_page_navigation_is_not_found() {
         let t = test_app_with_web(&[("_shell.html", "<!doctype html><title>KROMA</title>")]);
 
-        for path in ["/robots.txt", "/llms.txt", "/.well-known/ard.json", "/assets/gone-DXQwrN_7.js"] {
+        for path in [
+            "/robots.txt",
+            "/llms.txt",
+            "/.well-known/ard.json",
+            "/assets/gone-DXQwrN_7.js",
+        ] {
             let (status, _, _) = raw(&t.app, "GET", path, None, None, &[("accept", "*/*")]).await;
 
             assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
