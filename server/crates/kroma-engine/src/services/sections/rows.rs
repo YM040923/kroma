@@ -15,7 +15,6 @@ use super::board::{
 const HERO_PICKS: usize = 3;
 const HERO_CAP: usize = 5;
 const HERO_FETCH: usize = 10;
-const HERO_SHARE: usize = 6;
 const SPOTLIGHT_FROM: usize = 24;
 const FRESH_FOR_DAYS: i64 = 45;
 const DAY: i64 = 86_400;
@@ -67,10 +66,11 @@ impl<'a> Board<'a> {
         if picks.is_empty() {
             return None;
         }
+        let hero_count = picks.len().min(HERO_CAP);
         let mut draft = Draft::rail("hero", self.t("content.featured", &[]), Self::ids(picks.iter().copied(), HERO_FETCH))
             .drawn(Layout::Hero)
             .at_least(1);
-        draft.cap = (self.ranked.len() / HERO_SHARE).clamp(1, HERO_CAP);
+        draft.cap = hero_count.max(HERO_PICKS.min(self.ranked.len())).min(HERO_CAP);
         for title in picks {
             if let Some(why) = self.why(title) {
                 draft.notes.insert(title.facts.id.clone(), why);

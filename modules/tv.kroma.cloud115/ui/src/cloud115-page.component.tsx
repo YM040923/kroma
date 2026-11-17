@@ -53,6 +53,20 @@ const GRID_ROW: CSSProperties = {
 };
 
 const CELL: CSSProperties = { flex: '1 1 180px', minWidth: 160 };
+const SUMMARY_GRID: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(220px, 1.2fr) repeat(3, minmax(140px, 1fr))',
+  gap: 22,
+  alignItems: 'start',
+};
+const TASK_ROW: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto',
+  gap: 18,
+  alignItems: 'end',
+  padding: '18px 0',
+  borderTop: '1px solid var(--kroma-border)',
+};
 
 const EMPTY_LIBRARY: CloudLibrary = { remote: '', local: '' };
 
@@ -203,39 +217,48 @@ export function Cloud115Settings() {
           <Section.Title>{t('cloud115.account')}</Section.Title>
         </Section.Header>
         <Surface elevated border="border" pad="none" px={22} py={20}>
-          <Field.Root label={t('cloud115.cookie')} value={cookie} onValueChange={setCookie} mb={12}>
-            <Field.Input
-              type="password"
-              placeholder={hasCookie ? t('cloud115.cookieKeep') : 'UID=…; CID=…; SEID=…'}
-            />
-            <Field.Hint>{t('cloud115.cookieHint')}</Field.Hint>
-          </Field.Root>
-          <Field.Root label={t('cloud115.baseUrl')} value={baseUrl} onValueChange={setBaseUrl} mb={4}>
-            <Field.Input placeholder="http://192.168.1.10:4040" />
-            <Field.Hint>{t('cloud115.baseUrlHint')}</Field.Hint>
-          </Field.Root>
-          {baseMismatch ? (
-            <Row wrap gap={10} mt={6} center>
-              <Text variant="meta" color="accentText">
-                {t('cloud115.baseMismatch')}
-              </Text>
-              <Button
-                label={t('cloud115.useCurrent')}
-                variant="ghost"
-                size="sm"
-                onPress={() => setBaseUrl(origin)}
-              />
+          <div style={SUMMARY_GRID}>
+            <Box>
+              <Text variant="h2">115 Cloud</Text>
+              <Row gap={8} center mt={8}>
+                <Badge tone={hasCookie ? 'success' : 'warning'}>
+                  {hasCookie ? t('cloud115.cookieSet') : t('cloud115.cookieMissing')}
+                </Badge>
+                <Text variant="meta" color="textDim">
+                  {baseUrl || origin || '—'}
+                </Text>
+              </Row>
+            </Box>
+            <SummaryStat label={t('cloud115.mappings')} value={String(libraries.filter((l) => l.remote && l.local).length)} />
+            <SummaryStat label={t('cloud115.indexedDirs')} value={String(status.indexedDirs)} />
+            <SummaryStat label={t('cloud115.statLinks')} value={String(status.linkCache)} />
+          </div>
+          <div style={{ ...GRID_ROW, marginTop: 24, marginBottom: 0 }}>
+            <div style={CELL}>
+              <Field.Root label={t('cloud115.cookie')} value={cookie} onValueChange={setCookie}>
+                <Field.Input
+                  type="password"
+                  placeholder={hasCookie ? t('cloud115.cookieKeep') : 'UID=…; CID=…; SEID=…'}
+                />
+                <Field.Hint>{t('cloud115.cookieHint')}</Field.Hint>
+              </Field.Root>
+            </div>
+            <div style={CELL}>
+              <Field.Root label={t('cloud115.baseUrl')} value={baseUrl} onValueChange={setBaseUrl}>
+                <Field.Input placeholder="http://192.168.1.10:4040" />
+                <Field.Hint>{t('cloud115.baseUrlHint')}</Field.Hint>
+              </Field.Root>
+            </div>
+            <Row gap={8}>
+              {hasCookie ? (
+                <Button label={t('cloud115.clearCookie')} variant="ghost" size="sm" onPress={() => void clearCookie()} />
+              ) : null}
             </Row>
-          ) : null}
-          {hasCookie ? (
-            <Row mt={8}>
-              <Button
-                label={t('cloud115.clearCookie')}
-                variant="ghost"
-                size="sm"
-                onPress={() => void clearCookie()}
-
-              />
+          </div>
+          {baseMismatch ? (
+            <Row wrap gap={10} mt={10} center>
+              <Text variant="meta" color="accentText">{t('cloud115.baseMismatch')}</Text>
+              <Button label={t('cloud115.useCurrent')} variant="ghost" size="sm" onPress={() => setBaseUrl(origin)} />
             </Row>
           ) : null}
         </Surface>
@@ -248,80 +271,34 @@ export function Cloud115Settings() {
         <Text variant="meta" color="textDim" mt={-8} mb={16}>
           {t('cloud115.mappingsHint')}
         </Text>
-        <Surface elevated border="border" pad="none" px={22} py={20}>
+        <Surface elevated border="border" pad="none" px={22} py={8}>
           {libraries.map((library, i) => (
-            <div style={GRID_ROW} key={i}>
-              <div style={CELL}>
-                <Field.Root
-                  label={t('cloud115.remote')}
-                  value={library.remote}
-                  onValueChange={(value) => updateLibrary(i, { remote: value })}
-                >
+            <div style={TASK_ROW} key={i}>
+              <div>
+                <Field.Root label={t('cloud115.remote')} value={library.remote} onValueChange={(value) => updateLibrary(i, { remote: value })}>
                   <Field.Input placeholder="/电影" />
                 </Field.Root>
                 <Row mt={6}>
-                  <Button
-                    label={t('cloud115.browseDrive')}
-                    icon="folder"
-                    variant="ghost"
-                    size="sm"
-                    onPress={() => setPicker({ at: i, mode: 'remote' })}
-                    disabled={busy}
-                  />
+                  <Button label={t('cloud115.browseDrive')} icon="folder" variant="ghost" size="sm" onPress={() => setPicker({ at: i, mode: 'remote' })} disabled={busy} />
                 </Row>
               </div>
-              <div style={CELL}>
-                <Field.Root
-                  label={t('cloud115.local')}
-                  value={library.local}
-                  onValueChange={(value) => updateLibrary(i, { local: value })}
-                >
+              <div>
+                <Field.Root label={t('cloud115.local')} value={library.local} onValueChange={(value) => updateLibrary(i, { local: value })}>
                   <Field.Input placeholder="/media/115/电影" />
                   <Field.Hint>{t('cloud115.localHint')}</Field.Hint>
                 </Field.Root>
                 <Row mt={6}>
-                  <Button
-                    label={t('cloud115.browseLocal')}
-                    icon="folder"
-                    variant="ghost"
-                    size="sm"
-                    onPress={() => setPicker({ at: i, mode: 'local' })}
-                    disabled={busy}
-                  />
+                  <Button label={t('cloud115.browseLocal')} icon="folder" variant="ghost" size="sm" onPress={() => setPicker({ at: i, mode: 'local' })} disabled={busy} />
                 </Row>
                 {!library.remote.trim() || !library.local.trim() ? null : i < resolved.length ? (
-                  resolved[i] ? (
-                    <Text variant="meta" color="textDim" mt={4}>
-                      {t('cloud115.resolved', { path: resolved[i] as string })}
-                    </Text>
-                  ) : (
-                    <Text variant="meta" color="accentText" mt={4}>
-                      {t('cloud115.unresolved')}
-                    </Text>
-                  )
-                ) : (
-                  <Text variant="meta" color="textDim" mt={4}>
-                    {t('cloud115.willCreate')}
-                  </Text>
-                )}
+                  resolved[i] ? <Text variant="meta" color="textDim" mt={4}>{t('cloud115.resolved', { path: resolved[i] as string })}</Text> : <Text variant="meta" color="accentText" mt={4}>{t('cloud115.unresolved')}</Text>
+                ) : <Text variant="meta" color="textDim" mt={4}>{t('cloud115.willCreate')}</Text>}
               </div>
-              <Button
-                label={t('cloud115.remove')}
-                variant="ghost"
-                size="sm"
-                onPress={() => setLibraries((current) => current.filter((_, at) => at !== i))}
-              />
+              <Button label={t('cloud115.remove')} variant="ghost" size="sm" onPress={() => setLibraries((current) => current.filter((_, at) => at !== i))} />
             </div>
           ))}
-          <Row mt={4}>
-            <Button
-              label={t('cloud115.addMapping')}
-              icon="plus"
-              variant="ghost"
-              size="sm"
-              onPress={() => setLibraries((current) => [...current, { ...EMPTY_LIBRARY }])}
-              disabled={busy}
-            />
+          <Row mt={4} mb={12}>
+            <Button label={t('cloud115.addMapping')} icon="plus" variant="ghost" size="sm" onPress={() => setLibraries((current) => [...current, { ...EMPTY_LIBRARY }])} disabled={busy} />
           </Row>
         </Surface>
       </Section.Root>
@@ -545,6 +522,15 @@ function NumberField({
     >
       <Field.Input />
     </Field.Root>
+  );
+}
+
+function SummaryStat({ label, value }: Readonly<{ label: string; value: string }>) {
+  return (
+    <Box>
+      <Text variant="meta" color="textDim">{label}</Text>
+      <Text variant="h2" mt={4}>{value}</Text>
+    </Box>
   );
 }
 

@@ -3,7 +3,7 @@
   "schemaVersion": 3,
   "id": "tv.kroma.cloud115",
   "name": "115 Cloud",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Mirror a 115 drive folder into the library as .strm entries and play them by redirecting to the drive's own link, so nothing streams through this server.",
   "engines": {
     "server": ">=0.1.39"

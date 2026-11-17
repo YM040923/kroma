@@ -1,0 +1,14 @@
+{
+  "nav.subscriptions": "Subscriptions",
+  "subscriptions.subtitle": "Discover and deduplicate first; no automatic transfer or spending yet.",
+  "subscriptions.new": "New subscription task",
+  "subscriptions.name": "Task name",
+  "subscriptions.source": "Source",
+  "subscriptions.monitor": "Monitor folder",
+  "subscriptions.target": "Target folder",
+  "subscriptions.failure": "Failure folder",
+  "subscriptions.save": "Save task",
+  "subscriptions.tasks": "Tasks",
+  "subscriptions.scan": "Scan now",
+  "subscriptions.empty": "No subscription tasks yet."
+}

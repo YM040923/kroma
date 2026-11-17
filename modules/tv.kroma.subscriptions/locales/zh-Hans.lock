@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "messages": {
+    "nav.subscriptions": "8ac50b36 fcbfc79d",
+    "subscriptions.empty": "132b038b aeae67a1",
+    "subscriptions.failure": "ea152e92 18ec652f",
+    "subscriptions.monitor": "37713e68 05042282",
+    "subscriptions.name": "2315c9fe fd4ca465",
+    "subscriptions.new": "ca595eac 07f97bae",
+    "subscriptions.save": "4dba1b93 619653c2",
+    "subscriptions.scan": "b9784350 87b8d8f5",
+    "subscriptions.source": "531e58eb e9932857",
+    "subscriptions.subtitle": "ce34376f 9d6ca89d",
+    "subscriptions.target": "b430a068 f116bdc1",
+    "subscriptions.tasks": "22c9520b 637e3904"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "nav.subscriptions": "订阅任务",
+  "subscriptions.subtitle": "先发现和去重，不自动转存、不自动扣费。",
+  "subscriptions.new": "新建订阅任务",
+  "subscriptions.name": "任务名称",
+  "subscriptions.source": "订阅源",
+  "subscriptions.monitor": "监控目录",
+  "subscriptions.target": "目标目录",
+  "subscriptions.failure": "失败目录",
+  "subscriptions.save": "保存任务",
+  "subscriptions.tasks": "任务列表",
+  "subscriptions.scan": "立即扫描",
+  "subscriptions.empty": "还没有订阅任务。"
+}

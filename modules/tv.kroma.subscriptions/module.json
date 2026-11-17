@@ -1,0 +1,13 @@
+{
+  "$schema": "https://modules.kroma.tv/schemas/3/manifest.json",
+  "schemaVersion": 3,
+  "id": "tv.kroma.subscriptions",
+  "name": "Subscriptions",
+  "version": "0.1.0",
+  "description": "Manage monitored 115 subscription tasks and dry-run discovery without duplicating cloud-drive logic.",
+  "engines": { "server": ">=0.1.39" },
+  "component": { "instances": 2, "cpuSeconds": 300 },
+  "feRemote": { "module": "./remoteEntry.js" },
+  "permissions": { "net": { "connect": [{ "purpose": "subscription-source", "to": ["115.com", "*.115.com"], "ports": [443] }] }, "fs": { "read": ["module"], "write": ["module"] } },
+  "dependencies": { "tv.kroma.cloud115": ">=0.3.2" }
+}
