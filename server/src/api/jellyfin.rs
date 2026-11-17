@@ -35,6 +35,16 @@ pub fn routes() -> Router<SharedState> {
         .route("/Users/{user_id}/Views", get(views))
         .route("/Users/{user_id}/Items", get(items))
         .route("/Users/{user_id}/Items/Latest", get(latest))
+        .route("/Users/{user_id}/Items/{id}", get(item_detail))
+        .route("/Users/{user_id}/Items/{id}/Similar", get(similar))
+        .route("/UserViews", get(user_views))
+        .route("/Items/{id}", get(item_detail))
+        .route("/Items/{id}/Similar", get(similar))
+        .route("/Items/Counts", get(item_counts))
+        .route("/Items/Filters", get(filters))
+        .route("/Items/Filters2", get(filters))
+        .route("/Genres", get(genres))
+        .route("/Notifications/{user_id}/Summary", get(notifications_summary))
         .route("/Shows/{id}/Seasons", get(seasons))
         .route("/Shows/{id}/Episodes", get(episodes))
         .route("/Items/{id}/PlaybackInfo", post(playback_info))
@@ -206,6 +216,19 @@ async fn views(
     Path(_user_id): Path<String>,
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
+    Ok(Json(views_payload(&state)))
+}
+
+async fn user_views(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(views_payload(&state)))
+}
+
+fn views_payload(state: &SharedState) -> Value {
     let defs = crate::services::settings::library_defs(&state.settings, &state.config);
     let items: Vec<Value> = defs
         .iter()
@@ -216,13 +239,146 @@ async fn views(
                 "Type": "CollectionFolder",
                 "CollectionType": library_type(def),
                 "IsFolder": true,
-                "ServerId": server_id(&state),
+                "ServerId": server_id(state),
             })
         })
+        .collect();
+    json!({ "Items": items, "TotalRecordCount": items.len() })
+}
+
+/// One title, by the item id a list handed out. Jellyfin clients address this
+/// for the detail page, under both `/Items/{id}` and the per-user spelling.
+async fn item_detail(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(path): Path<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    let (user, access) = user_of(&state, &headers, &params).await?;
+    let id = path.get("id").cloned().unwrap_or_default();
+    if id.is_empty() {
+        return Err(json_error(StatusCode::NOT_FOUND, "item not found"));
+    }
+    let wanted = id.clone();
+    if let Some(detail) = query(&state.db, move |pool| db::get_show(&pool, &wanted)).await? {
+        crate::api::visibility::gate_show(&state, &user, &detail.show.id).await?;
+        return Ok(Json(series_detail_dto(&state, &detail.show)));
+    }
+    let item = query(&state.db, move |pool| db::get_item(&pool, &id))
+        .await?
+        .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "item not found"))?;
+    crate::api::visibility::gate_item(&state, &user, &item.id).await?;
+    if let Some(show_id) = item.show_id.clone() {
+        let show = query(&state.db, move |pool| db::get_show(&pool, &show_id)).await?;
+        return Ok(Json(episode_detail_dto(
+            &state,
+            &headers,
+            &item,
+            show.as_ref().map(|d| &d.show),
+            &access,
+        )));
+    }
+    Ok(Json(movie_detail_dto(
+        &state,
+        &headers,
+        &item,
+        &access,
+    )))
+}
+
+async fn similar(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(_path): Path<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(json!({ "Items": [], "TotalRecordCount": 0 })))
+}
+
+async fn item_counts(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    let (user, _) = user_of(&state, &headers, &params).await?;
+    let mut items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+    let mut shows = query(&state.db, |pool| db::list_shows(&pool, None)).await?;
+    crate::api::visibility::keep_items(&user, &mut items);
+    crate::api::visibility::keep_shows(&user, &mut shows);
+    let movie_count = items
+        .iter()
+        .filter(|item| matches!(item.kind, Kind::Movie | Kind::Video) && item.show_id.is_none())
+        .count();
+    let episode_count = items.iter().filter(|item| item.show_id.is_some()).count();
+    let series_count = shows.len();
+    Ok(Json(json!({
+        "MovieCount": movie_count,
+        "SeriesCount": series_count,
+        "EpisodeCount": episode_count,
+        "ArtistCount": 0,
+        "ProgramCount": 0,
+        "TrailerCount": 0,
+        "SongCount": 0,
+        "AlbumCount": 0,
+        "MusicVideoCount": 0,
+        "BoxSetCount": 0,
+        "BookCount": 0,
+        "ItemCount": movie_count + series_count + episode_count,
+    })))
+}
+
+async fn filters(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(json!({
+        "Genres": [],
+        "Tags": [],
+        "OfficialRatings": [],
+        "Years": [],
+    })))
+}
+
+async fn genres(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    let (user, _) = user_of(&state, &headers, &params).await?;
+    let mut items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+    crate::api::visibility::keep_items(&user, &mut items);
+    let mut names: Vec<String> = items
+        .iter()
+        .filter_map(|item| item.metadata.as_ref())
+        .flat_map(|meta| meta.genres.iter().cloned())
+        .collect();
+    names.sort();
+    names.dedup();
+    let items: Vec<Value> = names
+        .iter()
+        .map(|name| json!({ "Name": name, "Id": name }))
         .collect();
     Ok(Json(
         json!({ "Items": items, "TotalRecordCount": items.len() }),
     ))
+}
+
+async fn notifications_summary(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(_user_id): Path<String>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(json!({
+        "UnreadCount": 0,
+        "MaxUnreadCount": 0,
+        "UnreadCountsByType": {},
+        "UnreadCountsByLevel": {},
+    })))
 }
 
 fn ticks(ms: Option<u64>) -> i64 {
@@ -273,6 +429,190 @@ fn series_dto(state: &SharedState, show: &Show) -> Value {
         "ChildCount": show.episode_count,
         "RecursiveItemCount": show.episode_count,
         "UserData": { "Played": false, "PlaybackPositionTicks": 0, "PlayCount": 0, "IsFavorite": false },
+    })
+}
+
+fn provider_ids(meta: Option<&crate::model::Metadata>) -> Value {
+    let Some(meta) = meta else {
+        return json!({});
+    };
+    let mut ids = serde_json::Map::new();
+    ids.insert("Tmdb".to_string(), json!(meta.tmdb_id.to_string()));
+    if let Some(imdb) = meta.imdb_id.as_ref() {
+        ids.insert("Imdb".to_string(), json!(imdb));
+    }
+    Value::Object(ids)
+}
+
+fn item_people(meta: Option<&crate::model::Metadata>) -> Value {
+    let Some(meta) = meta else {
+        return json!([]);
+    };
+    let mut people = Vec::new();
+    for member in &meta.cast {
+        people.push(json!({
+            "Name": member.name,
+            "Type": "Actor",
+            "Role": member.character,
+        }));
+    }
+    for member in &meta.crew {
+        people.push(json!({
+            "Name": member.name,
+            "Type": if member.job.eq_ignore_ascii_case("director") { "Director" } else { "Writer" },
+            "Role": member.job,
+        }));
+    }
+    json!(people)
+}
+
+fn media_streams(item: &MediaItem) -> Value {
+    let mut streams = Vec::new();
+    if let Some(video) = item.video.as_ref() {
+        streams.push(json!({
+            "Type": "Video",
+            "Index": 0,
+            "Codec": video.codec,
+            "Width": video.width,
+            "Height": video.height,
+            "IsDefault": true,
+        }));
+    }
+    for (i, audio) in item.audio_tracks.iter().enumerate() {
+        streams.push(json!({
+            "Type": "Audio",
+            "Index": i + 1,
+            "Codec": audio.codec,
+            "Channels": audio.channels,
+            "Language": audio.language,
+            "DisplayTitle": audio.title,
+            "IsDefault": audio.default,
+        }));
+    }
+    for (i, subtitle) in item.subtitles.iter().enumerate() {
+        streams.push(json!({
+            "Type": "Subtitle",
+            "Index": 1000 + i,
+            "Codec": subtitle.codec,
+            "Language": subtitle.language,
+            "DisplayTitle": subtitle.title,
+            "IsForced": subtitle.forced,
+        }));
+    }
+    json!(streams)
+}
+
+fn media_source(
+    state: &SharedState,
+    headers: &HeaderMap,
+    item: &MediaItem,
+    access: &str,
+) -> Value {
+    let ticket = crate::services::media_ticket::for_access_token(&state.media_ticket_key, access);
+    let path = item
+        .abs_path
+        .clone()
+        .filter(|p| p.starts_with("http://") || p.starts_with("https://"))
+        .unwrap_or_else(|| format!("/api/items/{}/stream?t={ticket}", item.id));
+    json!({
+        "Id": item.id,
+        "Name": item.title,
+        "Path": client_url(headers, &path),
+        "Container": if item.container == "strm" { "mkv" } else { item.container.as_str() },
+        "RunTimeTicks": ticks(item.duration_ms),
+        "Size": Value::Null,
+        "SupportsDirectPlay": true,
+        "SupportsDirectStream": true,
+        "SupportsTranscoding": false,
+        "IsRemote": item.abs_path.as_deref().is_some_and(|p| p.starts_with("http")),
+        "MediaStreams": media_streams(item),
+    })
+}
+
+fn movie_detail_dto(
+    state: &SharedState,
+    headers: &HeaderMap,
+    item: &MediaItem,
+    access: &str,
+) -> Value {
+    let mut dto = movie_dto(state, item);
+    if let Some(meta) = item.metadata.as_ref() {
+        dto["Genres"] = json!(meta.genres.clone());
+        if let Some(tagline) = meta.tagline.as_ref() {
+            dto["Taglines"] = json!([tagline]);
+        }
+        if let Some(certification) = meta.certification.as_ref() {
+            dto["OfficialRating"] = json!(certification);
+        }
+        if let Some(release_date) = meta.release_date.as_ref() {
+            dto["PremiereDate"] = json!(release_date);
+        }
+        dto["ProviderIds"] = provider_ids(Some(meta));
+        dto["People"] = item_people(Some(meta));
+    }
+    dto["DateCreated"] = json!(item.added_at);
+    dto["CanDownload"] = json!(true);
+    dto["LocationType"] = json!("FileSystem");
+    dto["VideoType"] = json!("VideoFile");
+    dto["MediaSources"] = json!([media_source(state, headers, item, access)]);
+    dto
+}
+
+fn series_detail_dto(state: &SharedState, show: &Show) -> Value {
+    let mut dto = series_dto(state, show);
+    if let Some(meta) = show.metadata.as_ref() {
+        dto["Genres"] = json!(meta.genres.clone());
+        if let Some(tagline) = meta.tagline.as_ref() {
+            dto["Taglines"] = json!([tagline]);
+        }
+        if let Some(certification) = meta.certification.as_ref() {
+            dto["OfficialRating"] = json!(certification);
+        }
+        if let Some(release_date) = meta.release_date.as_ref() {
+            dto["PremiereDate"] = json!(release_date);
+        }
+        dto["ProviderIds"] = provider_ids(Some(meta));
+        dto["People"] = item_people(Some(meta));
+    }
+    dto["DateCreated"] = json!(show.added_at);
+    dto["CanDownload"] = json!(false);
+    dto["LocationType"] = json!("FileSystem");
+    dto
+}
+
+fn episode_detail_dto(
+    state: &SharedState,
+    headers: &HeaderMap,
+    item: &MediaItem,
+    show: Option<&Show>,
+    access: &str,
+) -> Value {
+    let poster = show
+        .and_then(|show| show.metadata.as_ref())
+        .and_then(|meta| meta.poster_url.clone());
+    json!({
+        "Name": item.episode_title.clone().unwrap_or_else(|| format!("Episode {}", item.episode.unwrap_or(0))),
+        "Id": item.id,
+        "ServerId": server_id(state),
+        "Type": "Episode",
+        "MediaType": "Video",
+        "IsFolder": false,
+        "SeriesId": item.show_id,
+        "SeriesName": item.show_title,
+        "SeasonId": item.show_id.as_ref().map(|id| format!("{id}:s{}", item.season.unwrap_or(0))),
+        "ParentIndexNumber": item.season,
+        "IndexNumber": item.episode,
+        "ProductionYear": show.and_then(|show| show.year).or(item.year),
+        "RunTimeTicks": ticks(item.duration_ms),
+        "Container": if item.container == "strm" { "mkv" } else { item.container.as_str() },
+        "Overview": show.and_then(|show| show.metadata.as_ref()).and_then(|meta| meta.overview.clone()),
+        "ImageTags": image_tag(poster.as_ref()),
+        "DateCreated": item.added_at,
+        "CanDownload": true,
+        "LocationType": "FileSystem",
+        "VideoType": "VideoFile",
+        "UserData": { "Played": false, "PlaybackPositionTicks": 0, "PlayCount": 0, "IsFavorite": false },
+        "MediaSources": [media_source(state, headers, item, access)],
     })
 }
 
