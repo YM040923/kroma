@@ -26,7 +26,18 @@ const Task = z.object({
   episodeTotal: z.number().default(0),
   link: z.string().default(''),
 });
-const Item = z.object({ key: z.string(), taskId: z.string(), title: z.string(), state: z.string(), lastError: z.string() });
+const Item = z.object({
+  key: z.string(),
+  taskId: z.string(),
+  title: z.string(),
+  state: z.string(),
+  lastError: z.string(),
+  resource: z.string().default(''),
+  index: z.number().default(0),
+  size: z.string().default(''),
+  link: z.string().default(''),
+  price: z.number().default(0),
+});
 const View = z.object({ sourceUrl: z.string().default(''), tasks: z.array(Task), items: z.array(Item) });
 const Preference = z.object({
   minSizeGb: z.number().default(0),
@@ -73,6 +84,8 @@ export const useSubscriptionsApi = moduleApiHook((api) => ({
   update: (id: string, body: SubscriptionTaskInput) => api.put(`/subscriptions/${id}`, body, Task),
   scan: (id: string) => api.post(`/subscriptions/${id}/scan`, {}, z.array(Item)),
   execute: (id: string) => api.post(`/subscriptions/${id}/execute`, {}, Task),
+  executeItem: (id: string, body: { resource: string; index: number; price: number; link: string }) =>
+    api.post(`/subscriptions/${id}/execute-item`, body, Task),
   source: (url: string) => api.post('/source', { url }, View),
   config: () => api.get('/config', SourceConfig),
   saveConfig: (body: SubscriptionConfigInput) => api.post('/config', body, SourceConfig),

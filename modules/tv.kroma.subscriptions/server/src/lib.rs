@@ -32,6 +32,7 @@ fn poll<S: HostCtx + Clone + Send + Sync + 'static>(_host: &S) -> anyhow::Result
     // paid acquisition happens until an item is explicitly executed.
     let _ = store::load();
     routes::poll_transfers();
+    routes::discover();
     Ok(())
 }
 

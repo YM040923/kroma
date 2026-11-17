@@ -29,6 +29,8 @@
   "subscriptions.saveConfig": "保存配置",
   "subscriptions.configSaved": "已保存",
   "subscriptions.configLoadFailed": "来源配置读取失败，请检查来源地址与服务状态。",
+  "subscriptions.discover": "发现",
+  "subscriptions.discoverHint": "订阅任务搜到的新资源；确认后才会真实转存并扣积分。",
   "subscriptions.saveSource": "保存地址",
   "subscriptions.sourceHint": "目前接入 MADREEL；后续可加 TG 群组、其他网盘来源。",
   "subscriptions.sourceUrl": "来源服务地址",

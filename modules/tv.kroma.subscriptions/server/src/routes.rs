@@ -79,6 +79,7 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/search", post(search::<S>))
         .route("/subscribe", post(subscribe::<S>))
         .route("/subscriptions/{id}/execute", post(execute::<S>))
+        .route("/subscriptions/{id}/execute-item", post(execute_item::<S>))
         .route("/subscriptions/{id}/job", get(job::<S>))
 }
 
@@ -127,7 +128,134 @@ fn validate(body: &TaskBody) -> Result<(), String> {
 async fn list<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser) -> Result<Json<store::Stored>, axum::response::Response> {
     require(&host, &user)?;
     poll_transfers();
+    discover();
     Ok(Json(store::load()))
+}
+
+/// Finds releases the enabled show subscriptions have not been sent yet. This
+/// is discovery only: it never unlocks or spends points; a person still has to
+/// confirm a candidate from the page.
+pub(crate) fn discover() {
+    let mut stored = store::load();
+    let source = stored.source_url.clone();
+    if source.trim().is_empty() {
+        return;
+    }
+    let now = kroma_module_sdk::primitives::now_ms();
+    if now - stored.last_discovery_at < 15 * 60 * 1000 {
+        return;
+    }
+    let tasks: Vec<(String, String, i64)> = stored
+        .tasks
+        .iter()
+        .filter(|task| task.enabled && task.kind == "show")
+        .map(|task| (task.id.clone(), task.name.clone(), task.tmdb_id))
+        .collect();
+    for (id, name, tmdb_id) in tasks {
+        let path = format!("/search?tmdb={tmdb_id}&type=tv&probe=0");
+        let Ok(value) = source_json(&source, &path, None) else {
+            continue;
+        };
+        let candidates = value
+            .get("candidates")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for candidate in candidates {
+            let resource = candidate
+                .get("fileName")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if resource.is_empty() {
+                continue;
+            }
+            let key = format!("{id}:{resource}");
+            if stored.items.iter().any(|item| item.key == key) {
+                continue;
+            }
+            if stored
+                .tasks
+                .iter()
+                .any(|task| task.id == id && task.resource == resource)
+            {
+                continue;
+            }
+            stored.items.push(store::Item {
+                key,
+                task_id: id.clone(),
+                title: name.clone(),
+                state: "new".into(),
+                last_error: String::new(),
+                resource,
+                index: candidate.get("index").and_then(Value::as_i64).unwrap_or(0),
+                size: candidate
+                    .get("size")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                link: candidate
+                    .get("link")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                price: candidate.get("price").and_then(Value::as_i64).unwrap_or(0),
+            });
+        }
+    }
+    let excess = stored.items.len().saturating_sub(500);
+    if excess > 0 {
+        stored.items.drain(0..excess);
+    }
+    stored.last_discovery_at = now;
+    let _ = store::save(&stored);
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExecuteItemBody {
+    resource: String,
+    #[serde(default)]
+    index: i64,
+    #[serde(default)]
+    price: i64,
+    #[serde(default)]
+    link: String,
+}
+
+async fn execute_item<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser, Path(id): Path<String>, Json(body): Json<ExecuteItemBody>) -> Result<Json<Task>, axum::response::Response> {
+    require(&host, &user)?;
+    if body.resource.trim().is_empty() {
+        return Err(json_error(StatusCode::BAD_REQUEST, "缺少要转存的资源"));
+    }
+    let mut stored = store::load();
+    let source = stored.source_url.clone();
+    let kind = stored
+        .tasks
+        .iter()
+        .find(|task| task.id == id)
+        .map(|task| if task.kind == "show" { "show" } else { "movie" })
+        .unwrap_or("movie")
+        .to_string();
+    let task = stored
+        .tasks
+        .iter_mut()
+        .find(|task| task.id == id)
+        .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "订阅任务不存在"))?;
+    task.resource = body.resource.trim().to_string();
+    task.resource_index = body.index;
+    task.price = body.price;
+    task.link = body.link.trim().into();
+    start_transfer(task, &source, &kind);
+    let result = task.clone();
+    for item in stored.items.iter_mut() {
+        if item.task_id == id && item.resource == result.resource {
+            item.state = "sent".into();
+        }
+    }
+    store::save(&stored).map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, &error))?;
+    Ok(Json(result))
 }
 
 /// Reads the source's asynchronous unlock/transfer jobs and folds their result

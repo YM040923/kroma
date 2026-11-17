@@ -1,6 +1,7 @@
 import { Denied, ModuleFailed, ModuleLoading, useCap, useT } from '@kromatv/module-sdk';
 import {
   Badge,
+  Box,
   Button,
   Dialog,
   Field,
@@ -138,6 +139,7 @@ export default function SubscriptionsPage() {
   const [config, setConfig] = useState<SubscriptionConfig | null>(null);
   const [configBusy, setConfigBusy] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
+  const [confirmItem, setConfirmItem] = useState('');
   const [tab, setTab] = useState<Tab>('movie');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [network, setNetwork] = useState<'all' | '115'>('all');
@@ -184,6 +186,16 @@ export default function SubscriptionsPage() {
       return true;
     });
   }, [data, tab, statusFilter, network, updated, query]);
+
+  const discoveries = useMemo(() => {
+    if (!data) return [];
+    return data.items
+      .filter((item) => item.state === 'new')
+      .flatMap((item) => {
+        const task = data.tasks.find((candidate) => candidate.id === item.taskId);
+        return task ? [{ item, task }] : [];
+      });
+  }, [data]);
 
   if (!allowed) {
     return <Denied />;
@@ -301,6 +313,37 @@ export default function SubscriptionsPage() {
       setError(String(reason));
     } finally {
       setConfigBusy(false);
+    }
+  };
+
+  const sendItem = async (task: SubscriptionTask, item: SubscriptionItem) => {
+    if (confirmItem !== item.key) {
+      setConfirmItem(item.key);
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await api.executeItem(task.id, {
+        resource: item.resource,
+        index: item.index,
+        price: item.price,
+        link: item.link,
+      });
+      setConfirmItem('');
+      await load();
+    } catch (reason) {
+      setError(String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyItem = async (link: string) => {
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      setError(link);
     }
   };
 
@@ -593,6 +636,63 @@ export default function SubscriptionsPage() {
               {data.tasks.length ? t('subscriptions.noResults') : t('subscriptions.empty')}
             </Text>
           )}
+
+          {discoveries.length ? (
+            <Surface elevated border="border" pad="none" px={22} py={20} mt={26}>
+              <Text variant="cardTitle">{t('subscriptions.discover')}</Text>
+              <Text variant="meta" color="textDim" mt={4}>
+                {t('subscriptions.discoverHint')}
+              </Text>
+              <Box gap={8} mt={14}>
+                {discoveries.map(({ item, task }) => (
+                  <Box key={item.key} border="border" radius="lg" px={14} py={10}>
+                    <Row between gap={12} align="flex-start">
+                      <Box minW={0} shrink={1}>
+                        <Text variant="label" lines={2}>
+                          {item.resource}
+                        </Text>
+                        <Row wrap gap={10} mt={4}>
+                          <Text variant="meta" color="textDim">
+                            {task.name}
+                          </Text>
+                          {item.size ? (
+                            <Text variant="meta" color="textDim">
+                              {item.size}
+                            </Text>
+                          ) : null}
+                          {item.price ? (
+                            <Text variant="meta" color="accentText">
+                              {t('subscriptions.points', { points: item.price })}
+                            </Text>
+                          ) : null}
+                        </Row>
+                      </Box>
+                      <Row gap={8} shrink={0}>
+                        <Button
+                          label={t('subscriptions.copy')}
+                          size="sm"
+                          variant="ghost"
+                          disabled={!item.link}
+                          onPress={() => void copyItem(item.link)}
+                        />
+                        <Button
+                          label={
+                            confirmItem === item.key
+                              ? t('subscriptions.confirmSubscribe')
+                              : t('subscriptions.add')
+                          }
+                          size="sm"
+                          variant="primary"
+                          disabled={busy}
+                          onPress={() => void sendItem(task, item)}
+                        />
+                      </Row>
+                    </Row>
+                  </Box>
+                ))}
+              </Box>
+            </Surface>
+          ) : null}
         </>
       )}
 

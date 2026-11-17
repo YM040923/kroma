@@ -29,6 +29,8 @@
   "subscriptions.saveConfig": "Save config",
   "subscriptions.configSaved": "Saved",
   "subscriptions.configLoadFailed": "Could not read the source config; check the source URL and service.",
+  "subscriptions.discover": "Discovered",
+  "subscriptions.discoverHint": "New releases found for subscription tasks; only a confirmed one is transferred and charged.",
   "subscriptions.saveSource": "Save address",
   "subscriptions.sourceHint": "MADREEL today; Telegram groups and other drives later.",
   "subscriptions.sourceUrl": "Source service address",

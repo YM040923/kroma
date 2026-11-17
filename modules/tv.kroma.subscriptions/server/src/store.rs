@@ -45,6 +45,12 @@ pub struct Item {
     pub title: String,
     pub state: String,
     pub last_error: String,
+    /// The candidate as the source listed it, so the page can show and send it.
+    pub resource: String,
+    pub index: i64,
+    pub size: String,
+    pub link: String,
+    pub price: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -53,6 +59,8 @@ pub struct Stored {
     /// Where releases are searched for. A local service that speaks the
     /// source's own protocol; the module never talks to the site itself.
     pub source_url: String,
+    /// Last discovery pass, so opening the page does not hammer the source.
+    pub last_discovery_at: i64,
     pub tasks: Vec<Task>,
     pub items: Vec<Item>,
 }
