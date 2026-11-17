@@ -483,6 +483,7 @@ async fn playback_info(
         .clone()
         .filter(|p| p.starts_with("http://") || p.starts_with("https://"))
         .unwrap_or_else(|| format!("/api/items/{}/stream?t={ticket}", item.id));
+    let path = client_url(&headers, &path);
     let container = if item.container == "strm" {
         "mkv".to_string()
     } else {
@@ -556,7 +557,7 @@ async fn image_art(
     let Some(target) = art else {
         return Err(json_error(StatusCode::NOT_FOUND, "no image"));
     };
-    redirect(&target)
+    redirect(&client_url(headers, &target))
 }
 
 async fn stream(
@@ -574,10 +575,65 @@ async fn stream(
         .as_deref()
         .filter(|p| p.starts_with("http://") || p.starts_with("https://"))
     {
-        return redirect(path);
+        return redirect(&client_url(&headers, path));
     }
     let ticket = crate::services::media_ticket::for_access_token(&state.media_ticket_key, &access);
-    redirect(&format!("/api/items/{}/stream?t={ticket}", item.id))
+    redirect(&client_url(
+        &headers,
+        &format!("/api/items/{}/stream?t={ticket}", item.id),
+    ))
+}
+
+/// A playback URL as the calling client must see it. The `.strm` files name the
+/// server as `127.0.0.1` (the address it was scanned from), which a phone or TV
+/// resolves to itself; the same goes for a relative path. Both are re-anchored
+/// to the authority the request arrived on, so only that header decides where
+/// the client is told to fetch bytes from.
+fn client_url(headers: &HeaderMap, target: &str) -> String {
+    let Some(origin) = client_origin(headers) else {
+        return target.to_string();
+    };
+    for scheme in ["http://", "https://"] {
+        for host in ["127.0.0.1", "localhost", "[::1]"] {
+            let prefix = format!("{scheme}{host}");
+            let Some(rest) = target.strip_prefix(&prefix) else {
+                continue;
+            };
+            let rest = if rest.is_empty() {
+                String::new()
+            } else if let Some(after) = rest.strip_prefix(':') {
+                after
+                    .find('/')
+                    .map(|at| after[at..].to_string())
+                    .unwrap_or_default()
+            } else if rest.starts_with('/') {
+                rest.to_string()
+            } else {
+                continue;
+            };
+            return format!("{origin}{rest}");
+        }
+    }
+    if target.starts_with('/') {
+        return format!("{origin}{target}");
+    }
+    target.to_string()
+}
+
+fn client_origin(headers: &HeaderMap) -> Option<String> {
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())?;
+    let proto = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .map(str::trim)
+        .filter(|v| *v == "http" || *v == "https")
+        .unwrap_or("http");
+    Some(format!("{proto}://{host}"))
 }
 
 fn redirect(target: &str) -> Result<Response, Response> {
