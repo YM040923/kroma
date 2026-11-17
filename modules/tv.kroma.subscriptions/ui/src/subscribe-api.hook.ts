@@ -3,10 +3,18 @@ import { z } from 'zod';
 
 export const Candidate = z.object({
   index: z.number(),
-  fileName: z.string(),
+  fileName: z.string().default(''),
   size: z.string().default(''),
-  price: z.number().default(0),
+  price: z.number().nullable().default(null),
   tags: z.array(z.string()).default([]),
+  sizeBytes: z.number().default(0),
+  unlockCount: z.number().default(0),
+  sharer: z.string().default(''),
+  date: z.string().default(''),
+  link: z.string().default(''),
+  shareCode: z.string().default(''),
+  alreadyUnlocked: z.boolean().default(false),
+  probeError: z.string().nullable().default(null),
 });
 export type SubscriptionCandidate = z.infer<typeof Candidate>;
 
@@ -26,6 +34,9 @@ export interface SubscribeInput {
   resource: string;
   index: number;
   price: number;
+  poster: string;
+  year: number;
+  link: string;
 }
 
 export const useSubscribeApi = moduleApiHook((api) => ({

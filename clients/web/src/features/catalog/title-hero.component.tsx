@@ -106,6 +106,7 @@ export function TitleHero({
             tmdbId={view.tmdbId}
             title={view.title}
             year={view.year}
+            poster={view.poster}
             owned={owned}
           />
           <FollowState kind={view.kind === 'show' ? 'show' : 'movie'} tmdbId={view.tmdbId ?? null} />

@@ -20,6 +20,22 @@ struct TaskBody {
     failure_path: String,
     monitor_mode: String,
     enabled: bool,
+    #[serde(default)]
+    poster: String,
+    #[serde(default)]
+    year: i64,
+    #[serde(default)]
+    season: i64,
+    #[serde(default)]
+    episode_start: i64,
+    #[serde(default)]
+    episode_total: i64,
+    #[serde(default)]
+    link: String,
+    #[serde(default)]
+    tmdb_id: i64,
+    #[serde(default)]
+    kind: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -45,6 +61,12 @@ struct SubscribeBody {
     resource: String,
     index: i64,
     price: i64,
+    #[serde(default)]
+    poster: String,
+    #[serde(default)]
+    year: i64,
+    #[serde(default)]
+    link: String,
 }
 
 pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
@@ -64,11 +86,14 @@ fn require<S: HostCtx>(host: &S, user: &kroma_module_sdk::domain::User) -> Resul
 }
 
 fn validate(body: &TaskBody) -> Result<(), String> {
-    if body.name.trim().is_empty() || body.source.trim().is_empty() || body.monitor_path.trim().is_empty() || body.target_path.trim().is_empty() || body.failure_path.trim().is_empty() {
-        return Err("任务名称、订阅源、监控目录、目标目录和失败目录都必须填写".into());
+    if body.name.trim().is_empty() || body.source.trim().is_empty() {
+        return Err("任务名称和订阅源都必须填写".into());
     }
     if !matches!(body.monitor_mode.as_str(), "manual" | "polling") {
         return Err("监控方式只能是 manual 或 polling".into());
+    }
+    if body.monitor_mode == "polling" && body.monitor_path.trim().is_empty() {
+        return Err("轮询任务必须填写监控目录".into());
     }
     Ok(())
 }
@@ -83,7 +108,26 @@ async fn create<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S
     validate(&body).map_err(|e| json_error(StatusCode::BAD_REQUEST, &e))?;
     let mut stored = store::load();
     let id = format!("sub-{}", kroma_module_sdk::primitives::now_ms());
-    let task = Task { id, name: body.name.trim().into(), source: body.source.trim().into(), monitor_path: body.monitor_path.trim().into(), target_path: body.target_path.trim().into(), failure_path: body.failure_path.trim().into(), monitor_mode: body.monitor_mode, enabled: body.enabled, status: "draft".into(), ..Task::default() };
+    let task = Task {
+        id,
+        name: body.name.trim().into(),
+        source: body.source.trim().into(),
+        monitor_path: body.monitor_path.trim().into(),
+        target_path: body.target_path.trim().into(),
+        failure_path: body.failure_path.trim().into(),
+        monitor_mode: body.monitor_mode,
+        enabled: body.enabled,
+        status: "draft".into(),
+        poster: body.poster.trim().into(),
+        year: body.year,
+        season: body.season,
+        episode_start: body.episode_start,
+        episode_total: body.episode_total,
+        link: body.link.trim().into(),
+        tmdb_id: body.tmdb_id,
+        kind: body.kind,
+        ..Task::default()
+    };
     stored.tasks.push(task.clone());
     store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
     Ok(Json(task))
@@ -94,7 +138,22 @@ async fn update<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S
     validate(&body).map_err(|e| json_error(StatusCode::BAD_REQUEST, &e))?;
     let mut stored = store::load();
     let task = stored.tasks.iter_mut().find(|t| t.id == id).ok_or_else(|| json_error(StatusCode::NOT_FOUND, "订阅任务不存在"))?;
-    task.name = body.name.trim().into(); task.source = body.source.trim().into(); task.monitor_path = body.monitor_path.trim().into(); task.target_path = body.target_path.trim().into(); task.failure_path = body.failure_path.trim().into(); task.monitor_mode = body.monitor_mode; task.enabled = body.enabled; task.status = if task.enabled { "enabled" } else { "paused" }.into();
+    task.name = body.name.trim().into();
+    task.source = body.source.trim().into();
+    task.monitor_path = body.monitor_path.trim().into();
+    task.target_path = body.target_path.trim().into();
+    task.failure_path = body.failure_path.trim().into();
+    task.monitor_mode = body.monitor_mode;
+    task.enabled = body.enabled;
+    task.status = if task.enabled { "enabled" } else { "paused" }.into();
+    task.poster = body.poster.trim().into();
+    task.year = body.year;
+    task.season = body.season;
+    task.episode_start = body.episode_start;
+    task.episode_total = body.episode_total;
+    task.link = body.link.trim().into();
+    task.tmdb_id = body.tmdb_id;
+    task.kind = body.kind;
     let result = task.clone();
     store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
     Ok(Json(result))
@@ -175,6 +234,12 @@ async fn subscribe<S: HostCtx + Clone + Send + Sync + 'static>(State(host): Stat
         resource_index: body.index,
         price: body.price,
         job_id: String::new(),
+        poster: body.poster.trim().into(),
+        year: body.year,
+        season: 0,
+        episode_start: 0,
+        episode_total: 0,
+        link: body.link.trim().into(),
     };
     start_transfer(&mut task, &stored.source_url, &body.kind);
     stored.tasks.push(task.clone());

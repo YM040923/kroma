@@ -27,6 +27,14 @@ pub struct Task {
     pub price: i64,
     /// The source's asynchronous job, once a transfer was asked for.
     pub job_id: String,
+    /// What the card draws: the title's own art, its year, season and episode
+    /// span, and the subscription link the operator picked.
+    pub poster: String,
+    pub year: i64,
+    pub season: i64,
+    pub episode_start: i64,
+    pub episode_total: i64,
+    pub link: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

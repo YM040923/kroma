@@ -63,6 +63,7 @@ export interface SlotProps {
     tmdbId: number | null;
     title: string;
     year: number | null;
+    poster: string;
     owned: boolean;
   };
   /** The acquisition half of the admin request page: search for releases of
