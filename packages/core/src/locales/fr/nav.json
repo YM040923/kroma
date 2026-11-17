@@ -2,6 +2,8 @@
   "nav.account": "Compte",
   "nav.accountSettings": "Paramètres du compte",
   "nav.changeProfile": "Changer de profil",
+  "nav.collapseSidebar": "Réduire la barre latérale",
+  "nav.expandSidebar": "Développer la barre latérale",
   "nav.commandMenu": "Accès rapide",
   "nav.connectDevice": "Connecter un appareil",
   "nav.films": "Films",

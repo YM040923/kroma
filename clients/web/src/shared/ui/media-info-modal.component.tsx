@@ -36,7 +36,7 @@ export const MediaInfoModal = createCallable<{ id: string; title: string }>(
         <Dialog.Header>
           <Row between align="flex-start" gap={16}>
             <Box minW={0}>
-              <Text variant="overline" color="white/40">
+              <Text variant="overline" color="textDim">
                 {t('mediaInfo.title')}
               </Text>
               <Text variant="title" mt={4} lines={1}>
@@ -55,11 +55,11 @@ export const MediaInfoModal = createCallable<{ id: string; title: string }>(
         <Dialog.Panel>
           {isPending ? (
             <Box align="center" py={64}>
-              <Spinner size={26} color="white/40" />
+              <Spinner size={26} color="var(--kroma-text-dim)" />
             </Box>
           ) : null}
           {!isPending && files.length === 0 ? (
-            <Text variant="meta" color="white/40" textAlign="center" py={64}>
+            <Text variant="meta" color="textDim" textAlign="center" py={64}>
               {t('mediaInfo.noFile')}
             </Text>
           ) : null}
@@ -98,7 +98,7 @@ function EditionHeading({ edition }: Readonly<{ edition: Edition }>) {
         {edition.name ?? t('mediaInfo.editionUnnamed')}
       </Text>
       {edition.durationMs != null ? (
-        <Text variant="meta" color="white/35">
+        <Text variant="meta" color="textDim">
           {fmt.duration(edition.durationMs)}
         </Text>
       ) : null}

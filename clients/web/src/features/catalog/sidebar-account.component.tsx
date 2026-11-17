@@ -1,9 +1,20 @@
 // The sidebar's footer: who is signed in.
 
 import { useT } from '@kromatv/ui';
-import { Box, Menu, type MenuTriggerBind, styles, Text, useStyles } from '@kromatv/ui/kit';
+import {
+  Box,
+  Menu,
+  type MenuTriggerBind,
+  readMode,
+  styles,
+  Text,
+  type ThemeMode,
+  useStyleRuntime,
+  useStyles,
+  writeMode,
+} from '@kromatv/ui/kit';
 import { useRouterState } from '@tanstack/react-router';
-import { type Ref, useState } from 'react';
+import { type Ref, useEffect, useState } from 'react';
 import { useAuth } from '#web/shared/lib/auth';
 
 import { useFocusRing } from '#web/shared/lib/use-focus-ring.hook';
@@ -37,9 +48,20 @@ const sDefinition = styles({
 });
 
 /** The signed-in profile, and the account menu it opens. */
-export function UserChip() {
+const MODE_ICON = { system: 'device-desktop', light: 'sun', dark: 'moon' } as const;
+
+export function UserChip({ compact = false }: Readonly<{ compact?: boolean }>) {
   const t = useT();
   const { user, logout } = useAuth();
+  const runtime = useStyleRuntime();
+  const [mode, setMode] = useState<ThemeMode>('system');
+  useEffect(() => {
+    setMode(readMode());
+  }, []);
+  const pickMode = (next: ThemeMode) => {
+    setMode(next);
+    writeMode(next, runtime);
+  };
   // Return to the current page after switching profile.
   const href = useRouterState({ select: (s) => s.location.href });
   if (!user) {
@@ -47,10 +69,20 @@ export function UserChip() {
   }
   return (
     <Menu.Root label={t('nav.account')} align="start">
-      <Menu.Trigger render={userChipTrigger(user, t('nav.account'))} />
+      <Menu.Trigger render={userChipTrigger(user, t('nav.account'), compact)} />
       <Menu.Item icon="user-circle" label={t('nav.accountSettings')} asChild>
         <RouteLink to="/account" />
       </Menu.Item>
+      <Menu.Separator />
+      {(['system', 'light', 'dark'] as const).map((value) => (
+        <Menu.Item
+          key={value}
+          icon={MODE_ICON[value]}
+          label={`${t('appearance.title')} · ${t(`appearance.${value}`)}${mode === value ? '  ✓' : ''}`}
+          onSelect={() => pickMode(value)}
+        />
+      ))}
+      <Menu.Separator />
       <Menu.Item icon="sparkles" label={t('releases.title')} asChild>
         <RouteLink to="/whats-new" />
       </Menu.Item>
@@ -71,8 +103,8 @@ export function UserChip() {
 // Built out here rather than inline in <UserChip>: a render prop is still a
 // function returning elements, and one written inside the parent remounts its
 // subtree on every render of it.
-const userChipTrigger = (user: ChipUser, label: string) => (bind: MenuTriggerBind) => (
-  <UserChipTrigger bind={bind} user={user} label={label} />
+const userChipTrigger = (user: ChipUser, label: string, compact: boolean) => (bind: MenuTriggerBind) => (
+  <UserChipTrigger bind={bind} user={user} label={label} compact={compact} />
 );
 
 interface ChipUser {
@@ -85,7 +117,8 @@ function UserChipTrigger({
   bind,
   user,
   label,
-}: Readonly<{ bind: MenuTriggerBind; user: ChipUser; label: string }>) {
+  compact,
+}: Readonly<{ bind: MenuTriggerBind; user: ChipUser; label: string; compact: boolean }>) {
   const s = useStyles(sDefinition);
 
   const { ref, expanded, onPress } = bind;
@@ -107,20 +140,23 @@ function UserChipTrigger({
       <Box
         row
         align="center"
-        gap={12}
+        justify={compact ? 'center' : 'flex-start'}
+        gap={compact ? 0 : 12}
         p={10}
         radius="md"
         bg={expanded || hovered ? 'white/4' : undefined}
       >
         <UserAvatar name={user.username} avatarUrl={user.avatarUrl} seed={user.id} size={36} />
-        <Box minW={0}>
-          <Text variant="label" lines={1}>
-            {user.username}
-          </Text>
-          <Text variant="overline" color="textDim" style={s.noCaps} lines={1}>
-            {label}
-          </Text>
-        </Box>
+        {compact ? null : (
+          <Box minW={0}>
+            <Text variant="label" lines={1}>
+              {user.username}
+            </Text>
+            <Text variant="overline" color="textDim" style={s.noCaps} lines={1}>
+              {label}
+            </Text>
+          </Box>
+        )}
       </Box>
     </button>
   );

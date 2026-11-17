@@ -26,8 +26,8 @@ import { IconFileInfo } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 
 const sDefinition = styles({
-  topRule: { borderTopWidth: 1, borderTopColor: 'white/6' },
-  bottomRule: { borderBottomWidth: 1, borderBottomColor: 'white/6' },
+  topRule: { borderTopWidth: 1, borderTopColor: 'border' },
+  bottomRule: { borderBottomWidth: 1, borderBottomColor: 'border' },
   glyph: { mt: 2, flexShrink: 0 },
   noCaps: { textTransform: 'none' },
   path: { wordBreak: 'break-all' },
@@ -42,7 +42,7 @@ export function FileCard({
   const t = useT();
   const fmt = useFormat();
   return (
-    <Box overflow="hidden" radius="xl" border="white/8" bg="white/2">
+    <Box overflow="hidden" radius="xl" border="border" bg="wash">
       <FileHeader file={file} index={index} multi={multi} />
 
       <Box px={16} py={14}>
@@ -88,7 +88,7 @@ function FileHeader({
       <IconFileInfo
         size={18}
         stroke={1.9}
-        color={color('white/40', activeTheme(scope.theme))}
+        color={color('textDim', activeTheme(scope.theme))}
         className={classes(s.glyph)}
       />
       <Box minW={0} flex>
@@ -101,7 +101,7 @@ function FileHeader({
         </Row>
         {file.relPath ? (
           <div className={classes(s.path)}>
-            <Text variant="meta" font="mono" color="white/35" mt={2}>
+            <Text variant="meta" font="mono" color="textDim" mt={2}>
               {file.relPath}
             </Text>
           </div>
@@ -133,7 +133,7 @@ function Unreadable({ reason }: Readonly<{ reason: string }>) {
       <Text variant="meta" color="danger">
         {t('mediaInfo.unreadable')}
       </Text>
-      <Text variant="meta" font="mono" color="white/55">
+      <Text variant="meta" font="mono" color="textMuted">
         {reason}
       </Text>
     </Box>
@@ -219,7 +219,7 @@ function Section({
 
   return (
     <Box px={16} py={12} style={last ? undefined : s.bottomRule}>
-      <Text variant="overline" color="white/35" mb={6}>
+      <Text variant="overline" color="textDim" mb={6}>
         {label}
       </Text>
       <Box gap={4}>{children}</Box>
@@ -235,7 +235,7 @@ function TrackLine({
   return (
     <Box row wrap align="center" gapX={8} gapY={4}>
       {badge ? <Chip accent>{badge}</Chip> : null}
-      <Text variant="meta" color="white/75">
+      <Text variant="meta" color="text">
         {shown}
       </Text>
     </Box>
@@ -255,8 +255,8 @@ function Chip({ children, accent }: Readonly<{ children: string; accent?: boolea
   const s = useStyles(sDefinition);
 
   return (
-    <Box radius="pill" px={6} py={2} bg={accent ? 'accent/20' : 'white/8'}>
-      <Text variant="overline" color={accent ? 'accent' : 'white/50'} style={s.noCaps}>
+    <Box radius="pill" px={6} py={2} bg={accent ? 'accent/20' : 'wash'}>
+      <Text variant="overline" color={accent ? 'accent' : 'textMuted'} style={s.noCaps}>
         {children}
       </Text>
     </Box>
@@ -265,7 +265,7 @@ function Chip({ children, accent }: Readonly<{ children: string; accent?: boolea
 
 function Muted({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <Text variant="meta" color="white/35">
+    <Text variant="meta" color="textDim">
       {children}
     </Text>
   );

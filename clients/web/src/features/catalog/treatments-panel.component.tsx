@@ -45,7 +45,7 @@ const STATUS = {
   running: { icon: IconLoader2, ink: 'accent', spin: true },
   pending: { icon: IconLoader2, ink: 'accent/70' },
   failed: { icon: IconAlertTriangleFilled, ink: 'danger' },
-  missing: { icon: IconCircle, ink: 'white/25' },
+  missing: { icon: IconCircle, ink: 'textDim' },
 } satisfies Record<string, { icon: TablerIcon; ink: string; spin?: boolean }>;
 
 const PANEL_PAD = { base: 24, md: 64 } as const;
@@ -133,10 +133,10 @@ export function TreatmentsPanel({
         px={20}
         py={16}
         radius="xl"
-        border="white/8"
-        bg="white/3"
+        border="border"
+        bg="wash"
       >
-        <Text variant="overline" color="white/45">
+        <Text variant="overline" color="textDim">
           {t('pipeline.treatments')}
         </Text>
         {(treatments ?? []).map((tr) => {
@@ -154,7 +154,7 @@ export function TreatmentsPanel({
               ) : (
                 <Icon size={16} color={color(meta.ink, activeTheme(scope.theme))} />
               )}
-              <Text variant="meta" color="white/80">
+              <Text variant="meta" color="text">
                 {t(`pipeline.t.${tr.key}`)}
               </Text>
             </span>

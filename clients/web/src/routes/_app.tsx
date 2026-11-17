@@ -8,6 +8,7 @@ import { CastBar } from '#web/features/playback/cast/cast-bar.component';
 import { isAuthed } from '#web/shared/lib/api';
 import { deviceInfo } from '#web/shared/lib/device';
 import { useRequireAuth } from '#web/shared/lib/require-auth.hook';
+import { useSidebarCollapsed } from '#web/shared/lib/sidebar-collapsed.hook';
 import { useWebRuntime } from '#web/shared/lib/web-runtime';
 import { CastPicker } from '#web/shared/ui/cast-picker.component';
 import { DirectOffer } from '#web/shared/ui/direct-offer.component';
@@ -41,6 +42,7 @@ const sDefinition = styles({
 });
 
 const RAIL_WIDTH = 248;
+const RAIL_COLLAPSED = 104;
 
 function AppLayout() {
   const webRuntime = useWebRuntime();
@@ -50,6 +52,7 @@ function AppLayout() {
   const { ready, authed } = useRequireAuth();
   const step = useBreakpoint();
   const wide = step === 'lg' || step === 'tv';
+  const [collapsed, setCollapsed] = useSidebarCollapsed();
   useNotificationStream();
   if (!(ready && authed)) {
     return null;
@@ -58,8 +61,8 @@ function AppLayout() {
     <CastProvider client={webRuntime.client} enabled deviceName={BROWSER_LABEL}>
       <Box row={wide} minH="100%">
         {wide ? (
-          <Box w={RAIL_WIDTH} shrink={0}>
-            <Sidebar />
+          <Box w={collapsed ? RAIL_COLLAPSED : RAIL_WIDTH} shrink={0}>
+            <Sidebar collapsed={collapsed} onToggleCollapsed={() => setCollapsed(!collapsed)} />
           </Box>
         ) : (
           <MobileTopbar />

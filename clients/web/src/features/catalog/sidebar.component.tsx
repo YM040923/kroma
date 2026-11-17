@@ -1,6 +1,16 @@
 import { hasPermission } from '@kromatv/client/accounts';
 import { useT } from '@kromatv/ui';
-import { Box, classes, Drawer, Logo, Row, styles, useBreakpoint, useStyles } from '@kromatv/ui/kit';
+import {
+  Box,
+  classes,
+  Drawer,
+  IconButton,
+  Logo,
+  Row,
+  styles,
+  useBreakpoint,
+  useStyles,
+} from '@kromatv/ui/kit';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
 import { ScrollView } from 'react-native';
@@ -17,7 +27,7 @@ import { resolveModuleIcon } from '#web/modules/module-icons';
 import { useAuth } from '#web/shared/lib/auth';
 import { useNavActions } from '#web/shared/ui/nav-actions';
 import { NavMenuButton } from '#web/shared/ui/nav-menu-button.component';
-import { SideNav } from '#web/shared/ui/side-nav.component';
+import { SideNav, SideNavCompactProvider } from '#web/shared/ui/side-nav.component';
 import { SIDE_NAV_FRAME, SIDE_NAV_GUTTER } from '#web/shared/ui/side-nav-style';
 
 // `position: sticky`, `100vh`, `overflow-y` and `env()` have no React Native
@@ -66,7 +76,10 @@ const sDefinition = styles({
 
 // `env()` has no React Native spelling, so the sheet's own insets stay CSS.
 
-export function Sidebar() {
+export function Sidebar({
+  collapsed,
+  onToggleCollapsed,
+}: Readonly<{ collapsed: boolean; onToggleCollapsed: () => void }>) {
   const s = useStyles(sDefinition);
 
   const step = useBreakpoint();
@@ -75,26 +88,34 @@ export function Sidebar() {
   }
   return (
     <aside className={classes(s.sidebar)}>
-      <SideNav.Header>
-        <Logo size={24} />
-      </SideNav.Header>
-      <SidebarBody />
+      <SideNavCompactProvider compact={collapsed}>
+        <SideNav.Header compact={collapsed}>
+          <Logo size={24} />
+        </SideNav.Header>
+        <SidebarBody collapsed={collapsed} onToggleCollapsed={onToggleCollapsed} />
+      </SideNavCompactProvider>
     </aside>
   );
 }
 
 // The desktop aside's own scroll frame. In the phone sheet the frame is the
 // drawer's <Drawer.Panel>, which is why the two are separate.
-function SidebarBody() {
+function SidebarBody({
+  collapsed,
+  onToggleCollapsed,
+}: Readonly<{ collapsed: boolean; onToggleCollapsed: () => void }>) {
   const s = useStyles(sDefinition);
   return (
     <ScrollView style={SIDE_NAV_FRAME} contentContainerStyle={s.scrollContent}>
-      <SidebarNav />
+      <SidebarNav collapsed={collapsed} onToggleCollapsed={onToggleCollapsed} />
     </ScrollView>
   );
 }
 
-function SidebarNav() {
+function SidebarNav({
+  collapsed = false,
+  onToggleCollapsed,
+}: Readonly<{ collapsed?: boolean; onToggleCollapsed?: () => void }>) {
   const t = useT();
   const s = useStyles(sDefinition);
   return (
@@ -124,10 +145,22 @@ function SidebarNav() {
           <WhatsNewLink />
         </SideNav.Group>
         <Box style={s.accountArea}>
-          <UserChip />
-          <Box px={4} pt={6}>
-            <SidebarVersion />
-          </Box>
+          {onToggleCollapsed ? (
+            <Row justify={collapsed ? 'center' : 'flex-start'} px={collapsed ? 0 : 4} pb={4}>
+              <IconButton
+                variant="ghost"
+                icon={collapsed ? 'chevron-right' : 'chevron-left'}
+                label={t(collapsed ? 'nav.expandSidebar' : 'nav.collapseSidebar')}
+                onPress={onToggleCollapsed}
+              />
+            </Row>
+          ) : null}
+          <UserChip compact={collapsed} />
+          {collapsed ? null : (
+            <Box px={4} pt={6}>
+              <SidebarVersion />
+            </Box>
+          )}
         </Box>
       </SideNav.Footer>
     </SideNav.Root>

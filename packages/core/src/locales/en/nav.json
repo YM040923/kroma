@@ -2,6 +2,8 @@
   "nav.account": "Account",
   "nav.accountSettings": "Account settings",
   "nav.changeProfile": "Switch profile",
+  "nav.collapseSidebar": "Collapse sidebar",
+  "nav.expandSidebar": "Expand sidebar",
   "nav.commandMenu": "Quick access",
   "nav.connectDevice": "Connect a device",
   "nav.films": "Movies",

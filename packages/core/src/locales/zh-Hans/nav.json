@@ -2,6 +2,8 @@
   "nav.account": "账户",
   "nav.accountSettings": "账户设置",
   "nav.changeProfile": "切换个人资料",
+  "nav.collapseSidebar": "收起侧边栏",
+  "nav.expandSidebar": "展开侧边栏",
   "nav.commandMenu": "快速访问",
   "nav.connectDevice": "连接设备",
   "nav.discover": "发现",
