@@ -52,6 +52,10 @@ pub(super) fn normalize_core(raw: &str) -> String {
         }
         match fold(ch) {
             Some(s) => out.push_str(s),
+            // Letters outside Latin-1 (CJK, Cyrillic, Greek…) are signal, not
+            // punctuation: dropping them empties a Chinese title and scores
+            // every pair of such titles zero, so TMDB never matches them.
+            None if ch.is_alphanumeric() => out.extend(ch.to_lowercase()),
             // Punctuation / symbols become a separator rather than vanishing, so
             // "spider-man" and "spider man" agree.
             None if !out.ends_with(' ') => out.push(' '),
@@ -177,6 +181,22 @@ mod tests {
         assert_eq!(similarity("", "Matrix"), 0.0);
         // A single-char title has no bigrams; nothing to compare against.
         assert_eq!(similarity("A", "Matrix"), 0.0);
+    }
+
+    #[test]
+    fn normalize_keeps_non_latin_letters() {
+        // CJK titles used to fold to the empty string, which made every one of
+        // them score zero against TMDB and never match.
+        assert_eq!(normalize("你的名字。"), "你的名字");
+        assert_eq!(normalize("罗小黑战记"), "罗小黑战记");
+        assert_eq!(normalize("Привет, мир"), "привет мир");
+    }
+
+    #[test]
+    fn similarity_matches_chinese_titles() {
+        assert_eq!(similarity("你的名字。", "你的名字。"), 1.0);
+        assert_eq!(similarity("你的名字。", "你的名字"), 1.0);
+        assert!(similarity("你的名字。", "天气之子") < 0.35);
     }
 
     #[test]
