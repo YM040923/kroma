@@ -237,7 +237,7 @@ async fn views(
     Path(_user_id): Path<String>,
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
-    Ok(Json(views_payload(&state)))
+    Ok(Json(views_payload(&state).await?))
 }
 
 async fn user_views(
@@ -246,14 +246,21 @@ async fn user_views(
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
-    Ok(Json(views_payload(&state)))
+    Ok(Json(views_payload(&state).await?))
 }
 
-fn views_payload(state: &SharedState) -> Value {
+async fn views_payload(state: &SharedState) -> Result<Value, Response> {
     let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
     let items: Vec<Value> = defs
         .iter()
         .map(|def| {
+            let cover = items
+                .iter()
+                .find(|item| item.library == def.name || item.library == def.id)
+                .and_then(|item| item.metadata.as_ref());
+            let poster = cover.and_then(|meta| meta.poster_url.as_ref());
+            let backdrop = cover.and_then(|meta| meta.backdrop_url.as_ref());
             json!({
                 "Name": def.name,
                 "Id": def.id,
@@ -261,10 +268,13 @@ fn views_payload(state: &SharedState) -> Value {
                 "CollectionType": library_type(def),
                 "IsFolder": true,
                 "ServerId": server_id(state),
+                "ImageTags": image_tag(poster),
+                "PrimaryImageTag": poster.map(|_| "1"),
+                "BackdropImageTags": if backdrop.is_some() { json!(["1"]) } else { json!([]) },
             })
         })
         .collect();
-    json!({ "Items": items, "TotalRecordCount": items.len() })
+    Ok(json!({ "Items": items, "TotalRecordCount": items.len() }))
 }
 
 /// One title, by the item id a list handed out. Jellyfin clients address this
@@ -282,6 +292,13 @@ async fn item_detail(
     }
     let defs = crate::services::settings::library_defs(&state.settings, &state.config);
     if let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) {
+        let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+        let cover = items
+            .iter()
+            .find(|item| item.library == def.name || item.library == def.id)
+            .and_then(|item| item.metadata.as_ref());
+        let poster = cover.and_then(|meta| meta.poster_url.as_ref());
+        let backdrop = cover.and_then(|meta| meta.backdrop_url.as_ref());
         return Ok(Json(json!({
             "Name": def.name,
             "Id": def.id,
@@ -290,6 +307,9 @@ async fn item_detail(
             "CollectionType": library_type(def),
             "IsFolder": true,
             "ChildCount": 0,
+            "ImageTags": image_tag(poster),
+            "PrimaryImageTag": poster.map(|_| "1"),
+            "BackdropImageTags": if backdrop.is_some() { json!(["1"]) } else { json!([]) },
         })));
     }
     let wanted = id.clone();
@@ -917,16 +937,38 @@ async fn image_art(
     kind: String,
 ) -> Result<Response, Response> {
     user_of(state, headers, params).await?;
-    let item = query(&state.db, move |pool| db::get_item(&pool, &id))
-        .await?
-        .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "item not found"))?;
-    let art = item.metadata.as_ref().and_then(|m| {
-        if kind.eq_ignore_ascii_case("backdrop") {
-            m.backdrop_url.clone()
+    let wanted = id.clone();
+    let item = query(&state.db, move |pool| db::get_item(&pool, &wanted)).await?;
+    let backdrop = kind.eq_ignore_ascii_case("backdrop");
+    let art = if let Some(item) = item {
+        item.metadata.as_ref().and_then(|meta| {
+            if backdrop {
+                meta.backdrop_url.clone()
+            } else {
+                meta.poster_url.clone()
+            }
+        })
+    } else {
+        // A library has no row of its own; its cover is the first title's art,
+        // which is what every client expects a CollectionFolder to show.
+        let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+        if let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) {
+            let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+            items
+                .iter()
+                .find(|item| item.library == def.name || item.library == def.id)
+                .and_then(|item| item.metadata.as_ref())
+                .and_then(|meta| {
+                    if backdrop {
+                        meta.backdrop_url.clone()
+                    } else {
+                        meta.poster_url.clone()
+                    }
+                })
         } else {
-            m.poster_url.clone()
+            None
         }
-    });
+    };
     let Some(target) = art else {
         return Err(json_error(StatusCode::NOT_FOUND, "no image"));
     };
