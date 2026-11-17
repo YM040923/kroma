@@ -190,7 +190,7 @@ async fn search<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S
         return Err(json_error(StatusCode::BAD_REQUEST, "缺少 TMDB 标识"));
     }
     let kind = if body.kind == "show" { "tv" } else { "movie" };
-    let url = format!("{source}/search?tmdb={}&type={kind}", body.tmdb_id);
+    let url = format!("{source}/search?tmdb={}&type={kind}&probe=0", body.tmdb_id);
     let response = Fetch::default()
         .purpose("subscription-source")
         .max_time(180)

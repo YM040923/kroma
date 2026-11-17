@@ -40,6 +40,7 @@
   "cloud115.saved": "已保存",
   "cloud115.files": "网盘目录",
   "cloud115.filesHint": "实时读取镜像看到的内容。打开一个目录就是一次 115 调用，同样受节流约束。",
+  "cloud115.unsaved": "有未保存的更改",
   "cloud115.up": "上一级",
   "cloud115.refresh": "刷新",
   "cloud115.root": "网盘根目录",

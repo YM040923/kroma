@@ -11,6 +11,7 @@
   "subscriptions.points": "{points} 积分",
   "subscriptions.search": "搜索资源",
   "subscriptions.searching": "正在搜索…",
+  "subscriptions.searchingHint": "正在搜索… 已等待 {seconds} 秒。站点需要先打开页面再读取资源，通常 5–15 秒。",
   "subscriptions.saveSource": "保存地址",
   "subscriptions.sourceHint": "目前接入 MADREEL；后续可加 TG 群组、其他网盘来源。",
   "subscriptions.sourceUrl": "来源服务地址",

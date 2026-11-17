@@ -36,6 +36,12 @@ const sDefinition = styles({
     maskImage: FROST_MASK,
     WebkitMaskImage: FROST_MASK,
   },
+  textShade: {
+    backgroundImage: [
+      'linear-gradient(90deg, rgba(0, 0, 0, 0.42) 0%, rgba(0, 0, 0, 0.24) 34%, transparent 66%)',
+      'linear-gradient(0deg, rgba(0, 0, 0, 0.3) 0%, transparent 44%)',
+    ].join(' '),
+  },
 });
 
 /** Layered backdrop + scrims for the cinematic `DetailHero`. Overlays text on an
@@ -55,6 +61,7 @@ export function HeroBackdrop({
       <Box fill style={s.sideFade} />
       <Box fill style={s.bottomFade} />
       <Box style={s.frost} />
+      <Box fill style={s.textShade} />
     </>
   );
 }

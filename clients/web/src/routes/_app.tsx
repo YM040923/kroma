@@ -46,7 +46,7 @@ const sDefinition = styles({
 });
 
 const RAIL_WIDTH = 248;
-const RAIL_COLLAPSED = 104;
+const RAIL_COLLAPSED = 76;
 
 function AppLayout() {
   const webRuntime = useWebRuntime();

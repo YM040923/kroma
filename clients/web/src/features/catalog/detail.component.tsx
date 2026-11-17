@@ -11,6 +11,7 @@ import {
   Ground,
   type HostElement,
   IconButton,
+  ExpandableText,
   styles,
   Text,
   useBreakpoint,
@@ -67,6 +68,7 @@ const sDefinition = styles({
   },
   noCaps: { textTransform: 'none' },
   italic: { fontStyle: 'italic' },
+  overview: { marginBottom: 22 },
 });
 
 const subscribeNever = () => () => {};
@@ -230,9 +232,15 @@ export function DetailHero({
               </Text>
             ) : null}
             {overview ? (
-              <Text variant="body" color="white/82" mb={22} lines={wide ? undefined : 4}>
+              <ExpandableText
+                variant="body"
+                color="white/82"
+                lines={4}
+                moreLabel={t('person.readMore')}
+                style={s.overview}
+              >
                 {overview}
-              </Text>
+              </ExpandableText>
             ) : null}
 
             <Box row wrap align="center" gap={14} mb={26}>

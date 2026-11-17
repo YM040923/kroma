@@ -67,9 +67,9 @@ const sDefinition = styles({
   },
   scrim: {
     backgroundImage: [
-      'linear-gradient(90deg, var(--kroma-bg) 6%,',
-      'color-mix(in srgb, var(--kroma-bg) 35%, transparent) 42%, transparent 64%),',
-      'linear-gradient(0deg, var(--kroma-bg) 2%, transparent 46%)',
+      'linear-gradient(90deg, color-mix(in srgb, var(--kroma-bg) 78%, transparent) 0%,',
+      'color-mix(in srgb, var(--kroma-bg) 24%, transparent) 32%, transparent 56%),',
+      'linear-gradient(0deg, color-mix(in srgb, var(--kroma-bg) 42%, transparent) 0%, transparent 34%)',
     ].join(' '),
   },
 });

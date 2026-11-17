@@ -34,31 +34,35 @@ function Header({
   return (
     <Box
       shrink={0}
-      row={!compact}
-      align="center"
-      justify={compact ? 'center' : undefined}
-      between={!compact}
-      gap={compact ? 10 : 8}
-      pl={compact ? 8 : SIDE_NAV_BAND_X}
-      pr={compact ? 8 : SIDE_NAV_GUTTER}
-      pt={24}
-      pb={16}
+      align={compact ? 'center' : undefined}
+      gap={compact ? 4 : 10}
+      pl={compact ? 6 : SIDE_NAV_BAND_X}
+      pr={compact ? 6 : SIDE_NAV_GUTTER}
+      pt={compact ? 18 : 24}
+      pb={compact ? 12 : 16}
     >
-      {children}
       {compact ? (
         <>
           {toggle}
-          <Box align="center" gap={2}>
+          <Box align="center" my={2}>
+            {children}
+          </Box>
+          <Box align="center" gap={4}>
             {actions}
           </Box>
         </>
       ) : (
-        <Box row align="center" gap={4}>
-          {toggle}
+        <>
+          <Box row align="center" justify="space-between">
+            {children}
+            <Box row align="center" gap={4}>
+              {toggle}
+            </Box>
+          </Box>
           <Box row align="center" gap={2}>
             {actions}
           </Box>
-        </Box>
+        </>
       )}
     </Box>
   );
@@ -71,11 +75,22 @@ interface SideNavRootProps {
 function Root({ children }: Readonly<SideNavRootProps>) {
   const compact = useContext(CompactContext);
   return (
-    <Box role="navigation" flex minH={0} px={compact ? 8 : SIDE_NAV_GUTTER} pt={4}>
+    <Box role="navigation" flex minH={0} px={compact ? 6 : SIDE_NAV_GUTTER} pt={4}>
       {children}
     </Box>
   );
 }
+
+/** A rail row: the glyph centred in a square that reads as one target, while
+ *  the expanded row keeps its label-led layout. */
+const COMPACT_ROW = {
+  width: 56,
+  minHeight: 44,
+  paddingHorizontal: 0,
+  justifyContent: 'center',
+  marginLeft: 'auto',
+  marginRight: 'auto',
+} as const;
 
 interface SideNavGroupProps {
   label: string;
@@ -106,6 +121,7 @@ interface SideNavItemProps {
 
 function Item({ to, exact = false, icon, disabled = false, children }: Readonly<SideNavItemProps>) {
   const matchRoute = useMatchRoute();
+  const compact = useContext(CompactContext);
   const current = matchRoute({ to, fuzzy: !exact }) !== false;
   return (
     <Focusable
@@ -113,12 +129,18 @@ function Item({ to, exact = false, icon, disabled = false, children }: Readonly<
       vars={{ current }}
       current={current ? 'page' : undefined}
       disabled={disabled}
+      style={compact ? COMPACT_ROW : undefined}
       asChild
     >
       {({ slots }) => (
         <RouteLink to={to}>
           <RowContext.Provider value={slots}>
-            <Icon name={icon} size={SIDE_NAV_GLYPH} thickness={1.7} color={slots.glyph.color} />
+            <Icon
+              name={icon}
+              size={compact ? 20 : SIDE_NAV_GLYPH}
+              thickness={1.7}
+              color={slots.glyph.color}
+            />
             {children}
           </RowContext.Provider>
         </RouteLink>
@@ -141,6 +163,10 @@ function Label({ children }: Readonly<{ children: ReactNode }>) {
 }
 
 function Trailing({ children }: Readonly<{ children: ReactNode }>) {
+  const compact = useContext(CompactContext);
+  if (compact) {
+    return null;
+  }
   return (
     <Box row align="center" gap={6} shrink={0} ml="auto">
       {children}

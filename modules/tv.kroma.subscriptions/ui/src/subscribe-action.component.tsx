@@ -1,7 +1,7 @@
 import type { SlotProps } from '@kromatv/module-sdk';
 import { useT } from '@kromatv/module-sdk';
 import { Badge, Box, Button, Dialog, Row, Text } from '@kromatv/ui/kit';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { type SubscriptionCandidate, useSubscribeApi } from './subscribe-api.hook';
 
 type Props = SlotProps['title.detail.actions'];
@@ -29,11 +29,22 @@ export function SubscribeAction({ kind, tmdbId, title, year, poster, owned }: Pr
   const api = useSubscribeApi();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
   const [candidates, setCandidates] = useState<SubscriptionCandidate[] | null>(null);
   const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   const [confirming, setConfirming] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!busy) {
+      setElapsed(0);
+      return undefined;
+    }
+    const started = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [busy]);
 
   const close = () => {
     if (busy) return;
@@ -153,6 +164,11 @@ export function SubscribeAction({ kind, tmdbId, title, year, poster, owned }: Pr
                   onPress={() => void search()}
                 />
               </Row>
+              {busy ? (
+                <Text variant="meta" color="textDim" mb={12}>
+                  {t('subscriptions.searchingHint', { seconds: elapsed })}
+                </Text>
+              ) : null}
               {error ? (
                 <Text variant="meta" color="danger" mb={12}>
                   {error}

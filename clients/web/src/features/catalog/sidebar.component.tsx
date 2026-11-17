@@ -140,14 +140,16 @@ function SidebarNav({ collapsed = false }: Readonly<{ collapsed?: boolean }>) {
         <ModuleNavLinks />
       </SideNav.Group>
       <SideNav.Footer>
-        <ServerUpdateNotice />
+        {collapsed ? null : <ServerUpdateNotice />}
         <SideNav.Group label={t('nav.more')}>
-          <InviteLink />
-          <SideNav.Item to="/connect" icon="device-desktop">
-            <SideNav.Label>{t('nav.connectDevice')}</SideNav.Label>
-          </SideNav.Item>
+          {collapsed ? null : <InviteLink />}
+          {collapsed ? null : (
+            <SideNav.Item to="/connect" icon="device-desktop">
+              <SideNav.Label>{t('nav.connectDevice')}</SideNav.Label>
+            </SideNav.Item>
+          )}
           <AdminLink />
-          <WhatsNewLink />
+          {collapsed ? null : <WhatsNewLink />}
         </SideNav.Group>
         <Box style={s.accountArea}>
           <UserChip compact={collapsed} />

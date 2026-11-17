@@ -40,6 +40,7 @@
   "cloud115.saved": "Saved",
   "cloud115.files": "Drive folders",
   "cloud115.filesHint": "What the mirror sees, read live. One folder costs one call to 115, paced like every other.",
+  "cloud115.unsaved": "Unsaved changes",
   "cloud115.up": "Up",
   "cloud115.refresh": "Refresh",
   "cloud115.root": "drive root",

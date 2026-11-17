@@ -11,6 +11,7 @@
   "subscriptions.points": "{points} points",
   "subscriptions.search": "Search releases",
   "subscriptions.searching": "Searching…",
+  "subscriptions.searchingHint": "Searching… {seconds}s elapsed. Opening the source page takes a few seconds, usually 5–15s.",
   "subscriptions.saveSource": "Save address",
   "subscriptions.sourceHint": "MADREEL today; Telegram groups and other drives later.",
   "subscriptions.sourceUrl": "Source service address",

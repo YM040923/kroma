@@ -59,13 +59,53 @@ const SUMMARY_GRID: CSSProperties = {
   gap: 22,
   alignItems: 'start',
 };
-const TASK_ROW: CSSProperties = {
+const MAPPING_CARD: CSSProperties = {
+  border: '1px solid var(--kroma-border)',
+  borderRadius: 'var(--radius-md)',
+  padding: '16px 18px',
+  background: 'var(--kroma-surface-2)',
+};
+
+const MAPPING_GRID: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
   gap: 18,
-  alignItems: 'end',
-  padding: '18px 0',
+  alignItems: 'start',
+};
+
+const READONLY_VALUE: CSSProperties = {
+  border: '1px solid var(--kroma-border)',
+  borderRadius: 'var(--radius-md)',
+  padding: '10px 12px',
+  background: 'var(--kroma-surface-1)',
+  minHeight: 40,
+  display: 'flex',
+  alignItems: 'center',
+  marginTop: 6,
+  overflow: 'hidden',
+};
+
+const READONLY_TEXT: CSSProperties = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  font: 'var(--type-body)',
+  color: 'var(--kroma-text)',
+};
+
+const SAVE_BAR: CSSProperties = {
+  position: 'sticky',
+  bottom: 0,
+  zIndex: 5,
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 12,
+  marginTop: 26,
+  padding: '14px 0',
   borderTop: '1px solid var(--kroma-border)',
+  background: 'var(--kroma-bg)',
 };
 
 const EMPTY_LIBRARY: CloudLibrary = { remote: '', local: '' };
@@ -87,6 +127,8 @@ export function Cloud115Settings() {
   const [resolved, setResolved] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loaded = useRef(false);
   const [picker, setPicker] = useState<{ at: number; mode: 'remote' | 'local' } | null>(null);
@@ -131,7 +173,13 @@ export function Cloud115Settings() {
   }
 
   const updateLibrary = (at: number, patch: Partial<CloudLibrary>) => {
+    setDirty(true);
     setLibraries((current) => current.map((item, i) => (i === at ? { ...item, ...patch } : item)));
+  };
+
+  const patchOptions = (patch: Partial<CloudOptions>) => {
+    setDirty(true);
+    setOptions((current) => (current ? { ...current, ...patch } : current));
   };
 
   const save = async () => {
@@ -154,7 +202,9 @@ export function Cloud115Settings() {
       });
       setCookie('');
       setHasCookie(hasCookie || Boolean(cookie.trim()));
+      setDirty(false);
       setSaved(true);
+      setSavedAt(new Date());
       // The save also creates each mapping's folder; a path outside the storage
       // roots fails here, and that must be said now rather than at the next sync.
       const view = await api.settings();
@@ -178,7 +228,9 @@ export function Cloud115Settings() {
     try {
       await api.save({ clearCookie: true, baseUrl, libraries, options });
       setHasCookie(false);
+      setDirty(false);
       setSaved(true);
+      setSavedAt(new Date());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -235,7 +287,7 @@ export function Cloud115Settings() {
           </div>
           <div style={{ ...GRID_ROW, marginTop: 24, marginBottom: 0 }}>
             <div style={CELL}>
-              <Field.Root label={t('cloud115.cookie')} value={cookie} onValueChange={setCookie}>
+              <Field.Root label={t('cloud115.cookie')} value={cookie} onValueChange={(value) => { setDirty(true); setCookie(value); }}>
                 <Field.Input
                   type="password"
                   placeholder={hasCookie ? t('cloud115.cookieKeep') : 'UID=…; CID=…; SEID=…'}
@@ -244,7 +296,7 @@ export function Cloud115Settings() {
               </Field.Root>
             </div>
             <div style={CELL}>
-              <Field.Root label={t('cloud115.baseUrl')} value={baseUrl} onValueChange={setBaseUrl}>
+              <Field.Root label={t('cloud115.baseUrl')} value={baseUrl} onValueChange={(value) => { setDirty(true); setBaseUrl(value); }}>
                 <Field.Input placeholder="http://192.168.1.10:4040" />
                 <Field.Hint>{t('cloud115.baseUrlHint')}</Field.Hint>
               </Field.Root>
@@ -271,35 +323,42 @@ export function Cloud115Settings() {
         <Text variant="meta" color="textDim" mt={-8} mb={16}>
           {t('cloud115.mappingsHint')}
         </Text>
-        <Surface elevated border="border" pad="none" px={22} py={8}>
-          {libraries.map((library, i) => (
-            <div style={TASK_ROW} key={i}>
-              <div>
-                <Field.Root label={t('cloud115.remote')} value={library.remote} onValueChange={(value) => updateLibrary(i, { remote: value })}>
-                  <Field.Input placeholder="/电影" />
-                </Field.Root>
-                <Row mt={6}>
-                  <Button label={t('cloud115.browseDrive')} icon="folder" variant="ghost" size="sm" onPress={() => setPicker({ at: i, mode: 'remote' })} disabled={busy} />
+        <Surface elevated border="border" pad="none" px={22} py={16}>
+          <Box gap={12}>
+            {libraries.map((library, i) => (
+              <div style={MAPPING_CARD} key={i}>
+                <div style={MAPPING_GRID}>
+                  <div style={{ minWidth: 0 }}>
+                    <Text variant="meta" color="textDim">{t('cloud115.remote')}</Text>
+                    <div style={READONLY_VALUE} title={library.remote || '—'}>
+                      <span style={READONLY_TEXT}>{library.remote || '—'}</span>
+                    </div>
+                    <Row mt={8}>
+                      <Button label={t('cloud115.browseDrive')} icon="folder" variant="glass" size="sm" onPress={() => setPicker({ at: i, mode: 'remote' })} disabled={busy} />
+                    </Row>
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <Field.Root label={t('cloud115.local')} value={library.local} onValueChange={(value) => updateLibrary(i, { local: value })}>
+                      <Field.Input placeholder="/media/115/电影" />
+                      <Field.Hint>{t('cloud115.localHint')}</Field.Hint>
+                    </Field.Root>
+                    <Row mt={8}>
+                      <Button label={t('cloud115.browseLocal')} icon="folder" variant="ghost" size="sm" onPress={() => setPicker({ at: i, mode: 'local' })} disabled={busy} />
+                    </Row>
+                    {!library.remote.trim() || !library.local.trim() ? null : i < resolved.length ? (
+                      resolved[i] ? <Text variant="meta" color="textDim" mt={6}>{t('cloud115.resolved', { path: resolved[i] as string })}</Text> : <Text variant="meta" color="accentText" mt={6}>{t('cloud115.unresolved')}</Text>
+                    ) : <Text variant="meta" color="textDim" mt={6}>{t('cloud115.willCreate')}</Text>}
+                  </div>
+                </div>
+                <Row justify="flex-end" mt={10}>
+                  <Button label={t('cloud115.remove')} variant="ghost" size="sm" onPress={() => { setDirty(true); setLibraries((current) => current.filter((_, at) => at !== i)); }} />
                 </Row>
               </div>
-              <div>
-                <Field.Root label={t('cloud115.local')} value={library.local} onValueChange={(value) => updateLibrary(i, { local: value })}>
-                  <Field.Input placeholder="/media/115/电影" />
-                  <Field.Hint>{t('cloud115.localHint')}</Field.Hint>
-                </Field.Root>
-                <Row mt={6}>
-                  <Button label={t('cloud115.browseLocal')} icon="folder" variant="ghost" size="sm" onPress={() => setPicker({ at: i, mode: 'local' })} disabled={busy} />
-                </Row>
-                {!library.remote.trim() || !library.local.trim() ? null : i < resolved.length ? (
-                  resolved[i] ? <Text variant="meta" color="textDim" mt={4}>{t('cloud115.resolved', { path: resolved[i] as string })}</Text> : <Text variant="meta" color="accentText" mt={4}>{t('cloud115.unresolved')}</Text>
-                ) : <Text variant="meta" color="textDim" mt={4}>{t('cloud115.willCreate')}</Text>}
-              </div>
-              <Button label={t('cloud115.remove')} variant="ghost" size="sm" onPress={() => setLibraries((current) => current.filter((_, at) => at !== i))} />
-            </div>
-          ))}
-          <Row mt={4} mb={12}>
-            <Button label={t('cloud115.addMapping')} icon="plus" variant="ghost" size="sm" onPress={() => setLibraries((current) => [...current, { ...EMPTY_LIBRARY }])} disabled={busy} />
-          </Row>
+            ))}
+            <Row mt={4}>
+              <Button label={t('cloud115.addMapping')} icon="plus" variant="ghost" size="sm" onPress={() => { setDirty(true); setLibraries((current) => [...current, { ...EMPTY_LIBRARY }]); }} disabled={busy} />
+            </Row>
+          </Box>
         </Surface>
       </Section.Root>
 
@@ -320,7 +379,7 @@ export function Cloud115Settings() {
             </Box>
             <Switch
               checked={options.watchEnabled}
-              onCheckedChange={(watchEnabled) => setOptions({ ...options, watchEnabled })}
+              onCheckedChange={(watchEnabled) => patchOptions({ watchEnabled })}
               label={t('cloud115.watch')}
             />
           </Row>
@@ -328,7 +387,7 @@ export function Cloud115Settings() {
             <NumberField
               label={t('cloud115.watchInterval')}
               value={options.watchIntervalSecs}
-              onChange={(watchIntervalSecs) => setOptions({ ...options, watchIntervalSecs })}
+              onChange={(watchIntervalSecs) => patchOptions({ watchIntervalSecs })}
             />
           </div>
           <Text variant="meta" color={status.gateOk === false ? 'danger' : 'textDim'} mt={10}>
@@ -360,28 +419,28 @@ export function Cloud115Settings() {
               <NumberField
                 label={t('cloud115.interval')}
                 value={options.intervalMs}
-                onChange={(intervalMs) => setOptions({ ...options, intervalMs })}
+                onChange={(intervalMs) => patchOptions({ intervalMs })}
               />
             </div>
             <div style={CELL}>
               <NumberField
                 label={t('cloud115.budget')}
                 value={options.maxCallsPerRun}
-                onChange={(maxCallsPerRun) => setOptions({ ...options, maxCallsPerRun })}
+                onChange={(maxCallsPerRun) => patchOptions({ maxCallsPerRun })}
               />
             </div>
             <div style={CELL}>
               <NumberField
                 label={t('cloud115.folderCap')}
                 value={options.maxEntriesPerFolder}
-                onChange={(maxEntriesPerFolder) => setOptions({ ...options, maxEntriesPerFolder })}
+                onChange={(maxEntriesPerFolder) => patchOptions({ maxEntriesPerFolder })}
               />
             </div>
             <div style={CELL}>
               <NumberField
                 label={t('cloud115.linkTtl')}
                 value={options.linkTtlSecs}
-                onChange={(linkTtlSecs) => setOptions({ ...options, linkTtlSecs })}
+                onChange={(linkTtlSecs) => patchOptions({ linkTtlSecs })}
               />
             </div>
           </div>
@@ -394,21 +453,21 @@ export function Cloud115Settings() {
             </Box>
             <Switch
               checked={options.skipIso}
-              onCheckedChange={(skipIso) => setOptions({ ...options, skipIso })}
+              onCheckedChange={(skipIso) => patchOptions({ skipIso })}
               label={t('cloud115.skipIso')}
             />
           </Row>
         </Surface>
       </Section.Root>
 
-      <Row wrap gap={12} mt={26}>
+      <div style={SAVE_BAR}>
         <Button
           label={busy ? t('cloud115.saving') : t('cloud115.save')}
           icon="device-floppy"
           variant="primary"
           size="sm"
           onPress={() => void save()}
-          disabled={busy}
+          disabled={busy || !dirty}
         />
         <Button
           label={t('cloud115.syncNow')}
@@ -418,9 +477,15 @@ export function Cloud115Settings() {
           onPress={() => void syncNow()}
           disabled={busy || status.running}
         />
-        {saved ? (
+        {dirty ? (
+          <Text variant="meta" color="accentText">
+            {t('cloud115.unsaved')}
+          </Text>
+        ) : null}
+        {!dirty && saved ? (
           <Text variant="meta" color="success">
             {t('cloud115.saved')}
+            {savedAt ? ` · ${savedAt.toLocaleTimeString()}` : ''}
           </Text>
         ) : null}
         {error ? (
@@ -428,7 +493,7 @@ export function Cloud115Settings() {
             {error}
           </Text>
         ) : null}
-      </Row>
+      </div>
 
       <Section.Root mt={28}>
         <Section.Header>
@@ -824,9 +889,9 @@ const OVERLAY: CSSProperties = {
   padding: 16,
 };
 
-const DIALOG: CSSProperties = { width: 'min(580px, 94vw)', maxHeight: '76vh' };
+const DIALOG: CSSProperties = { width: 'min(760px, 96vw)', maxHeight: '84vh' };
 
-const DIALOG_BODY: CSSProperties = { overflow: 'auto', maxHeight: '42vh', paddingRight: 4 };
+const DIALOG_BODY: CSSProperties = { overflow: 'auto', maxHeight: '52vh', paddingRight: 4 };
 
 /** Pick a drive folder by walking the tree, so a mapping's remote side is never
  *  typed from memory. Starts at the root and answers the path it ends on. */

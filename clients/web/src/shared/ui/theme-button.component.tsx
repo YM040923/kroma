@@ -1,11 +1,12 @@
 import { useT } from '@kromatv/ui';
-import { Menu, readMode, type ThemeMode, useStyleRuntime, writeMode } from '@kromatv/ui/kit';
+import { IconButton, readMode, type ThemeMode, useStyleRuntime, writeMode } from '@kromatv/ui/kit';
 import { useEffect, useState } from 'react';
 
 const ICON = { system: 'device-desktop', light: 'sun', dark: 'moon' } as const;
+const ORDER: readonly ThemeMode[] = ['system', 'light', 'dark'];
 
-/** The appearance choice, on the top bar itself: a global switch that only
- *  lived in preferences is a switch nobody finds. */
+/** The appearance switch on the top bar: one press steps to the next mode, so
+ *  system → light → dark → system cycles without opening a menu. */
 export function ThemeButton() {
   const t = useT();
   const runtime = useStyleRuntime();
@@ -15,22 +16,19 @@ export function ThemeButton() {
     setMode(readMode());
   }, []);
 
-  const pick = (next: ThemeMode) => {
-    setMode(next);
-    writeMode(next, runtime);
-  };
+  const next = ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length] ?? 'system';
 
   return (
-    <Menu.Root label={t('appearance.title')} align="end">
-      <Menu.Trigger icon={ICON[mode]} variant="ghost" diameter={40} radius="md" />
-      {(['system', 'light', 'dark'] as const).map((value) => (
-        <Menu.Item
-          key={value}
-          icon={ICON[value]}
-          label={`${t(`appearance.${value}`)}${mode === value ? '  ✓' : ''}`}
-          onSelect={() => pick(value)}
-        />
-      ))}
-    </Menu.Root>
+    <IconButton
+      icon={ICON[mode]}
+      variant="ghost"
+      diameter={40}
+      radius="md"
+      label={`${t('appearance.title')}：${t(`appearance.${mode}`)}`}
+      onPress={() => {
+        setMode(next);
+        writeMode(next, runtime);
+      }}
+    />
   );
 }

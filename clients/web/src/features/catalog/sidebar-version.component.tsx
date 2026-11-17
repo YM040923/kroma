@@ -36,6 +36,8 @@ const triggerStyle = sv({
     px: 6,
     py: 4,
     radius: 'sm',
+    w: '100%',
+    minW: 0,
     _hover: { bg: 'tint/4' },
     _focus: { bg: 'tint/4' },
     _press: { bg: 'tint/6' },
@@ -97,7 +99,7 @@ function VersionStamp() {
   };
 
   return (
-    <span title={action}>
+    <span title={action} style={{ display: 'block', width: '100%', minWidth: 0 }}>
       <Focusable sv={triggerStyle} label={[...spoken, action].join(', ')} onPress={copy}>
         {({ hovered, focused }) => (
           <>
