@@ -1,3 +1,4 @@
+import type { Activity } from '@kromatv/client/admin';
 import type { AdminLibrary } from '@kromatv/client/library';
 import { useFormat, useT } from '@kromatv/ui';
 import {
@@ -9,6 +10,7 @@ import {
   Grid,
   Icon,
   type IconName,
+  Progress,
   Row,
   Surface,
   Text,
@@ -21,6 +23,7 @@ import {
 } from '#web/features/admin/libraries-modals';
 import { Pill } from '#web/features/admin/pill.component';
 import { Denied, PageHeader, useCap, usePoll } from '#web/features/admin/shell';
+import { imageUrl } from '#web/shared/lib/api';
 import { useAuth } from '#web/shared/lib/auth';
 import { TableSkeleton } from '#web/shared/ui';
 
@@ -49,6 +52,7 @@ function LibrariesPageInner() {
   const t = useT();
   const { client } = useAuth();
   const { data, reload } = usePoll(['admin', 'libraries'], () => client.library.list(), 8000);
+  const { data: activity } = usePoll(['admin', 'status'], () => client.admin.status(), 3000);
 
   const openAdd = async () => {
     if (await AddLibraryModal.call()) {
@@ -56,9 +60,9 @@ function LibrariesPageInner() {
     }
   };
   const openManage = async (lib: AdminLibrary) => {
-    if (await ManageLibraryModal.call({ lib })) {
-      await reload();
-    }
+    await ManageLibraryModal.call({ lib });
+    // The cover picker inside the modal writes on its own, so refresh either way.
+    await reload();
   };
 
   const libraries = data?.libraries ?? [];
@@ -78,13 +82,20 @@ function LibrariesPageInner() {
         </PageHeader.Actions>
       </PageHeader.Root>
 
+      {activity ? <LibraryActivity activity={activity} /> : null}
+
       {data === null ? <TableSkeleton rows={4} /> : null}
 
       {libraries.length > 0 ? (
         <Box mt={24}>
           <Grid min={360} gap={16}>
             {libraries.map((l) => (
-              <LibraryCard key={l.id} lib={l} onManage={() => void openManage(l)} />
+              <LibraryCard
+                key={l.id}
+                lib={l}
+                scanning={activity?.scanning ?? false}
+                onManage={() => void openManage(l)}
+              />
             ))}
           </Grid>
         </Box>
@@ -106,35 +117,105 @@ function LibrariesPageInner() {
   );
 }
 
+/** What the server is busy with right now: a scan has no done/total (the walk
+ *  discovers as it goes), enrichment and probing do. */
+function LibraryActivity({ activity }: Readonly<{ activity: Activity }>) {
+  const t = useT();
+  const enriching = activity.enrichTotal > 0 && activity.enrichDone < activity.enrichTotal;
+  const probing = activity.phase === 'probing' && activity.probeTotal > 0;
+  if (!activity.scanning && !enriching && !probing) {
+    return null;
+  }
+  let title = t('admin.activityScanning');
+  let done = 0;
+  let total = 0;
+  let current: string | null = null;
+  let failed = 0;
+  if (enriching) {
+    title = t('admin.activityEnriching');
+    done = activity.enrichDone;
+    total = activity.enrichTotal;
+    current = activity.enrichCurrent ?? null;
+    failed = activity.enrichFailed ?? 0;
+  } else if (probing) {
+    title = t('admin.activityProbing');
+    done = activity.probeDone;
+    total = activity.probeTotal;
+  }
+  return (
+    <Surface elevated pad="none" radius="xl" border="border" mt={20} px={20} py={16}>
+      <Row between gap={16}>
+        <Text variant="meta" color="accentText">
+          {title}
+        </Text>
+        {total > 0 ? (
+          <Text variant="meta" color="textMuted">
+            {done}/{total}
+          </Text>
+        ) : null}
+      </Row>
+      {total > 0 ? (
+        <Box mt={10}>
+          <Progress value={done / total} rounded />
+        </Box>
+      ) : null}
+      {current ? (
+        <Text variant="meta" color="textDim" mt={8} lines={1} minW={0}>
+          {t('admin.activityCurrent', { title: current })}
+        </Text>
+      ) : null}
+      {failed > 0 ? (
+        <Text variant="meta" color="danger" mt={4}>
+          {t('admin.activityFailed', { count: failed })}
+        </Text>
+      ) : null}
+    </Surface>
+  );
+}
+
 function LibraryCard({
   lib,
+  scanning,
   onManage,
 }: Readonly<{
   lib: AdminLibrary;
+  scanning: boolean;
   onManage: () => void;
 }>) {
   const t = useT();
   const fmt = useFormat();
   const { client } = useAuth();
-  const [scanning, setScanning] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   async function scan() {
-    setScanning(true);
+    setStarting(true);
     try {
       await client.library.scan(lib.id);
     } finally {
-      setTimeout(() => setScanning(false), 1200);
+      setTimeout(() => setStarting(false), 2500);
     }
   }
 
   const glyph = ICONS[lib.kind] ?? 'movie';
+  const cover = imageUrl(lib.cover);
+  const busyScan = scanning || starting;
 
   return (
     <Surface elevated pad="none" radius="xl" border="border" overflow="hidden">
       <Row gap={14} px={20} py={18} bg="success/7">
-        <Row center w={46} h={46} shrink={0} radius="sm" bg="success/16">
-          <Icon name={glyph} size={22} thickness={1.8} color="success" />
-        </Row>
+        {cover ? (
+          <Box w={46} h={46} shrink={0} radius="sm" overflow="hidden" bg="success/16">
+            <img
+              src={cover}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          </Box>
+        ) : (
+          <Row center w={46} h={46} shrink={0} radius="sm" bg="success/16">
+            <Icon name={glyph} size={22} thickness={1.8} color="success" />
+          </Row>
+        )}
         <Box flex minW={0}>
           <Text variant="title">{lib.name}</Text>
           <Text variant="meta" color="textDim">
@@ -182,9 +263,10 @@ function LibraryCard({
         <Button
           size="sm"
           icon="refresh"
-          label={scanning ? t('admin.scanning') : t('admin.scan')}
+          label={busyScan ? t('admin.scanning') : t('admin.scan')}
           onPress={() => void scan()}
-          loading={scanning}
+          loading={busyScan}
+          disabled={scanning}
         />
         <Button variant="glass" size="sm" label={t('common.manage')} onPress={onManage} />
       </Row>

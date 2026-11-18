@@ -12,6 +12,7 @@ import {
   Field,
   Icon,
   PageHeader,
+  Progress,
   Row,
   Section,
   Surface,
@@ -549,6 +550,31 @@ export function Cloud115Settings() {
               ) : null}
             </Row>
           ) : null}
+          {status.running && report.callsTotal > 0 ? (
+            <Box mb={10}>
+              <Progress
+                value={report.callsTotal > 0 ? report.calls / report.callsTotal : 0}
+                label={t('cloud115.budgetProgress')}
+              />
+              <Row between mt={4}>
+                <Text variant="meta" color="textDim">
+                  {t('cloud115.budgetLine', {
+                    calls: report.calls,
+                    total: report.callsTotal,
+                  })}
+                </Text>
+                <Text variant="meta" color="textDim">
+                  {t('cloud115.statFilesRate', {
+                    rate: (
+                      report.startedAt
+                        ? report.files / Math.max(1, Date.now() / 1000 - report.startedAt)
+                        : 0
+                    ).toFixed(1),
+                  })}
+                </Text>
+              </Row>
+            </Box>
+          ) : null}
           <Row wrap gapX={24} gapY={6}>
             <Stat label={t('cloud115.statDirs')} value={report.dirs} />
             <Stat label={t('cloud115.statFiles')} value={report.files} />
@@ -751,6 +777,7 @@ const EMPTY_REPORT: SyncReport = {
   pendingProbe: 0,
   assets: 0,
   calls: 0,
+  callsTotal: 0,
   truncated: false,
   errors: [],
 };

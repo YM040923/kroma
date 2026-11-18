@@ -107,10 +107,14 @@ pub(super) fn spawn(eng: Engine, activity: Activity, search: Arc<SearchEngine>, 
             let _ = h.join();
         }
         let resolved = counters.resolved.load(Ordering::Relaxed);
+        let failed = counters.failed.load(Ordering::Relaxed);
         activity::enrich_completed(&activity);
-        info!(resolved, total, "TMDB enrichment complete");
-        eng.bus
-            .publish(ServerEvent::EnrichCompleted { resolved, total });
+        info!(resolved, failed, total, "TMDB enrichment complete");
+        eng.bus.publish(ServerEvent::EnrichCompleted {
+            resolved,
+            total,
+            failed,
+        });
         match search.reindex_from_db(&eng.pool) {
             Ok(()) => info!("search index rebuilt after enrichment"),
             Err(e) => warn!(error = %e, "search reindex after enrichment failed"),

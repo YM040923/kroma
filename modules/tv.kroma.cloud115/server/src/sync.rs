@@ -77,6 +77,9 @@ pub struct Report {
     /// Subtitle/NFO/poster files written locally this run.
     pub assets: u64,
     pub calls: u32,
+    /// The per-run call ceiling this run is spending against; 0 when the run
+    /// is not running.
+    pub calls_total: u32,
     pub truncated: bool,
     pub errors: Vec<String>,
 }
@@ -208,6 +211,7 @@ async fn run<S: HostCtx>(
     pacer().begin_run(&config.options).await;
     let mut report = Report::default();
     report.started_at = Some(unix_now());
+    report.calls_total = pacer().budget().await;
     publish(&report);
     let mut dirs = std::collections::BTreeMap::new();
     let mut probe_left = probe_cap;
@@ -361,6 +365,7 @@ async fn sync_library(
         // The watcher turns an event's parent id into a path with this map.
         dirs.insert(cid.clone(), dir.to_string_lossy().into_owned());
         report.current = dir.to_string_lossy().into_owned();
+        report.calls = pacer().spent().await;
         publish(report);
         let page_size = config.options.page_size;
         let mut offset = 0u32;

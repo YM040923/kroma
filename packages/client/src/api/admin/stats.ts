@@ -14,7 +14,10 @@ export type NetworkKind = z.infer<typeof NetworkKind>;
 export const WatchTotals = z.record(WatchKind, z.number());
 export type WatchTotals = z.infer<typeof WatchTotals>;
 
-/** A snapshot of what the server is doing. */
+/** A snapshot of what the server is doing. `enrichCurrent` names the title the
+ *  enrichment pass is on and `enrichFailed` counts the titles whose metadata
+ *  could not be stored; both are absent on a server that predates them, which
+ *  is also why they are nullish rather than defaulted. */
 export const Activity = z.object({
   phase: z.string(),
   scanning: z.boolean(),
@@ -23,6 +26,8 @@ export const Activity = z.object({
   items: z.number(),
   enrichDone: z.number(),
   enrichTotal: z.number(),
+  enrichCurrent: z.string().nullish(),
+  enrichFailed: z.number().nullish(),
   probeDone: z.number(),
   probeTotal: z.number(),
   lastScanAt: z.string().nullable(),

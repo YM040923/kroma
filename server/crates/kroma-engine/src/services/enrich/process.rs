@@ -8,6 +8,7 @@ use crate::infra::image;
 use crate::infra::metadata;
 use crate::infra::theme;
 use crate::model::Metadata;
+use crate::services::activity;
 use crate::services::activity::Shared as Activity;
 
 use super::engine::{bump, Counters, Engine};
@@ -167,6 +168,11 @@ pub(super) fn process_job(
     activity: Option<&Activity>,
     job: Job,
 ) {
+    // Named before the first network call, which is where a pass spends its
+    // time: a client watching the bar wants the row, not the count it is on.
+    if let Some(activity) = activity {
+        activity::enrich_current(activity, job.title.clone());
+    }
     // A library may scrape in its own language; everything below reads the
     // engine, so overriding the clone keeps every lookup on one language.
     let mut local = eng.clone();
@@ -264,7 +270,13 @@ pub(super) fn process_job(
     match write {
         Ok(()) => on_write_ok(eng, counters, &job, &meta, &vector, &by_lang, langs),
         Err(e) => {
-            counters.failed.fetch_add(1, Ordering::Relaxed);
+            // Report the new total, not "+1": the snapshot holds a number the
+            // panel renders, and `activity::enrich_failed` keeps it monotonic
+            // across workers that write in a different order than they counted.
+            let failed = counters.failed.fetch_add(1, Ordering::Relaxed) + 1;
+            if let Some(activity) = activity {
+                activity::enrich_failed(activity, failed);
+            }
             warn!(id = %job.id, error = %e, "failed to store metadata");
         }
     }

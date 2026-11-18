@@ -21,6 +21,14 @@ pub struct Activity {
     pub enrich_done: usize,
     #[serde(rename = "enrichTotal")]
     pub enrich_total: usize,
+    /// The title the pass is on right now, so a client that joins mid-scan can
+    /// name the row being scraped rather than only counting the ones behind it.
+    #[serde(rename = "enrichCurrent")]
+    pub enrich_current: Option<String>,
+    /// Titles whose metadata could not be stored. Not reset by the end of the
+    /// pass: "it finished" and "nothing failed" are two different answers.
+    #[serde(rename = "enrichFailed")]
+    pub enrich_failed: usize,
     #[serde(rename = "probeDone")]
     pub probe_done: usize,
     #[serde(rename = "probeTotal")]
@@ -39,6 +47,8 @@ impl Default for Activity {
             items: 0,
             enrich_done: 0,
             enrich_total: 0,
+            enrich_current: None,
+            enrich_failed: 0,
             probe_done: 0,
             probe_total: 0,
             last_scan_at: None,
@@ -77,6 +87,22 @@ pub fn enrich_started(a: &Shared, total: usize) {
     g.phase = if total > 0 { "enriching" } else { "ready" };
     g.enrich_total = total;
     g.enrich_done = 0;
+    // The previous pass's leftovers describe titles this pass has not reached,
+    // so carrying them over would report the wrong row and the wrong failures.
+    g.enrich_current = None;
+    g.enrich_failed = 0;
+}
+
+pub fn enrich_current(a: &Shared, title: String) {
+    a.write().unwrap().enrich_current = Some(title);
+}
+
+pub fn enrich_failed(a: &Shared, failed: usize) {
+    let mut g = a.write().unwrap();
+    // Workers report the running total, and two of them can reach the lock in
+    // the other order than they counted: taking the higher value keeps the
+    // number a counter rather than letting a late writer roll it back.
+    g.enrich_failed = g.enrich_failed.max(failed);
 }
 
 pub fn enrich_progress(a: &Shared, done: usize) {
@@ -86,6 +112,8 @@ pub fn enrich_progress(a: &Shared, done: usize) {
 pub fn enrich_completed(a: &Shared) {
     let mut g = a.write().unwrap();
     g.enrich_done = g.enrich_total;
+    // `enrich_failed` is deliberately kept: the panel still needs the tally
+    // after the bar fills up, and nothing else will report it.
     g.phase = "ready";
 }
 
@@ -186,6 +214,51 @@ mod tests {
         // Carrying 10 into a 3-item pass shows 10/3.
         assert_eq!(snapshot(&a).enrich_done, 0);
         assert_eq!(snapshot(&a).enrich_total, 3);
+    }
+
+    #[test]
+    fn a_pass_reports_the_title_a_worker_is_on() {
+        let a = new();
+        enrich_started(&a, 3);
+        // Nothing is on the bench until a worker picks a job up.
+        assert!(snapshot(&a).enrich_current.is_none());
+
+        enrich_current(&a, "The Long Goodbye".into());
+        assert_eq!(
+            snapshot(&a).enrich_current.as_deref(),
+            Some("The Long Goodbye")
+        );
+    }
+
+    #[test]
+    fn failures_survive_the_end_of_the_pass() {
+        let a = new();
+        enrich_started(&a, 10);
+        enrich_failed(&a, 2);
+        assert_eq!(snapshot(&a).enrich_failed, 2);
+
+        enrich_completed(&a);
+        let s = snapshot(&a);
+        // The panel only ever reads this snapshot, so clearing the tally here
+        // would leave a finished pass looking like a clean one.
+        assert_eq!(s.enrich_failed, 2);
+        assert_eq!(s.phase, "ready");
+    }
+
+    #[test]
+    fn a_second_enrich_pass_clears_the_last_title_and_failure_tally() {
+        let a = new();
+        enrich_started(&a, 4);
+        enrich_current(&a, "Solaris".into());
+        enrich_failed(&a, 1);
+
+        enrich_started(&a, 2);
+        let s = snapshot(&a);
+        // Blaming this pass for the previous one's title and failures would
+        // point at rows it has not looked at yet.
+        assert!(s.enrich_current.is_none());
+        assert_eq!(s.enrich_failed, 0);
+        assert_eq!(s.enrich_total, 2);
     }
 
     #[test]

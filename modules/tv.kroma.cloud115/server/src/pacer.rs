@@ -171,6 +171,11 @@ impl Pacer {
         self.state.lock().await.calls
     }
 
+    /// The per-run ceiling this run is spending against.
+    pub async fn budget(&self) -> u32 {
+        self.state.lock().await.budget
+    }
+
     /// Seconds left on a cooldown, if one is running.
     pub async fn paused_for(&self) -> Option<Duration> {
         let state = self.state.lock().await;

@@ -103,5 +103,8 @@
   "cloud115.willCreate": "保存后创建。",
   "cloud115.browseLocal": "浏览存储…",
   "cloud115.chooseLocalFolder": "选择本地目录",
-  "cloud115.localHint": "必须以 /media 开头（存储根），例如 /media/115/动画电影；保存时会创建目录。"
+  "cloud115.localHint": "必须以 /media 开头（存储根），例如 /media/115/动画电影；保存时会创建目录。",
+  "cloud115.budgetProgress": "本轮调用预算",
+  "cloud115.budgetLine": "{calls} / {total} 次调用",
+  "cloud115.statFilesRate": "{rate} 文件/秒"
 }

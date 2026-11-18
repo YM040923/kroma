@@ -87,5 +87,8 @@
   "cloud115.willCreate": "Créé au prochain enregistrement.",
   "cloud115.browseLocal": "Parcourir le stockage…",
   "cloud115.chooseLocalFolder": "Choisir un dossier local",
-  "cloud115.localHint": "Doit commencer par /media (racine du stockage), ex. /media/115/Films ; le dossier est créé à l’enregistrement."
+  "cloud115.localHint": "Doit commencer par /media (racine du stockage), ex. /media/115/Films ; le dossier est créé à l’enregistrement.",
+  "cloud115.budgetProgress": "Budget d'appels utilisé",
+  "cloud115.budgetLine": "{calls} / {total} appels",
+  "cloud115.statFilesRate": "{rate} fichiers/s"
 }

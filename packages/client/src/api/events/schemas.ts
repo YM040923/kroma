@@ -29,8 +29,18 @@ export const ServerEvent = z.discriminatedUnion('type', [
   frame('library.updated', {}),
   frame('item.updated', { id: ItemId }),
   frame('show.updated', { id: ShowId }),
-  frame('enrich.progress', progress),
-  frame('enrich.completed', { resolved: z.number(), total: z.number() }),
+  frame('enrich.progress', {
+    ...progress,
+    // `current`/`failed` are absent on frames from a server that predates
+    // them, so a listener must not need them to read `done`/`total`.
+    current: z.string().nullish(),
+    failed: z.number().nullish(),
+  }),
+  frame('enrich.completed', {
+    resolved: z.number(),
+    total: z.number(),
+    failed: z.number().nullish(),
+  }),
   frame('probe.progress', progress),
   frame('probe.completed', { total: z.number() }),
   frame('playback.started', counted),

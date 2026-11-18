@@ -103,5 +103,8 @@
   "cloud115.willCreate": "Saved with the next save.",
   "cloud115.browseLocal": "Browse storage…",
   "cloud115.chooseLocalFolder": "Choose a local folder",
-  "cloud115.localHint": "Must start with /media (the storage root), e.g. /media/115/Films; the folder is created on save."
+  "cloud115.localHint": "Must start with /media (the storage root), e.g. /media/115/Films; the folder is created on save.",
+  "cloud115.budgetProgress": "Sync budget used",
+  "cloud115.budgetLine": "{calls} / {total} calls",
+  "cloud115.statFilesRate": "{rate} files/s"
 }

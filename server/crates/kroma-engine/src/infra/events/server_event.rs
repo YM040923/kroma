@@ -23,9 +23,20 @@ pub enum ServerEvent {
     #[serde(rename = "show.updated")]
     ShowUpdated { id: String },
     #[serde(rename = "enrich.progress")]
-    EnrichProgress { done: usize, total: usize },
+    EnrichProgress {
+        done: usize,
+        total: usize,
+        // `current` is null for a pass with no activity snapshot behind it (the
+        // nightly stage); a client shows the counters either way.
+        current: Option<String>,
+        failed: usize,
+    },
     #[serde(rename = "enrich.completed")]
-    EnrichCompleted { resolved: usize, total: usize },
+    EnrichCompleted {
+        resolved: usize,
+        total: usize,
+        failed: usize,
+    },
     #[serde(rename = "probe.progress")]
     ProbeProgress { done: usize, total: usize },
     #[serde(rename = "probe.completed")]

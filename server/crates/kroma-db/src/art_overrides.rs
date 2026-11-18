@@ -13,6 +13,7 @@ use crate::{Pool, Result};
 
 pub const ITEM_KIND: &str = "item";
 pub const SHOW_KIND: &str = "show";
+pub const LIBRARY_KIND: &str = "library";
 pub const POSTER: &str = "poster";
 pub const BACKDROP: &str = "backdrop";
 pub const LOGO: &str = "logo";

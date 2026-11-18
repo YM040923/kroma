@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { createCallable } from 'react-call';
 import { FolderField, FolderListEditor } from '#web/features/admin/folder-field.component';
 import { useAsyncAction } from '#web/features/admin/shell';
+import { ArtworkButton } from '#web/features/catalog/artwork-picker.component';
 import { useAuth } from '#web/shared/lib/auth';
 
 /** Library kind as accepted by the create/update API: `""` = Auto. */
@@ -219,6 +220,15 @@ export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>
             </Text>
           </Box>
           <Switch checked={autoScan} onCheckedChange={setAutoScan} label={t('admin.autoScan')} />
+        </Row>
+        <Row between gap={16}>
+          <Box>
+            <Text variant="label">{t('admin.libraryCover')}</Text>
+            <Text variant="meta" color="textDim" mt={2}>
+              {t('admin.libraryCoverHint')}
+            </Text>
+          </Box>
+          <ArtworkButton itemId={lib.id} title={lib.name} />
         </Row>
         <Text variant="label">{t('admin.scrapeSection')}</Text>
         <Field.Root label={t('admin.scrapeLanguage')}>

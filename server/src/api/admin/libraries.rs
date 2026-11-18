@@ -43,6 +43,10 @@ pub async fn list_libraries(
     super::require_any_admin(&user)?;
     let defs = settings::library_defs(&state.settings, &state.config);
     let stats = query(&state.db, move |pool| db::library_stats(&pool)).await?;
+    let covers = query(&state.db, |pool| {
+        db::art_overrides::all(&pool, db::art_overrides::LIBRARY_KIND)
+    })
+    .await?;
     let last_scan = crate::services::activity::snapshot(&state.activity).last_scan_at;
 
     let libraries: Vec<crate::api::dto::AdminLibrary> = defs
@@ -59,6 +63,7 @@ pub async fn list_libraries(
                 last_scan: last_scan.clone(),
                 auto_scan: d.auto_scan,
                 scrape: settings::library_scrape(&state.settings, &d.id),
+                cover: covers.get(&d.id).and_then(|art| art.get("poster").cloned()),
             }
         })
         .collect();

@@ -65,7 +65,59 @@ async fn page(state: &SharedState, user: &crate::model::User, id: &str) -> Resul
             logo: overrides.get("logo").cloned().or_else(|| meta.logo_url.clone()),
         });
     }
+    if let Some(page) = library_page(state, id).await? {
+        return Ok(page);
+    }
     show_page(state, user, id).await
+}
+
+/// A library has no TMDB id; its candidates are the art the titles inside it
+/// already carry, and its "current" is whatever a client shows today (the
+/// override, else the first title's poster).
+async fn library_page(state: &SharedState, id: &str) -> Result<Option<Page>, Response> {
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) else {
+        return Ok(None);
+    };
+    let def_id = def.id.clone();
+    let overrides = query(&state.db, {
+        let id = def_id.clone();
+        move |pool| db::art_overrides::get(&pool, db::art_overrides::LIBRARY_KIND, &id)
+    })
+    .await?;
+    let (poster, backdrop) = library_cover(state, id).await?;
+    Ok(Some(Page {
+        kind: db::art_overrides::LIBRARY_KIND,
+        id: def_id,
+        tmdb_id: 0,
+        target: Target::Movie,
+        poster: overrides.get("poster").cloned().or(poster),
+        backdrop: overrides.get("backdrop").cloned().or(backdrop),
+        logo: None,
+    }))
+}
+
+/// The legacy cover: the first title's scraped art, which is what Jellyfin
+/// clients have been shown until now.
+async fn library_cover(
+    state: &SharedState,
+    id: &str,
+) -> Result<(Option<String>, Option<String>), Response> {
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) else {
+        return Ok((None, None));
+    };
+    let name = def.name.clone();
+    let def_id = def.id.clone();
+    let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+    let cover = items
+        .into_iter()
+        .find(|item| item.library == name || item.library == def_id)
+        .and_then(|item| item.metadata);
+    Ok(match cover {
+        Some(meta) => (meta.poster_url, meta.backdrop_url),
+        None => (None, None),
+    })
 }
 
 async fn show_page(state: &SharedState, user: &crate::model::User, id: &str) -> Result<Page, Response> {
@@ -105,6 +157,9 @@ async fn get_artwork(
         Ok(page) => page,
         Err(response) => return response,
     };
+    if page.kind == db::art_overrides::LIBRARY_KIND {
+        return library_artwork(&state, &page).await;
+    }
     let Some(api_key) = state.config.tmdb_api_key.clone() else {
         return json_error(StatusCode::SERVICE_UNAVAILABLE, "TMDB API key 未配置");
     };
@@ -120,6 +175,51 @@ async fn get_artwork(
         Ok(lists) => lists,
         Err(response) => return response,
     };
+    Json(json!({
+        "current": {
+            "poster": page.poster,
+            "backdrop": page.backdrop,
+            "logo": page.logo,
+        },
+        "posters": posters,
+        "backdrops": backdrops,
+    }))
+    .into_response()
+}
+
+/// A library's candidates are the posters and backdrops its titles already
+/// carry, deduplicated and capped so the grid stays one screenful.
+async fn library_artwork(state: &SharedState, page: &Page) -> Response {
+    let items = match query(&state.db, |pool| db::list_items(&pool, None)).await {
+        Ok(items) => items,
+        Err(response) => return response,
+    };
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let name = defs
+        .iter()
+        .find(|def| def.id == page.id)
+        .map(|def| def.name.clone())
+        .unwrap_or_default();
+    let mut posters: Vec<String> = Vec::new();
+    let mut backdrops: Vec<String> = Vec::new();
+    for item in items
+        .iter()
+        .filter(|item| item.library == name || item.library == page.id)
+    {
+        let Some(meta) = item.metadata.as_ref() else {
+            continue;
+        };
+        if let Some(url) = meta.poster_url.as_ref() {
+            if posters.len() < 24 && !posters.contains(url) {
+                posters.push(url.clone());
+            }
+        }
+        if let Some(url) = meta.backdrop_url.as_ref() {
+            if backdrops.len() < 24 && !backdrops.contains(url) {
+                backdrops.push(url.clone());
+            }
+        }
+    }
     Json(json!({
         "current": {
             "poster": page.poster,

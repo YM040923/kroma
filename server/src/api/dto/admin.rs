@@ -98,6 +98,8 @@ pub struct AdminLibrary {
     pub last_scan: Option<String>,
     pub auto_scan: bool,
     pub scrape: crate::services::settings::ScrapeOptions,
+    /// The operator-picked cover, if one is set.
+    pub cover: Option<String>,
 }
 
 /// One weekly bucket of the play-history chart.

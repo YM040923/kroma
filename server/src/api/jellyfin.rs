@@ -254,15 +254,25 @@ async fn user_views(
 async fn views_payload(state: &SharedState) -> Result<Value, Response> {
     let defs = crate::services::settings::library_defs(&state.settings, &state.config);
     let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+    let covers = query(&state.db, |pool| {
+        db::art_overrides::all(&pool, db::art_overrides::LIBRARY_KIND)
+    })
+    .await?;
     let items: Vec<Value> = defs
         .iter()
         .map(|def| {
+            let picked = covers.get(&def.id);
             let cover = items
                 .iter()
                 .find(|item| item.library == def.name || item.library == def.id)
                 .and_then(|item| item.metadata.as_ref());
-            let poster = cover.and_then(|meta| meta.poster_url.as_ref());
-            let backdrop = cover.and_then(|meta| meta.backdrop_url.as_ref());
+            let poster = picked
+                .and_then(|art| art.get("poster").cloned())
+                .or_else(|| cover.and_then(|meta| meta.poster_url.clone()));
+            let backdrop = picked
+                .and_then(|art| art.get("backdrop").cloned())
+                .or_else(|| cover.and_then(|meta| meta.backdrop_url.clone()));
+            let tag = poster.as_deref().map(library_image_tag_value);
             json!({
                 "Name": def.name,
                 "Id": def.id,
@@ -270,8 +280,8 @@ async fn views_payload(state: &SharedState) -> Result<Value, Response> {
                 "CollectionType": library_type(def),
                 "IsFolder": true,
                 "ServerId": server_id(state),
-                "ImageTags": image_tag(poster),
-                "PrimaryImageTag": poster.map(|_| "1"),
+                "ImageTags": if tag.is_some() { json!({ "Primary": tag }) } else { json!({}) },
+                "PrimaryImageTag": tag,
                 "BackdropImageTags": if backdrop.is_some() { json!(["1"]) } else { json!([]) },
             })
         })
@@ -295,12 +305,24 @@ async fn item_detail(
     let defs = crate::services::settings::library_defs(&state.settings, &state.config);
     if let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) {
         let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+        let picked = query(&state.db, {
+            let id = def.id.clone();
+            move |pool| db::art_overrides::get(&pool, db::art_overrides::LIBRARY_KIND, &id)
+        })
+        .await?;
         let cover = items
             .iter()
             .find(|item| item.library == def.name || item.library == def.id)
             .and_then(|item| item.metadata.as_ref());
-        let poster = cover.and_then(|meta| meta.poster_url.as_ref());
-        let backdrop = cover.and_then(|meta| meta.backdrop_url.as_ref());
+        let poster = picked
+            .get("poster")
+            .cloned()
+            .or_else(|| cover.and_then(|meta| meta.poster_url.clone()));
+        let backdrop = picked
+            .get("backdrop")
+            .cloned()
+            .or_else(|| cover.and_then(|meta| meta.backdrop_url.clone()));
+        let tag = poster.as_deref().map(library_image_tag_value);
         return Ok(Json(json!({
             "Name": def.name,
             "Id": def.id,
@@ -309,8 +331,8 @@ async fn item_detail(
             "CollectionType": library_type(def),
             "IsFolder": true,
             "ChildCount": 0,
-            "ImageTags": image_tag(poster),
-            "PrimaryImageTag": poster.map(|_| "1"),
+            "ImageTags": if tag.is_some() { json!({ "Primary": tag }) } else { json!({}) },
+            "PrimaryImageTag": tag,
             "BackdropImageTags": if backdrop.is_some() { json!(["1"]) } else { json!([]) },
         })));
     }
@@ -629,6 +651,13 @@ fn image_tag(art: Option<&String>) -> Value {
         Some(_) => json!({ "Primary": "1" }),
         None => json!({}),
     }
+}
+
+/// A library's cover tag is derived from the cover URL: swapping the cover
+/// swaps the tag, so a client holding the old image refetches instead of
+/// serving a stale cache hit under the constant tag titles use.
+fn library_image_tag_value(url: &str) -> String {
+    crate::services::scan::short_hash(url)
 }
 
 fn movie_dto(state: &SharedState, item: &MediaItem) -> Value {
@@ -1167,22 +1196,31 @@ async fn image_art(
             })
         })
     } else {
-        // A library has no row of its own; its cover is the first title's art,
-        // which is what every client expects a CollectionFolder to show.
+        // A library has no row of its own; an operator-picked cover wins,
+        // otherwise the first title's art is what a CollectionFolder shows.
         let defs = crate::services::settings::library_defs(&state.settings, &state.config);
         if let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) {
-            let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
-            items
-                .iter()
-                .find(|item| item.library == def.name || item.library == def.id)
-                .and_then(|item| item.metadata.as_ref())
-                .and_then(|meta| {
-                    if backdrop {
-                        meta.backdrop_url.clone()
-                    } else {
-                        meta.poster_url.clone()
-                    }
-                })
+            let picked = query(&state.db, {
+                let id = def.id.clone();
+                move |pool| db::art_overrides::get(&pool, db::art_overrides::LIBRARY_KIND, &id)
+            })
+            .await?;
+            if let Some(url) = picked.get(art_key) {
+                Some(url.clone())
+            } else {
+                let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+                items
+                    .iter()
+                    .find(|item| item.library == def.name || item.library == def.id)
+                    .and_then(|item| item.metadata.as_ref())
+                    .and_then(|meta| {
+                        if backdrop {
+                            meta.backdrop_url.clone()
+                        } else {
+                            meta.poster_url.clone()
+                        }
+                    })
+            }
         } else {
             None
         }

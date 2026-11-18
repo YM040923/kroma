@@ -195,7 +195,12 @@ mod tests {
         let before = bus.catalog_version();
 
         bus.publish(ServerEvent::PlaybackUpdated { count: 1 });
-        bus.publish(ServerEvent::EnrichProgress { done: 1, total: 2 });
+        bus.publish(ServerEvent::EnrichProgress {
+            done: 1,
+            total: 2,
+            current: None,
+            failed: 0,
+        });
 
         assert_eq!(bus.catalog_version(), before);
     }

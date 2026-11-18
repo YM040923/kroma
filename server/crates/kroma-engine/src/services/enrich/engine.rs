@@ -60,7 +60,16 @@ pub(super) fn bump(eng: &Engine, counters: &Counters, total: usize, activity: Op
     if let Some(activity) = activity {
         activity::enrich_progress(activity, done);
         if done.is_multiple_of(25) {
-            eng.bus.publish(ServerEvent::EnrichProgress { done, total });
+            // Read back rather than threading the job through: `bump` runs on
+            // every outcome (hit, miss, write failure), so the snapshot is the
+            // one place that already knows which title the pass is on.
+            let current = activity::snapshot(activity).enrich_current;
+            eng.bus.publish(ServerEvent::EnrichProgress {
+                done,
+                total,
+                current,
+                failed: counters.failed.load(Ordering::Relaxed),
+            });
         }
     }
 }

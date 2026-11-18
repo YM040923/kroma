@@ -55,6 +55,7 @@ export const SyncReport = z.object({
   pendingProbe: z.number(),
   assets: z.number(),
   calls: z.number(),
+  callsTotal: z.number(),
   truncated: z.boolean(),
   errors: z.array(z.string()),
 });
