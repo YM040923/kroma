@@ -266,8 +266,9 @@ async fn views_payload(state: &SharedState) -> Result<Value, Response> {
                 .iter()
                 .find(|item| item.library == def.name || item.library == def.id)
                 .and_then(|item| item.metadata.as_ref());
+            // A library has one cover: whichever side of the picker filled it.
             let poster = picked
-                .and_then(|art| art.get("poster").cloned())
+                .and_then(|art| art.get("poster").or_else(|| art.get("backdrop")).cloned())
                 .or_else(|| cover.and_then(|meta| meta.poster_url.clone()));
             let backdrop = picked
                 .and_then(|art| art.get("backdrop").cloned())
@@ -316,6 +317,7 @@ async fn item_detail(
             .and_then(|item| item.metadata.as_ref());
         let poster = picked
             .get("poster")
+            .or_else(|| picked.get("backdrop"))
             .cloned()
             .or_else(|| cover.and_then(|meta| meta.poster_url.clone()));
         let backdrop = picked
@@ -1205,8 +1207,20 @@ async fn image_art(
                 move |pool| db::art_overrides::get(&pool, db::art_overrides::LIBRARY_KIND, &id)
             })
             .await?;
-            if let Some(url) = picked.get(art_key) {
-                Some(url.clone())
+            // The one cover an operator picked serves as Primary even when it
+            // was picked on the backdrop side of the artwork dialog.
+            let picked_cover = picked
+                .get(art_key)
+                .or_else(|| {
+                    if backdrop {
+                        None
+                    } else {
+                        picked.get(db::art_overrides::BACKDROP)
+                    }
+                })
+                .cloned();
+            if let Some(url) = picked_cover {
+                Some(url)
             } else {
                 let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
                 items

@@ -86,12 +86,18 @@ async fn library_page(state: &SharedState, id: &str) -> Result<Option<Page>, Res
     })
     .await?;
     let (poster, backdrop) = library_cover(state, id).await?;
+    // A library has one cover; whichever art the operator picked fills it,
+    // even when they picked it on the backdrop side of the picker.
+    let cover = overrides
+        .get("poster")
+        .or_else(|| overrides.get("backdrop"))
+        .cloned();
     Ok(Some(Page {
         kind: db::art_overrides::LIBRARY_KIND,
         id: def_id,
         tmdb_id: 0,
         target: Target::Movie,
-        poster: overrides.get("poster").cloned().or(poster),
+        poster: cover.or(poster),
         backdrop: overrides.get("backdrop").cloned().or(backdrop),
         logo: None,
     }))
@@ -228,7 +234,7 @@ async fn library_artwork(state: &SharedState, page: &Page) -> Response {
                 "height": 0,
                 "language": null,
                 "votes": 0,
-                "note": item.title,
+                "note": item.show_title.clone().unwrap_or_else(|| item.title.clone()),
             }));
         }
     }

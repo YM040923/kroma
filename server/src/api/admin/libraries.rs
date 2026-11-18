@@ -63,7 +63,9 @@ pub async fn list_libraries(
                 last_scan: last_scan.clone(),
                 auto_scan: d.auto_scan,
                 scrape: settings::library_scrape(&state.settings, &d.id),
-                cover: covers.get(&d.id).and_then(|art| art.get("poster").cloned()),
+                cover: covers
+                    .get(&d.id)
+                    .and_then(|art| art.get("poster").or_else(|| art.get("backdrop")).cloned()),
             }
         })
         .collect();
