@@ -163,6 +163,7 @@ async fn an_update_touches_only_the_fields_it_names() {
         kind: None,
         folders: None,
         auto_scan: None,
+        scrape: None,
     };
     let res = update_library(
         State(state.clone()),
@@ -192,6 +193,7 @@ async fn an_update_can_turn_auto_scan_off_without_touching_anything_else() {
         kind: None,
         folders: None,
         auto_scan: Some(false),
+        scrape: None,
     };
     update_library(
         State(state.clone()),
@@ -218,6 +220,7 @@ async fn a_blank_new_name_is_ignored_rather_than_applied() {
         kind: None,
         folders: None,
         auto_scan: None,
+        scrape: None,
     };
     update_library(
         State(state.clone()),
@@ -246,6 +249,7 @@ async fn replacing_the_folders_cleans_them_too() {
             "/media/shows".into(),
         ]),
         auto_scan: None,
+        scrape: None,
     };
     update_library(
         State(state.clone()),
@@ -272,6 +276,7 @@ async fn editing_a_library_that_is_not_there_is_a_404() {
         kind: None,
         folders: None,
         auto_scan: None,
+        scrape: None,
     };
     let err = update_library(
         State(state.clone()),
