@@ -29,6 +29,9 @@ interface ArtView {
 const GRID: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+  // Auto rows otherwise resolve to a sliver and the panel's stretch squeezes
+  // every card to it, cropping the image to a strip.
+  gridAutoRows: 'max-content',
   gap: 14,
   maxHeight: '52vh',
   overflow: 'auto',
