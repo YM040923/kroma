@@ -59,6 +59,10 @@ struct ScanOutcome {
 }
 
 fn scan_into(lib_id: &str, root: &Path) -> ScanOutcome {
+    scan_into_kind(lib_id, root, false)
+}
+
+fn scan_into_kind(lib_id: &str, root: &Path, tv_library: bool) -> ScanOutcome {
     let mut items = HashMap::new();
     let mut shows = HashMap::new();
     let mut mtimes = HashMap::new();
@@ -69,6 +73,7 @@ fn scan_into(lib_id: &str, root: &Path) -> ScanOutcome {
     let unreadable = scan_root(
         lib_id,
         root,
+        tv_library,
         &mut items,
         &mut shows,
         &mut mtimes,
@@ -376,4 +381,25 @@ fn a_malformed_sidecar_is_ignored_rather_than_failing_the_scan() {
         Some("https://example.test/s.mkv"),
         "the entry itself still indexed"
     );
+}
+
+#[test]
+fn a_tv_library_drops_an_unnumbered_file_from_a_season_folder() {
+    // The stray shape a mirror produces now and then: a file in a bare
+    // "Season" folder, no SxxExx anywhere. It cannot be numbered, and in a TV
+    // library it must not surface as a film either.
+    let root_dir = temp_scan_dir();
+    let root = root_dir.path();
+    let show_dir = root.join("Some Show (2023) {tmdb-1}");
+    std::fs::create_dir_all(show_dir.join("Season")).unwrap();
+    std::fs::write(show_dir.join("Season/Some Show - 1080p.mkv"), b"x").unwrap();
+    std::fs::create_dir_all(show_dir.join("Season 1")).unwrap();
+    std::fs::write(show_dir.join("Season 1/Some Show S01E01.mkv"), b"x").unwrap();
+
+    let tv = scan_into_kind("lib1", root, true);
+    assert_eq!(tv.items.len(), 1, "only the numbered episode is indexed");
+    assert!(tv.items.values().all(|i| i.kind == kroma_domain::Kind::Episode));
+
+    let films = scan_into_kind("lib1", root, false);
+    assert_eq!(films.items.len(), 2, "a film library still takes the file");
 }

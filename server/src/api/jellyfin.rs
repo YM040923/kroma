@@ -892,7 +892,7 @@ async fn items(
     Query(params): Query<HashMap<String, String>>,
     Path(_params): Path<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
-    let (user, _) = user_of(&state, &headers, &params).await?;
+    let (user, access) = user_of(&state, &headers, &params).await?;
     let parent = params.get("ParentId").cloned().unwrap_or_default();
     let include = params.get("IncludeItemTypes").cloned().unwrap_or_default();
     let search = params
@@ -919,10 +919,19 @@ async fn items(
     let filter_library = wanted.is_some();
 
     let mut out: Vec<Value> = Vec::new();
-    let want_series = include.contains("Series") || parent_is_series(&defs, wanted);
-    let want_movies = include.is_empty()
-        || include.contains("Movie")
-        || (!want_series && wanted.is_some_and(|d| library_type(d) == "movies"));
+    // A named IncludeItemTypes wins: asking for `Movie` must not also hand
+    // back every series, and asking for `Episode` must return episodes.
+    let want_series = if include.is_empty() {
+        parent_is_series(&defs, wanted)
+    } else {
+        include.contains("Series")
+    };
+    let want_movies = if include.is_empty() {
+        true
+    } else {
+        include.contains("Movie") || include.contains("Video")
+    };
+    let want_episodes = include.contains("Episode");
 
     if want_movies {
         let all = query(&state.db, |pool| db::list_items(&pool, None)).await?;
@@ -951,6 +960,26 @@ async fn items(
             out.push(series_dto(&state, &show));
         }
     }
+    if want_episodes {
+        let shows = query(&state.db, |pool| db::list_shows(&pool, None)).await?;
+        let all = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+        for item in all {
+            if !matches!(item.kind, Kind::Episode) || item.show_id.is_none() {
+                continue;
+            }
+            if filter_library && !library_names.contains(&item.library) {
+                continue;
+            }
+            if !search.is_empty() && !item.title.to_lowercase().contains(&search) {
+                continue;
+            }
+            let show = item
+                .show_id
+                .as_ref()
+                .and_then(|id| shows.iter().find(|s| &s.id == id));
+            out.push(episode_detail_dto(&state, &headers, &item, show, &access));
+        }
+    }
     let total = out.len();
     let mut page: Vec<Value> = out.into_iter().skip(skip).take(limit).collect();
     apply_user_data(&state, &user, &mut page).await?;
@@ -975,16 +1004,49 @@ async fn latest(
     Query(params): Query<HashMap<String, String>>,
     Path(_params): Path<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
-    let (user, _) = user_of(&state, &headers, &params).await?;
-    let all = query(&state.db, |pool| db::list_items(&pool, None)).await?;
-    let mut latest: Vec<Value> = all
-        .into_iter()
-        .filter(|i| matches!(i.kind, Kind::Movie) && i.show_id.is_none())
+    let (user, access) = user_of(&state, &headers, &params).await?;
+    let parent = params.get("ParentId").cloned().unwrap_or_default();
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let wanted = defs
+        .iter()
+        .find(|def| def.id == parent || def.name == parent);
+    // Jellyfin addresses this per library: a TV library's row is episodes, a
+    // movie library's is films. A request that names none gets both.
+    let tv = wanted.is_some_and(|def| library_type(def) == "tvshows");
+    let mut all = query(&state.db, |pool| db::list_items(&pool, None)).await?;
+    if let Some(def) = wanted {
+        all.retain(|item| item.library == def.id || item.library == def.name);
+    }
+    // Newest first: a "latest" row is about what arrived, not the shelf order.
+    all.sort_by(|a, b| b.added_at.cmp(&a.added_at));
+    let shows = if tv || wanted.is_none() {
+        query(&state.db, |pool| db::list_shows(&pool, None)).await?
+    } else {
+        Vec::new()
+    };
+    let mut out: Vec<Value> = all
+        .iter()
+        .filter(|item| match (tv, &item.kind) {
+            (true, Kind::Episode) => item.show_id.is_some(),
+            (true, _) => false,
+            (false, Kind::Episode) => wanted.is_none() && item.show_id.is_some(),
+            (false, Kind::Movie) | (false, Kind::Video) => item.show_id.is_none(),
+            (false, _) => false,
+        })
         .take(20)
-        .map(|item| movie_dto(&state, &item))
+        .map(|item| match &item.kind {
+            Kind::Episode => {
+                let show = item
+                    .show_id
+                    .as_ref()
+                    .and_then(|id| shows.iter().find(|s| &s.id == id));
+                episode_detail_dto(&state, &headers, item, show, &access)
+            }
+            _ => movie_dto(&state, item),
+        })
         .collect();
-    apply_user_data(&state, &user, &mut latest).await?;
-    Ok(Json(Value::Array(latest)))
+    apply_user_data(&state, &user, &mut out).await?;
+    Ok(Json(Value::Array(out)))
 }
 
 async fn seasons(

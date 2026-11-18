@@ -29,6 +29,7 @@ pub use kroma_media::video::{has_video_extension, VIDEO_EXTENSIONS};
 pub(super) fn scan_root(
     lib_id: &str,
     root: &Path,
+    tv_library: bool,
     items: &mut HashMap<String, MediaItem>,
     shows: &mut HashMap<String, Show>,
     mtimes: &mut HashMap<String, Option<i64>>,
@@ -170,8 +171,26 @@ pub(super) fn scan_root(
                 None => abs.to_string_lossy().to_string(),
             }),
         };
+        let parsed = naming::parse(root, &path);
+        // A TV library's season folder vouches for the show; a file in it
+        // without an episode marker is an unnumbered copy, not a film that
+        // belongs in the movies rows. Jellyfin drops these too.
+        if tv_library && matches!(parsed, naming::Parsed::Movie { .. }) {
+            let in_season = path
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(std::ffi::OsStr::to_str)
+                .is_some_and(naming::is_season_folder);
+            if in_season {
+                warn!(
+                    path = %path.display(),
+                    "no episode number in a season folder; left out of the TV library"
+                );
+                continue;
+            }
+        }
         index_parsed(
-            naming::parse(root, &path),
+            parsed,
             lib_id,
             &added_at,
             file,

@@ -74,6 +74,7 @@ pub fn scan_all(defs: &[LibraryDef]) -> ScanData {
             data.unreadable += scan_root(
                 &def.id,
                 root,
+                def.kind == "shows",
                 &mut items,
                 &mut shows,
                 &mut data.mtimes,
