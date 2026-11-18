@@ -19,7 +19,9 @@ export const localeSetting: SettingsItem = choiceItem({
   label: 'common.language',
   icon: 'language',
   options: () => LOCALES.map((l) => l.code),
-  valueLabel: (code) => LOCALES.find((l) => l.code === code)?.labelKey ?? 'common.language',
+  // A regional locale (`zh-Hans`) has no `lang.*` key of its own; the
+  // translated `valueText` below is what the row prints.
+  valueLabel: () => 'common.language',
   valueText: (t, code) => {
     const offered = LOCALES.find((l) => l.code === code);
     return offered ? localeLabel(t, offered) : t('common.language');

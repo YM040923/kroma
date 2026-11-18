@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -15,6 +16,12 @@ pub(super) struct Engine {
     pub(super) cache: Arc<Cache>,
     pub(super) api_key: String,
     pub(super) language: String,
+    /// Per-library scrape choices, by library id. A missing entry follows the
+    /// global language and leaves NFO/art preferences alone.
+    pub(super) scrape: BTreeMap<String, crate::services::settings::ScrapeOptions>,
+    /// Library id -> scan folders, to find a `.strm` whose stored path is the
+    /// stream URL rather than the file on disk.
+    pub(super) folders: BTreeMap<String, Vec<String>>,
     pub(super) data_dir: PathBuf,
     pub(super) theme_songs: bool,
     pub(super) bus: Bus,
@@ -36,6 +43,11 @@ pub(super) fn engine_for(state: &SharedState, api_key: String) -> Engine {
         cache: state.metadata_cache.clone(),
         api_key,
         language: crate::services::settings::metadata_language(&state.settings, &state.config),
+        scrape: crate::services::settings::all_library_scrape(&state.settings),
+        folders: crate::services::settings::library_defs(&state.settings, &state.config)
+            .into_iter()
+            .map(|def| (def.id, def.folders))
+            .collect(),
         data_dir: state.config.data_dir.clone(),
         theme_songs: crate::services::settings::theme_songs_enabled(&state.settings),
         bus: state.events.clone(),

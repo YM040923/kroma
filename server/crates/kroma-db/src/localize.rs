@@ -39,6 +39,10 @@ pub fn overlay_show_metadata(
     {
         apply(Some(meta), tr);
     }
+    let overrides = crate::art_overrides::get(pool, metadata_core::SHOW, show_id)?;
+    if !overrides.is_empty() {
+        crate::art_overrides::apply(meta, &overrides);
+    }
     Ok(())
 }
 

@@ -80,6 +80,7 @@ mod it_backup;
 mod it_cast;
 #[cfg(test)]
 mod it_content;
+mod artwork;
 #[cfg(test)]
 mod it_device_versions;
 #[cfg(test)]
@@ -288,6 +289,7 @@ pub fn router(state: SharedState, supervisor: Arc<Supervisor>) -> Router {
     // is not library bytes.
     let content = Router::new()
         .merge(media::routes())
+        .merge(artwork::routes())
         .merge(server_status::routes())
         .merge(direct::routes())
         .merge(stream::protected_routes())

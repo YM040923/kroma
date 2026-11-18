@@ -99,7 +99,8 @@ pub(super) fn spawn(eng: Engine, activity: Activity, search: Arc<SearchEngine>, 
                     Some(j) => j,
                     None => break,
                 };
-                process_job(&eng, &counters, total, Some(&activity), job);
+                process_job(&eng, &counters, total, Some(&activity), job.clone());
+                super::process::post_process(&eng, &job);
             }));
         }
         for h in handles {
@@ -119,6 +120,10 @@ pub(super) fn spawn(eng: Engine, activity: Activity, search: Arc<SearchEngine>, 
 
 /// Idempotent. A TMDB *miss* returns `Ok` so the ledger records it done and does
 /// not retry it every run; `Err` means a real write failure.
+fn has_library_scrape(state: &SharedState, library: &str) -> bool {
+    crate::services::settings::all_library_scrape(&state.settings).contains_key(library)
+}
+
 pub fn enrich_one(state: &SharedState, id: &str, is_show: bool) -> anyhow::Result<()> {
     let Some(api_key) = state.config.tmdb_api_key.clone() else {
         return Ok(());
@@ -134,15 +139,20 @@ pub fn enrich_one(state: &SharedState, id: &str, is_show: bool) -> anyhow::Resul
             .filter(|&i| i != 0);
         let pin = pin_for(state, db::metadata_core::SHOW, id).filter(|&p| Some(p) != on_file);
         let intact = art_intact(&state.config.data_dir, show.metadata.as_ref());
+        // A per-library choice only lands on titles matched after it was set;
+        // the stored blob carries no language marker, so a forced re-fetch is
+        // what makes an existing match pick the new language and artwork up.
+        let relocalize = has_library_scrape(state, &show.library);
         Job {
             id: show.id.clone(),
+            library: show.library.clone(),
             target: Target::Tv,
             title: show.title.clone(),
             year: show.year,
             is_show: true,
-            resolved_tmdb: on_file.filter(|_| pin.is_none() && intact),
+            resolved_tmdb: on_file.filter(|_| pin.is_none() && intact && !relocalize),
             pin,
-            refetch: on_file.filter(|_| pin.is_none() && !intact),
+            refetch: on_file.filter(|_| pin.is_none() && (!intact || relocalize)),
         }
     } else {
         let Some(item) = db::get_item(&state.db, id)? else {
@@ -155,20 +165,23 @@ pub fn enrich_one(state: &SharedState, id: &str, is_show: bool) -> anyhow::Resul
             .filter(|&i| i != 0);
         let pin = pin_for(state, db::metadata_core::ITEM, id).filter(|&p| Some(p) != on_file);
         let intact = art_intact(&state.config.data_dir, item.metadata.as_ref());
+        let relocalize = has_library_scrape(state, &item.library);
         Job {
             id: item.id.clone(),
+            library: item.library.clone(),
             target: Target::Movie,
             title: item.title.clone(),
             year: item.year,
             is_show: false,
-            resolved_tmdb: on_file.filter(|_| pin.is_none() && intact),
+            resolved_tmdb: on_file.filter(|_| pin.is_none() && intact && !relocalize),
             pin,
-            refetch: on_file.filter(|_| pin.is_none() && !intact),
+            refetch: on_file.filter(|_| pin.is_none() && (!intact || relocalize)),
         }
     };
     let eng = engine_for(state, api_key);
     let counters = Counters::default();
-    process_job(&eng, &counters, 1, None, job);
+    process_job(&eng, &counters, 1, None, job.clone());
+    super::process::post_process(&eng, &job);
     if counters.failed.load(Ordering::Relaxed) > 0 {
         anyhow::bail!("failed to store metadata for {id}");
     }
@@ -196,7 +209,8 @@ pub(super) fn enrich_worker(
             Some(j) => j,
             None => break,
         };
-        process_job(eng, counters, total, None, job);
+        process_job(eng, counters, total, None, job.clone());
+        super::process::post_process(eng, &job);
     }
 }
 

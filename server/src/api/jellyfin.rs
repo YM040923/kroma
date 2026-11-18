@@ -1128,13 +1128,43 @@ async fn image_art(
     let wanted = id.clone();
     let item = query(&state.db, move |pool| db::get_item(&pool, &wanted)).await?;
     let backdrop = kind.eq_ignore_ascii_case("backdrop");
+    let art_key = if backdrop {
+        db::art_overrides::BACKDROP
+    } else {
+        db::art_overrides::POSTER
+    };
     let art = if let Some(item) = item {
-        item.metadata.as_ref().and_then(|meta| {
-            if backdrop {
-                meta.backdrop_url.clone()
-            } else {
-                meta.poster_url.clone()
-            }
+        let overrides = query(&state.db, {
+            let id = item.id.clone();
+            move |pool| db::art_overrides::get(&pool, db::art_overrides::ITEM_KIND, &id)
+        })
+        .await?;
+        overrides.get(art_key).cloned().or_else(|| {
+            item.metadata.as_ref().and_then(|meta| {
+                if backdrop {
+                    meta.backdrop_url.clone()
+                } else {
+                    meta.poster_url.clone()
+                }
+            })
+        })
+    } else if let Some(detail) = {
+        let wanted = id.clone();
+        query(&state.db, move |pool| db::get_show(&pool, &wanted)).await?
+    } {
+        let overrides = query(&state.db, {
+            let id = detail.show.id.clone();
+            move |pool| db::art_overrides::get(&pool, db::art_overrides::SHOW_KIND, &id)
+        })
+        .await?;
+        overrides.get(art_key).cloned().or_else(|| {
+            detail.show.metadata.as_ref().and_then(|meta| {
+                if backdrop {
+                    meta.backdrop_url.clone()
+                } else {
+                    meta.poster_url.clone()
+                }
+            })
         })
     } else {
         // A library has no row of its own; its cover is the first title's art,

@@ -213,6 +213,8 @@ fn declared() -> Declared {
     m.module_declared("llmDefaultProvider", json!(""));
     m.core_only("signIn", json!({}));
     m.core_only("libraries", json!(null));
+    // Per-library scraping choices, `{ "<library id>": ScrapeOptions }`.
+    m.core_only("libraryScrape", json!({}));
     // ISO-8601 `items.added_at` the digest has reported up to. Empty = never run:
     // the first pass adopts the current library as its baseline and stays silent.
     m.module_declared("notifications.digest.since", json!(""));

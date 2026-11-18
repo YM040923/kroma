@@ -71,6 +71,95 @@ pub(super) fn fill_langs(eng: &Engine, job: &Job, tmdb_id: u64, missing: &[Strin
     }
 }
 
+pub(super) fn post_process(eng: &Engine, job: &Job) {
+    let Some(options) = eng.scrape.get(&job.library) else {
+        return;
+    };
+    if options.nfo {
+        super::nfo::write(eng, job);
+    }
+    apply_art_preference(eng, job, options);
+}
+
+/// Picks the preferred poster/backdrop (a language tag, or "textless") from the
+/// provider's full image list and stores it in the title's metadata. This is an
+/// automatic preference, distinct from the manual per-title override table.
+fn apply_art_preference(
+    eng: &Engine,
+    job: &Job,
+    options: &crate::services::settings::ScrapeOptions,
+) {
+    let poster = options
+        .poster_language
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("auto"));
+    let backdrop = options
+        .backdrop_language
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("auto"));
+    if poster.is_none() && backdrop.is_none() {
+        return;
+    }
+    let (mut meta, tmdb_id, is_show) = if job.is_show {
+        let Ok(Some(detail)) = db::get_show(&eng.pool, &job.id) else {
+            return;
+        };
+        let Some(meta) = detail.show.metadata.clone() else {
+            return;
+        };
+        let tmdb = meta.tmdb_id;
+        (meta, tmdb, true)
+    } else {
+        let Ok(Some(item)) = db::get_item(&eng.pool, &job.id) else {
+            return;
+        };
+        let Some(meta) = item.metadata.clone() else {
+            return;
+        };
+        let tmdb = meta.tmdb_id;
+        (meta, tmdb, false)
+    };
+    if tmdb_id == 0 {
+        return;
+    }
+    let Ok((posters, backdrops)) =
+        metadata::images(&eng.api_key, &eng.language, job.target, tmdb_id)
+    else {
+        return;
+    };
+    if let Some(pref) = poster {
+        if let Some(url) = pick_image(&posters, pref) {
+            meta.poster_url = Some(url);
+        }
+    }
+    if let Some(pref) = backdrop {
+        if let Some(url) = pick_image(&backdrops, pref) {
+            meta.backdrop_url = Some(url);
+        }
+    }
+    let meta = image::localize(&eng.data_dir, meta);
+    let _ = if is_show {
+        db::set_show_metadata(&eng.pool, &job.id, &meta)
+    } else {
+        db::set_item_metadata(&eng.pool, &job.id, &meta)
+    };
+}
+
+fn pick_image(images: &[metadata::ArtImage], preference: &str) -> Option<String> {
+    let wanted = if preference.eq_ignore_ascii_case("textless") {
+        None
+    } else {
+        Some(preference)
+    };
+    images
+        .iter()
+        .filter(|image| image.language.as_deref() == wanted)
+        .max_by(|a, b| a.votes.total_cmp(&b.votes))
+        .map(|image| image.url.clone())
+}
+
 pub(super) fn process_job(
     eng: &Engine,
     counters: &Counters,
@@ -78,6 +167,20 @@ pub(super) fn process_job(
     activity: Option<&Activity>,
     job: Job,
 ) {
+    // A library may scrape in its own language; everything below reads the
+    // engine, so overriding the clone keeps every lookup on one language.
+    let mut local = eng.clone();
+    if let Some(options) = local.scrape.get(&job.library) {
+        if let Some(language) = options
+            .language
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            local.language = language.to_string();
+        }
+    }
+    let eng = &local;
     let langs = crate::i18n::content_locales();
     if let Some(tmdb_id) = job.resolved_tmdb {
         if job.is_show {

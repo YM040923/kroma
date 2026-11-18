@@ -8,8 +8,10 @@ use crate::state::SharedState;
 
 use super::episodes::art_gone;
 
+#[derive(Clone)]
 pub(super) struct Job {
     pub(super) id: String,
+    pub(super) library: String,
     pub(super) target: Target,
     pub(super) title: String,
     pub(super) year: Option<u32>,
@@ -51,6 +53,7 @@ pub(super) fn build_jobs(
         let intact = art_intact(data_dir, i.metadata.as_ref());
         jobs.push(Job {
             id: i.id.clone(),
+            library: i.library.clone(),
             target: Target::Movie,
             title: i.title.clone(),
             year: i.year,
@@ -73,6 +76,7 @@ pub(super) fn build_jobs(
         let intact = art_intact(data_dir, s.metadata.as_ref());
         jobs.push(Job {
             id: s.id.clone(),
+            library: s.library.clone(),
             target: Target::Tv,
             title: s.title.clone(),
             year: s.year,

@@ -7,6 +7,7 @@ import {
   Field,
   Row,
   SegmentGroup,
+  Select,
   Switch,
   Text,
   useConfirm,
@@ -116,6 +117,36 @@ export const AddLibraryModal = createCallable<void, boolean>(({ call }) => {
   );
 });
 
+const AUTO_ART = 'auto';
+const ART_LANGUAGES = ['textless', 'zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr'];
+
+function ArtPreferenceSelect({
+  label,
+  value,
+  onChange,
+}: Readonly<{ label: string; value: string; onChange: (v: string) => void }>) {
+  const t = useT();
+  const current = value || AUTO_ART;
+  const tags = ART_LANGUAGES.includes(current) ? ART_LANGUAGES : [...ART_LANGUAGES, current];
+  return (
+    <Select.Root
+      label={label}
+      value={current}
+      onValueChange={(next) => onChange(next === AUTO_ART ? '' : next)}
+    >
+      <Select.Trigger />
+      <Select.Item value={AUTO_ART} label={t('admin.artAuto')} />
+      {tags.map((tag) => (
+        <Select.Item
+          key={tag}
+          value={tag}
+          label={tag === 'textless' ? t('admin.artTextless') : tag}
+        />
+      ))}
+    </Select.Root>
+  );
+}
+
 export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>(
   ({ call, lib }) => {
     const confirm = useConfirm();
@@ -125,11 +156,26 @@ export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>
     const [kind, setKind] = useState<LibKind>(() => normalizeLibKind(lib.kind));
     const [folders, setFolders] = useState(lib.folders);
     const [autoScan, setAutoScan] = useState(lib.autoScan);
+    const [scrapeLanguage, setScrapeLanguage] = useState(lib.scrape.language ?? '');
+    const [nfo, setNfo] = useState(lib.scrape.nfo);
+    const [posterLanguage, setPosterLanguage] = useState(lib.scrape.posterLanguage ?? '');
+    const [backdropLanguage, setBackdropLanguage] = useState(lib.scrape.backdropLanguage ?? '');
     const { busy, run } = useAsyncAction();
 
     const save = () =>
       run(async () => {
-        await client.library.update(lib.id, { name: name.trim(), kind, folders, autoScan });
+        await client.library.update(lib.id, {
+          name: name.trim(),
+          kind,
+          folders,
+          autoScan,
+          scrape: {
+            language: scrapeLanguage.trim() || null,
+            nfo,
+            posterLanguage: posterLanguage || null,
+            backdropLanguage: backdropLanguage || null,
+          },
+        });
         call.end(true);
       });
     const remove = async () => {
@@ -174,6 +220,37 @@ export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>
           </Box>
           <Switch checked={autoScan} onCheckedChange={setAutoScan} label={t('admin.autoScan')} />
         </Row>
+        <Text variant="label">{t('admin.scrapeSection')}</Text>
+        <Field.Root label={t('admin.scrapeLanguage')}>
+          <Field.Input
+            icon="language"
+            value={scrapeLanguage}
+            onValueChange={setScrapeLanguage}
+            placeholder={t('admin.scrapeLanguagePlaceholder')}
+          />
+        </Field.Root>
+        <Text variant="meta" color="textDim">
+          {t('admin.scrapeLanguageHint')}
+        </Text>
+        <Row between gap={16}>
+          <Box>
+            <Text variant="label">{t('admin.nfoFiles')}</Text>
+            <Text variant="meta" color="textDim" mt={2}>
+              {t('admin.nfoFilesHint')}
+            </Text>
+          </Box>
+          <Switch checked={nfo} onCheckedChange={setNfo} label={t('admin.nfoFiles')} />
+        </Row>
+        <ArtPreferenceSelect
+          label={t('admin.posterPreference')}
+          value={posterLanguage}
+          onChange={setPosterLanguage}
+        />
+        <ArtPreferenceSelect
+          label={t('admin.backdropPreference')}
+          value={backdropLanguage}
+          onChange={setBackdropLanguage}
+        />
         <Dialog.Footer>
           <Dialog.Actions
             onCancel={() => call.end(false)}

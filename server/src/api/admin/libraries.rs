@@ -58,6 +58,7 @@ pub async fn list_libraries(
                 size_bytes: st.map(|s| s.total_bytes).unwrap_or(0),
                 last_scan: last_scan.clone(),
                 auto_scan: d.auto_scan,
+                scrape: settings::library_scrape(&state.settings, &d.id),
             }
         })
         .collect();
@@ -125,6 +126,8 @@ pub struct UpdateLibraryBody {
     pub folders: Option<Vec<String>>,
     #[serde(rename = "autoScan", default)]
     pub auto_scan: Option<bool>,
+    #[serde(default)]
+    pub scrape: Option<settings::ScrapeOptions>,
 }
 
 pub async fn update_library(
@@ -156,9 +159,19 @@ pub async fn update_library(
     if let Some(auto) = body.auto_scan {
         def.auto_scan = auto;
     }
+    let scrape_changed = body
+        .scrape
+        .as_ref()
+        .is_some_and(|scrape| *scrape != settings::library_scrape(&state.settings, &id));
+    if let Some(scrape) = body.scrape {
+        settings::set_library_scrape(&state.settings, &state.db, &id, &scrape);
+    }
     settings::set_library_defs(&state.settings, &state.db, &defs);
     if needs_scan {
         spawn_rescan(state.clone());
+    }
+    if scrape_changed {
+        rescrape_metadata(state.clone()).await;
     }
     state.events.publish(ServerEvent::LibraryUpdated);
     Ok(StatusCode::NO_CONTENT.into_response())
@@ -213,5 +226,21 @@ fn spawn_rescan(state: SharedState) {
         state.clone(),
         crate::services::jobs::JobKey("library.scan"),
         "library-edit",
+    );
+}
+
+// A scrape change must revisit titles that are already matched, and their
+// ledger entries are `done`, so re-queue the stage before triggering it.
+async fn rescrape_metadata(state: SharedState) {
+    let now = crate::services::jobs::now_ms();
+    let _ = query(&state.db, move |pool| {
+        db::pipeline::requeue_stage(&pool, "metadata", now)?;
+        Ok(())
+    })
+    .await;
+    let _ = state.jobs.trigger(
+        state.clone(),
+        crate::services::jobs::JobKey("pipeline.metadata"),
+        "library-scrape",
     );
 }

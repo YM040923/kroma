@@ -97,6 +97,7 @@ pub struct AdminLibrary {
     pub size_bytes: i64,
     pub last_scan: Option<String>,
     pub auto_scan: bool,
+    pub scrape: crate::services::settings::ScrapeOptions,
 }
 
 /// One weekly bucket of the play-history chart.

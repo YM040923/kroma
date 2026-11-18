@@ -55,6 +55,8 @@ pub fn overlay_each<'a>(
     let movie_tr = translations::resolve_many(&conn, metadata_core::ITEM, &movie_ids, locale)?;
     let ep_tr = translations::resolve_many(&conn, "episode", &ep_ids, locale)?;
     let show_tr = translations::resolve_many(&conn, metadata_core::SHOW, &show_ids, locale)?;
+    let item_art = crate::art_overrides::all(pool, metadata_core::ITEM)?;
+    let show_art = crate::art_overrides::all(pool, metadata_core::SHOW)?;
     for item in items.iter_mut() {
         let table = if item.kind == Kind::Episode {
             &ep_tr
@@ -71,6 +73,16 @@ pub fn overlay_each<'a>(
             .and_then(|tr| tr.title.as_deref())
         {
             item.show_title = Some(name.to_string());
+        }
+        let item_key = item.id.clone();
+        let show_key = item.show_id.clone();
+        let overrides = if item.kind == Kind::Episode {
+            show_key.as_deref().and_then(|id| show_art.get(id))
+        } else {
+            item_art.get(&item_key)
+        };
+        if let (Some(meta), Some(overrides)) = (item.metadata.as_mut(), overrides) {
+            crate::art_overrides::apply(meta, overrides);
         }
     }
     Ok(())
@@ -98,16 +110,28 @@ pub fn overlay_section_items(pool: &Pool, items: &mut [SectionItem], locale: &st
         .collect();
     let m_tr = translations::resolve_many(&conn, metadata_core::ITEM, &movie_ids, locale)?;
     let s_tr = translations::resolve_many(&conn, metadata_core::SHOW, &show_ids, locale)?;
+    let item_art = crate::art_overrides::all(pool, metadata_core::ITEM)?;
+    let show_art = crate::art_overrides::all(pool, metadata_core::SHOW)?;
     for it in items.iter_mut() {
         match it {
             SectionItem::Movie { item } => {
                 if let Some(t) = m_tr.get(&item.id) {
                     apply_item(item, t);
                 }
+                if let Some(overrides) = item_art.get(&item.id) {
+                    if let Some(meta) = item.metadata.as_mut() {
+                        crate::art_overrides::apply(meta, overrides);
+                    }
+                }
             }
             SectionItem::Show { show } => {
                 if let Some(t) = s_tr.get(&show.id) {
                     apply_show(show, t);
+                }
+                if let Some(overrides) = show_art.get(&show.id) {
+                    if let Some(meta) = show.metadata.as_mut() {
+                        crate::art_overrides::apply(meta, overrides);
+                    }
                 }
             }
         }

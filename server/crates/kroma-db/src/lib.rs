@@ -40,7 +40,9 @@ mod rows;
 // Kept namespaced (`db::pipeline::…`) rather than glob-exported: its `counts`
 // would clash with `media::counts`, and the call sites read clearer scoped.
 pub mod audio_analysis;
+pub mod art_overrides;
 mod curated;
+pub mod local_paths;
 pub mod network_flows;
 pub mod network_inbound;
 pub mod notification_deliveries;

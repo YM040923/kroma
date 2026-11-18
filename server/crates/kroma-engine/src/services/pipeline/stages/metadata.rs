@@ -31,21 +31,36 @@ fn enumerate(state: &SharedState) -> Result<Vec<(String, String)>> {
     // title already done is never revisited when either of them changes.
     let langs = crate::i18n::content_locales().join(",");
     let rev = crate::db::translations::REV;
+    // A library's own scraping choices are part of the signature, or a title
+    // already done is never revisited when they change.
+    let scrape = crate::services::settings::all_library_scrape(&state.settings);
+    let lib_scrape = |library: &str| {
+        scrape
+            .get(library)
+            .and_then(|options| serde_json::to_string(options).ok())
+            .unwrap_or_default()
+    };
     for i in crate::db::list_items(&state.db, None)? {
         if matches!(i.kind, Kind::Movie | Kind::Video) {
             let pin = item_pins.get(&i.id).copied().unwrap_or(0);
+            let scrape = lib_scrape(&i.library);
             out.push((
                 i.id,
-                format!("{}:{}:{pin}:{langs}:r{rev}", i.title, i.year.unwrap_or(0)),
+                format!(
+                    "{}:{}:{pin}:{langs}:{scrape}:r{rev}",
+                    i.title,
+                    i.year.unwrap_or(0)
+                ),
             ));
         }
     }
     for s in crate::db::list_shows(&state.db, None)? {
         let pin = show_pins.get(&s.id).copied().unwrap_or(0);
+        let scrape = lib_scrape(&s.library);
         out.push((
             s.id,
             format!(
-                "{}:{}:{}:{pin}:{langs}:r{rev}",
+                "{}:{}:{}:{pin}:{langs}:{scrape}:r{rev}",
                 s.title,
                 s.year.unwrap_or(0),
                 s.episode_count

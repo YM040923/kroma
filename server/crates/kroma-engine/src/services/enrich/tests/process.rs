@@ -9,6 +9,7 @@ use crate::infra::metadata::Target;
 fn movie_job(resolved: Option<u64>, refetch: Option<u64>) -> Job {
     Job {
         id: MOVIE_ID.into(),
+        library: "lib".into(),
         target: Target::Movie,
         title: "Title m1".into(),
         year: None,
@@ -68,6 +69,7 @@ fn a_settled_show_with_unreachable_tmdb_still_counts_as_resolved() {
     let counters = Counters::default();
     let job = Job {
         id: SHOW_ID.into(),
+        library: "lib".into(),
         target: Target::Tv,
         title: "Show s1".into(),
         year: None,

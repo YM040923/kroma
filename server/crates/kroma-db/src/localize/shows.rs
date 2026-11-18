@@ -14,9 +14,15 @@ pub fn overlay_shows(pool: &Pool, shows: &mut [Show], locale: &str) -> Result<()
     let conn = pool.get()?;
     let ids: Vec<&str> = shows.iter().map(|s| s.id.as_str()).collect();
     let tr = translations::resolve_many(&conn, metadata_core::SHOW, &ids, locale)?;
+    let art = crate::art_overrides::all(pool, metadata_core::SHOW)?;
     for show in shows.iter_mut() {
         if let Some(t) = tr.get(&show.id) {
             apply_show(show, t);
+        }
+        if let Some(overrides) = art.get(&show.id) {
+            if let Some(meta) = show.metadata.as_mut() {
+                crate::art_overrides::apply(meta, overrides);
+            }
         }
     }
     Ok(())
@@ -37,6 +43,11 @@ pub fn overlay_show_detail(pool: &Pool, detail: &mut ShowDetail, locale: &str) -
     .get(&detail.show.id)
     {
         apply_show(&mut detail.show, t);
+    }
+    if let Ok(overrides) = crate::art_overrides::get(pool, metadata_core::SHOW, &detail.show.id) {
+        if let Some(meta) = detail.show.metadata.as_mut() {
+            crate::art_overrides::apply(meta, &overrides);
+        }
     }
     let ep_ids: Vec<&str> = detail
         .seasons

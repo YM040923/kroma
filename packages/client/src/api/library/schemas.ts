@@ -1,6 +1,15 @@
 import { z } from 'zod';
 import { LibraryId } from '../media';
 
+/** Per-library scraping choices; null/empty follows the server default. */
+export const ScrapeOptions = z.object({
+  language: z.string().nullable(),
+  nfo: z.boolean(),
+  posterLanguage: z.string().nullable(),
+  backdropLanguage: z.string().nullable(),
+});
+export type ScrapeOptions = z.infer<typeof ScrapeOptions>;
+
 /** A named, multi-folder library (`GET /api/admin/libraries`). */
 export const AdminLibrary = z.object({
   id: LibraryId,
@@ -11,6 +20,7 @@ export const AdminLibrary = z.object({
   sizeBytes: z.number(),
   lastScan: z.string().nullable(),
   autoScan: z.boolean(),
+  scrape: ScrapeOptions,
 });
 export type AdminLibrary = z.infer<typeof AdminLibrary>;
 
@@ -26,5 +36,6 @@ export const LibraryPatch = AdminLibrary.pick({
   kind: true,
   folders: true,
   autoScan: true,
+  scrape: true,
 }).exactPartial();
 export type LibraryPatch = z.infer<typeof LibraryPatch>;

@@ -157,6 +157,63 @@ fn default_true() -> bool {
     true
 }
 
+/// Per-library scraping choices, kept under the `libraryScrape` settings key so
+/// the persisted `LibraryDef` shape (and every constructor of it) stays put.
+/// `None`/empty means "follow the global setting"; the language values are TMDB
+/// tags ("zh-CN"), or "textless" for artwork with no printed title.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ScrapeOptions {
+    pub language: Option<String>,
+    pub nfo: bool,
+    pub poster_language: Option<String>,
+    pub backdrop_language: Option<String>,
+}
+
+pub fn library_scrape(settings: &Settings, library_id: &str) -> ScrapeOptions {
+    settings
+        .get("libraryScrape")
+        .get(library_id)
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or_default()
+}
+
+pub fn all_library_scrape(settings: &Settings) -> BTreeMap<String, ScrapeOptions> {
+    settings
+        .get("libraryScrape")
+        .as_object()
+        .map(|map| {
+            map.iter()
+                .filter_map(|(id, value)| {
+                    serde_json::from_value::<ScrapeOptions>(value.clone())
+                        .ok()
+                        .map(|options| (id.clone(), options))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn set_library_scrape(
+    settings: &Settings,
+    pool: &Pool,
+    library_id: &str,
+    options: &ScrapeOptions,
+) {
+    let mut map = settings
+        .get("libraryScrape")
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    map.insert(
+        library_id.to_string(),
+        serde_json::to_value(options).unwrap_or_default(),
+    );
+    let mut patch = BTreeMap::new();
+    patch.insert("libraryScrape".to_string(), Value::Object(map));
+    settings.set_patch(pool, patch);
+}
+
 /// The effective library definitions: persisted defs if present, else seeded
 /// from the env-configured media dirs. Seeding prefers the typed
 /// `KROMA_MOVIES_DIRS` / `KROMA_SERIES_DIRS` roots (one "Films" / "Séries" library
@@ -604,6 +661,25 @@ mod tests {
         assert!(!got[0].auto_scan);
         let folders = all_folders(&s, &cfg);
         assert_eq!(folders, vec![PathBuf::from("/a"), PathBuf::from("/b")]);
+    }
+
+    #[test]
+    fn library_scrape_is_stored_under_its_own_key_and_reads_back() {
+        let pool = test_pool();
+        let s = settings(&pool);
+        assert_eq!(library_scrape(&s, "lib1"), ScrapeOptions::default());
+
+        let wanted = ScrapeOptions {
+            language: Some("en-US".to_string()),
+            nfo: true,
+            poster_language: Some("textless".to_string()),
+            backdrop_language: None,
+        };
+        set_library_scrape(&s, &pool, "lib1", &wanted);
+
+        assert_eq!(library_scrape(&s, "lib1"), wanted);
+        assert_eq!(all_library_scrape(&s).get("lib1"), Some(&wanted));
+        assert_eq!(library_scrape(&s, "other"), ScrapeOptions::default());
     }
 
     #[test]

@@ -4,6 +4,7 @@ import type { ItemId, SubjectId } from '@kromatv/client/media';
 import { formatRuntime } from '@kromatv/core';
 import { useT } from '@kromatv/ui';
 import { Button, type HostElement } from '@kromatv/ui/kit';
+import { ArtworkButton } from '#web/features/catalog/artwork-picker.component';
 import {
   audioFlagLabel,
   audioString,
@@ -110,6 +111,7 @@ export function TitleHero({
             owned={owned}
           />
           <FollowState kind={view.kind === 'show' ? 'show' : 'movie'} tmdbId={view.tmdbId ?? null} />
+          {localId ? <ArtworkButton itemId={localId} title={view.title} /> : null}
         </>
       }
       back={back}
