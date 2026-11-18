@@ -198,7 +198,9 @@ fn build_app_with(
             ),
             (
                 std::any::TypeId::of::<kroma_engine::services::trailers::Trailers>(),
-                Arc::new(kroma_engine::services::trailers::Trailers::in_data_dir(&data_dir)) as Arc<_>,
+                Arc::new(kroma_engine::services::trailers::Trailers::in_data_dir(
+                    &data_dir,
+                )) as Arc<_>,
             ),
         ]);
     let state = AppState::new(

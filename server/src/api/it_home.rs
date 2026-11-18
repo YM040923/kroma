@@ -32,7 +32,12 @@ fn recommended_ids(home: &Value) -> Vec<String> {
         .as_array()
         .expect("sections")
         .iter()
-        .filter(|s| !matches!(s["id"].as_str(), Some("recent" | "recent-shows" | "trending")))
+        .filter(|s| {
+            !matches!(
+                s["id"].as_str(),
+                Some("recent" | "recent-shows" | "trending")
+            )
+        })
         .cloned()
         .collect();
     entry_ids(&Value::Array(recommending))
@@ -184,7 +189,11 @@ async fn home_serves_rails_only_to_a_client_that_names_no_layout() {
 
     assert_eq!(status, StatusCode::OK);
     assert!(!layouts(&body).is_empty());
-    assert!(layouts(&body).iter().all(|layout| *layout == "rail"), "{:?}", layouts(&body));
+    assert!(
+        layouts(&body).iter().all(|layout| *layout == "rail"),
+        "{:?}",
+        layouts(&body)
+    );
 }
 
 #[tokio::test]
@@ -202,5 +211,9 @@ async fn home_opens_on_a_hero_for_a_client_that_draws_one() {
     assert_eq!(layouts(&body)[0], "hero");
     let hero = &body[0];
     assert!(!hero["items"].as_array().unwrap().is_empty());
-    assert_eq!(hero["items"][0]["item"].get("files"), None, "a card carries no files");
+    assert_eq!(
+        hero["items"][0]["item"].get("files"),
+        None,
+        "a card carries no files"
+    );
 }

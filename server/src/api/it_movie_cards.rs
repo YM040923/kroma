@@ -13,7 +13,10 @@ async fn the_card_view_lists_every_movie_without_its_files_or_tracks() {
     let cards = cards.as_array().unwrap();
     assert_eq!(cards.len(), movies.as_array().unwrap().len());
     for card in cards {
-        assert!(card["id"].is_string() && card["title"].is_string(), "{card}");
+        assert!(
+            card["id"].is_string() && card["title"].is_string(),
+            "{card}"
+        );
         assert!(card["addedAt"].is_string(), "{card}");
         for gone in ["files", "subtitles", "audioTracks", "container"] {
             assert!(card.get(gone).is_none(), "{gone} in {card}");

@@ -16,8 +16,8 @@ use crate::api::extract::AuthUser;
 use crate::api::util::blocking;
 use crate::model::Permission;
 use crate::services::network::{
-    CallerPurpose, FlowFilter, MAX_BODY_BYTES, NetworkRules, RECENT_CAPACITY, RulesWriteError,
-    Verdict,
+    CallerPurpose, FlowFilter, NetworkRules, RulesWriteError, Verdict, MAX_BODY_BYTES,
+    RECENT_CAPACITY,
 };
 use crate::state::SharedState;
 

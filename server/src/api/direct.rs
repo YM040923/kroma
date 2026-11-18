@@ -5,7 +5,7 @@
 use std::net::{IpAddr, SocketAddr};
 
 use axum::extract::{ConnectInfo, Query, State};
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::error::json_error;
 use crate::api::util::{client_ip, trusted};
-use crate::services::direct::{Asker, is_private_client};
+use crate::services::direct::{is_private_client, Asker};
 use crate::state::SharedState;
 
 // What a hop between the client and this server writes. A request on a direct

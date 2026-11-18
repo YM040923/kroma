@@ -213,7 +213,10 @@ async fn with_passwords_off_a_member_is_refused_and_an_admin_still_gets_in() {
     let mut input = provider_input(&round.idp);
     input["id"] = json!("p0");
     let off = methods(false, true, json!([input]));
-    assert_eq!(save(&round.t, &round.t.token, off).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(
+        save(&round.t, &round.t.token, off).await.0,
+        StatusCode::NO_CONTENT
+    );
 
     let (member, body) = password_login(&round.t, "member").await;
     let (admin, _) = password_login(&round.t, "admin").await;
@@ -332,7 +335,10 @@ async fn a_provider_that_is_not_valid_is_not_saved() {
             broken("issuer", json!("http://id.example.com")),
             "sso.issuerInvalid",
         ),
-        (broken("scopes", json!(["two words"])), "sso.providerInvalid"),
+        (
+            broken("scopes", json!(["two words"])),
+            "sso.providerInvalid",
+        ),
         (broken("icon", json!("<svg>")), "sso.providerInvalid"),
         (
             config_with(json!(vec![provider_input(&idp); 9])),
@@ -587,10 +593,19 @@ async fn a_preset_says_what_its_form_starts_with_and_where_to_set_it_up() {
     assert_eq!(google["name"], json!("Google"));
     assert_eq!(google["issuer"], json!("https://accounts.google.com"));
     assert_eq!(google["groupClaim"], json!("groups"));
-    assert!(google["console"].as_str().unwrap().starts_with("https://console.cloud.google.com/"));
-    assert!(google["docs"].as_str().unwrap().starts_with("https://developers.google.com/"));
+    assert!(google["console"]
+        .as_str()
+        .unwrap()
+        .starts_with("https://console.cloud.google.com/"));
+    assert!(google["docs"]
+        .as_str()
+        .unwrap()
+        .starts_with("https://developers.google.com/"));
     assert_eq!(preset_of(&config, "entra")["label"], json!("Microsoft"));
-    assert_eq!(preset_of(&config, "gitlab")["groupClaim"], json!("groups_direct"));
+    assert_eq!(
+        preset_of(&config, "gitlab")["groupClaim"],
+        json!("groups_direct")
+    );
     assert_eq!(preset_of(&config, "keycloak").get("console"), None);
 }
 

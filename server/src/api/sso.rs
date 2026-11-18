@@ -20,8 +20,8 @@ mod identities;
 mod image;
 
 pub(crate) use begin::{begin, FlowClient};
-pub(crate) use image::{method_brand, method_image, preset_views};
 pub(crate) use identities::has_a_way_in;
+pub(crate) use image::{method_brand, method_image, preset_views};
 
 /// The callback's path under an origin, which is what a provider is given as
 /// this server's redirect URI.
@@ -87,7 +87,9 @@ pub(crate) const APP_RETURN: &str = "kroma://sso";
 /// one of the operator's own when they named any (the rule passkeys follow).
 pub(crate) fn accepted_origin(state: &SharedState, origin: &str) -> Option<String> {
     let origin = origin.trim().trim_end_matches('/');
-    let bare = origin.split_once("://").is_some_and(|(_, rest)| !rest.contains('/'));
+    let bare = origin
+        .split_once("://")
+        .is_some_and(|(_, rest)| !rest.contains('/'));
     if !bare || web_target(origin).is_none() {
         return None;
     }

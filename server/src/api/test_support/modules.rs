@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use axum::http::StatusCode;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use super::{TestApp, get, send};
+use super::{get, send, TestApp};
 
 /// Install a stub module `id` whose `module.json` ends with `extra` (`""`, or
 /// `, "settings": {...}`), and the token its callbacks carry.

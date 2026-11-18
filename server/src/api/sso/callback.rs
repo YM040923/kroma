@@ -79,8 +79,16 @@ async fn settle(state: &SharedState, flow: &Flow, code: String) -> Result<Outcom
     };
 
     let (caller, asked, flown) = (state.clone(), provider.clone(), flow.clone());
-    let identified =
-        blocking(move || Ok(identify(&caller.sso.directory, &asked, &flown, &code, now()))).await?;
+    let identified = blocking(move || {
+        Ok(identify(
+            &caller.sso.directory,
+            &asked,
+            &flown,
+            &code,
+            now(),
+        ))
+    })
+    .await?;
     let identity = match identified {
         Ok(identity) => identity,
         Err(e) => {
@@ -92,7 +100,11 @@ async fn settle(state: &SharedState, flow: &Flow, code: String) -> Result<Outcom
     let (decided_by, intent) = (provider.clone(), flow.intent.clone());
     let outcome = query(&state.db, move |pool| {
         let outcome = admit(&pool, &decided_by, identity, &intent, now())?;
-        if let Outcome::SignedIn { user_id, created: true } = &outcome {
+        if let Outcome::SignedIn {
+            user_id,
+            created: true,
+        } = &outcome
+        {
             db::set_whats_new_seen(&pool, user_id, crate::VERSION)?;
         }
         Ok(outcome)
@@ -113,7 +125,10 @@ async fn tell_the_admins(state: &SharedState, provider: &Provider, person: &Pers
         "notifications.system.join.requested.title",
         "notifications.system.join.requested.body",
     )
-    .param("user", person.name.clone().unwrap_or_else(|| person.label()))
+    .param(
+        "user",
+        person.name.clone().unwrap_or_else(|| person.label()),
+    )
     .param("provider", provider.label.clone())
     .link("/admin/users");
     let teller = state.clone();

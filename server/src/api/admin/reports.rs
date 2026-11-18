@@ -19,8 +19,7 @@ use crate::db;
 use crate::infra::events::ServerEvent;
 use crate::model::{
     Audience, NotificationEvent, NotificationSpec, NotificationSubject, Permission, Report,
-    ReportCategory,
-    ReportCounts, ReportStatus, ReportSubjectKind, ReportsView, User,
+    ReportCategory, ReportCounts, ReportStatus, ReportSubjectKind, ReportsView, User,
 };
 use crate::services::jobs::now_ms;
 use crate::state::SharedState;

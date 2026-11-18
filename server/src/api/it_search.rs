@@ -13,5 +13,8 @@ async fn search_answers_cards_when_asked_and_whole_titles_otherwise() {
     assert!(whole["results"][0]["item"]["files"].is_array());
     assert_eq!(cards["results"][0]["type"], json!("movie"));
     assert_eq!(cards["results"][0]["item"].get("files"), None);
-    assert_eq!(cards["results"][0]["item"]["id"], whole["results"][0]["item"]["id"]);
+    assert_eq!(
+        cards["results"][0]["item"]["id"],
+        whole["results"][0]["item"]["id"]
+    );
 }

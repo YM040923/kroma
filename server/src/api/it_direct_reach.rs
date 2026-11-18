@@ -2,8 +2,8 @@ use axum::http::StatusCode;
 use serde_json::json;
 
 use crate::api::test_support::{
-    HOUSEHOLD_PUBLIC_IP, NEIGHBOUR, TestApp, echo_answering, get, get_from, offer,
-    offer_through_the_tunnel, raw, send, test_app, test_app_served_at,
+    echo_answering, get, get_from, offer, offer_through_the_tunnel, raw, send, test_app,
+    test_app_served_at, TestApp, HOUSEHOLD_PUBLIC_IP, NEIGHBOUR,
 };
 
 async fn preflight(t: &TestApp, origin: &str) -> axum::http::HeaderMap {

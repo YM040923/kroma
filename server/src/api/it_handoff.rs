@@ -717,13 +717,24 @@ async fn a_preflight_names_the_method_and_headers_it_allows() {
         &[
             ("origin", "file://"),
             ("access-control-request-method", "POST"),
-            ("access-control-request-headers", "content-type,authorization"),
+            (
+                "access-control-request-headers",
+                "content-type,authorization",
+            ),
         ],
     )
     .await;
 
-    let named = |name: &str| headers.get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
-    assert_eq!(named("access-control-allow-methods").as_deref(), Some("POST"));
+    let named = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    };
+    assert_eq!(
+        named("access-control-allow-methods").as_deref(),
+        Some("POST")
+    );
     assert_eq!(
         named("access-control-allow-headers").as_deref(),
         Some("content-type,authorization")

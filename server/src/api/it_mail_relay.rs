@@ -34,7 +34,11 @@ fn stub_relay() -> StubRelay {
             answer(stream, &at, &log, &yes);
         }
     });
-    StubRelay { base, calls, active }
+    StubRelay {
+        base,
+        calls,
+        active,
+    }
 }
 
 fn answer(stream: TcpStream, base: &str, log: &Mutex<Vec<(String, Value)>>, yes: &AtomicBool) {
@@ -179,7 +183,8 @@ async fn the_relay_probe_delivers_once_the_server_is_active() {
 }
 
 #[tokio::test]
-async fn a_members_mail_waits_for_the_owner_to_activate_the_server_and_then_goes_straight_through() {
+async fn a_members_mail_waits_for_the_owner_to_activate_the_server_and_then_goes_straight_through()
+{
     let stub = stub_relay();
     let t = relay_app(&stub);
     let (uid, _) = seed_session(&t.state, "pat@test.dev", "pat", &[Permission::Playback]);

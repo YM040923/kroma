@@ -130,7 +130,10 @@ pub async fn exchange_token(
         return resp;
     }
     Json(crate::api::dto::SessionResult {
-        media_ticket: crate::services::media_ticket::for_access_token(&state.media_ticket_key, &access),
+        media_ticket: crate::services::media_ticket::for_access_token(
+            &state.media_ticket_key,
+            &access,
+        ),
         token,
         user,
     })

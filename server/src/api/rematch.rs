@@ -26,8 +26,13 @@ pub fn routes() -> Router<SharedState> {
 }
 
 fn subject_of(user: &User, kind: &str) -> Result<Subject, Response> {
-    Subject::parse(kind)
-        .ok_or_else(|| lerr(i18n::user_locale(user), StatusCode::NOT_FOUND, "error.itemNotFound"))
+    Subject::parse(kind).ok_or_else(|| {
+        lerr(
+            i18n::user_locale(user),
+            StatusCode::NOT_FOUND,
+            "error.itemNotFound",
+        )
+    })
 }
 
 #[derive(Debug, Deserialize)]

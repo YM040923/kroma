@@ -197,9 +197,12 @@ function usePlayerRoot({
     setTransportHeight((prev) => (prev === height || height <= 0 ? prev : height));
   }, []);
   const transport = transportHeight || px(TRANSPORT_HEIGHT);
-  // Reserve the peek's height whenever there is something to peek at, so the
-  // transport does not jump when the pointer reaches the bottom edge.
-  const bottomInset = hasUpNext(upNext) && !ending.over ? PEEK_HEIGHT : px(28);
+  // Reserve the peek's height only while paused: the peek itself never shows
+  // during playback (see deriveChrome), so a mid-play reveal would otherwise
+  // float the transport 150px off the bottom. While paused the reservation is
+  // kept regardless of pointer position, so the transport does not jump when
+  // the pointer reaches the bottom edge.
+  const bottomInset = hasUpNext(upNext) && !ending.over && !c.playing ? PEEK_HEIGHT : px(28);
   const clearance = bottomInset + transport + px(SKIP_GAP);
   const introLift = chromeShown ? clearance : px(SKIP_REST);
   const cueClearance = chromeShown ? clearance : 0;

@@ -15,10 +15,7 @@ const ANOTHER_HOUSE: &str = "203.0.113.9";
 
 async fn at_home() -> TestApp {
     let t = test_app_served_at(None, Some(&echo_answering("203.0.113.7\n").await));
-    t.state
-        .direct
-        .learn_public_address(&t.state.settings)
-        .await;
+    t.state.direct.learn_public_address(&t.state.settings).await;
     t
 }
 
@@ -30,9 +27,16 @@ async fn listed_from(t: &TestApp, ip: &str) -> Vec<Value> {
 
 async fn grant_from(t: &TestApp, handle: &Value, ip: &str) -> StatusCode {
     let body = json!({ "handle": handle });
-    from(t, "POST", "/api/handoff/grant", Some(&t.token), Some(body), ip)
-        .await
-        .0
+    from(
+        t,
+        "POST",
+        "/api/handoff/grant",
+        Some(&t.token),
+        Some(body),
+        ip,
+    )
+    .await
+    .0
 }
 
 #[tokio::test]

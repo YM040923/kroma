@@ -13,6 +13,7 @@ import {
 } from '@kromatv/ui/kit';
 import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import {
+  type SubscriptionCalendarEntry,
   type SubscriptionConfig,
   type SubscriptionItem,
   type SubscriptionPreference,
@@ -21,7 +22,7 @@ import {
   useSubscriptionsApi,
 } from './api.hook';
 
-type Tab = 'movie' | 'show' | 'source' | 'rules' | 'config';
+type Tab = 'movie' | 'show' | 'calendar' | 'source' | 'rules' | 'config';
 type StatusFilter = 'all' | 'active' | 'completed' | 'failed';
 type UpdatedFilter = 'all' | 'today' | 'week';
 
@@ -110,6 +111,29 @@ const FILTER_ROW: CSSProperties = {
 
 const TABS: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 18 };
 
+const CAL_ROW: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 14,
+  padding: '12px 0',
+  borderTop: '1px solid var(--kroma-border)',
+};
+
+const CAL_DATE: CSSProperties = {
+  minWidth: 92,
+  font: 'var(--type-label)',
+  color: 'var(--kroma-text-dim)',
+};
+
+const CAL_POSTER: CSSProperties = {
+  width: 44,
+  height: 66,
+  flex: '0 0 44px',
+  borderRadius: 'var(--radius-sm)',
+  objectFit: 'cover',
+  background: 'linear-gradient(158deg, var(--kroma-surface-3), var(--kroma-surface-1))',
+};
+
 const FORM_GRID: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -141,6 +165,8 @@ export default function SubscriptionsPage() {
   const [configSaved, setConfigSaved] = useState(false);
   const [confirmItem, setConfirmItem] = useState('');
   const [tab, setTab] = useState<Tab>('movie');
+  const [calendar, setCalendar] = useState<SubscriptionCalendarEntry[] | null>(null);
+  const [calendarBusy, setCalendarBusy] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [network, setNetwork] = useState<'all' | '115'>('all');
   const [updated, setUpdated] = useState<UpdatedFilter>('all');
@@ -168,6 +194,16 @@ export default function SubscriptionsPage() {
       .then(setConfig)
       .catch(() => undefined);
   }, [api]);
+
+  useEffect(() => {
+    if (tab !== 'calendar' || calendar !== null || calendarBusy) return;
+    setCalendarBusy(true);
+    api
+      .calendar()
+      .then((view) => setCalendar(view.entries))
+      .catch((reason) => setError(String(reason)))
+      .finally(() => setCalendarBusy(false));
+  }, [tab, calendar, calendarBusy, api]);
 
   const tasks = useMemo(() => {
     if (!data) return [];
@@ -362,6 +398,7 @@ export default function SubscriptionsPage() {
           [
             ['movie', 'subscriptions.movies'],
             ['show', 'subscriptions.shows'],
+            ['calendar', 'subscriptions.calendar'],
             ['rules', 'subscriptions.rules'],
             ['config', 'subscriptions.config'],
             ['source', 'subscriptions.settings'],
@@ -485,6 +522,49 @@ export default function SubscriptionsPage() {
           ) : (
             <Text variant="meta" color="danger" mt={12}>
               {t('subscriptions.configLoadFailed')}
+            </Text>
+          )}
+          {error ? (
+            <Text variant="meta" color="danger" mt={10}>
+              {error}
+            </Text>
+          ) : null}
+        </Surface>
+      ) : tab === 'calendar' ? (
+        <Surface elevated border="border" pad="none" px={22} py={20} mt={20}>
+          <Text variant="meta" color="textDim">
+            {t('subscriptions.calendarHint')}
+          </Text>
+          {calendarBusy ? (
+            <Text variant="meta" color="textDim" mt={12}>
+              {t('subscriptions.calendarLoading')}
+            </Text>
+          ) : calendar && calendar.length > 0 ? (
+            <Box mt={12}>
+              {calendar.map((entry) => (
+                <div
+                  key={`${entry.taskId}-${entry.season}-${entry.episode}-${entry.date}`}
+                  style={CAL_ROW}
+                >
+                  <div style={CAL_DATE}>{entry.date}</div>
+                  {entry.poster ? (
+                    <img src={entry.poster} alt="" style={CAL_POSTER} />
+                  ) : (
+                    <div style={CAL_POSTER} />
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <Text variant="label">{entry.title}</Text>
+                    <Text variant="meta" color="textDim">
+                      S{entry.season} · E{entry.episode}
+                      {entry.episodeName ? ` · ${entry.episodeName}` : ''}
+                    </Text>
+                  </div>
+                </div>
+              ))}
+            </Box>
+          ) : (
+            <Text variant="meta" color="textDim" mt={12}>
+              {t('subscriptions.calendarEmpty')}
             </Text>
           )}
           {error ? (

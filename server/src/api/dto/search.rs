@@ -9,13 +9,23 @@ use crate::model::{show_card, MediaCard, MediaItem, Show};
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum SearchHit {
-    Movie { item: MediaItem },
-    Show { show: Show },
-    Episode { item: MediaItem },
+    Movie {
+        item: MediaItem,
+    },
+    Show {
+        show: Show,
+    },
+    Episode {
+        item: MediaItem,
+    },
     #[serde(rename = "movie")]
-    MovieCard { item: MediaCard },
+    MovieCard {
+        item: MediaCard,
+    },
     #[serde(rename = "episode")]
-    EpisodeCard { item: MediaCard },
+    EpisodeCard {
+        item: MediaCard,
+    },
 }
 
 impl SearchHit {
@@ -47,7 +57,9 @@ impl SearchHit {
             Self::Show { show } => (true, show.metadata.as_ref()),
             Self::Episode { .. } | Self::EpisodeCard { .. } => return None,
         };
-        metadata.map(|m| (show, m.tmdb_id)).filter(|(_, id)| *id != 0)
+        metadata
+            .map(|m| (show, m.tmdb_id))
+            .filter(|(_, id)| *id != 0)
     }
 
     fn episodes(&self) -> u32 {
@@ -176,7 +188,11 @@ mod tests {
 
     #[test]
     fn a_show_held_under_two_rows_is_listed_once_as_the_fuller_one() {
-        let hits = vec![show("half", 84773, 8), movie("film", 7), show("whole", 84773, 16)];
+        let hits = vec![
+            show("half", 84773, 8),
+            movie("film", 7),
+            show("whole", 84773, 16),
+        ];
 
         let listed = one_per_title(hits);
 

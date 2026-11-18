@@ -50,7 +50,11 @@ fn a_module_published_only_as_native_builds_is_listed_but_not_offered() {
         serde_json::to_value(&refusal).unwrap(),
         json!({ "kind": "native" })
     );
-    assert!(refusal.reason().contains("native build"), "{}", refusal.reason());
+    assert!(
+        refusal.reason().contains("native build"),
+        "{}",
+        refusal.reason()
+    );
 }
 
 #[test]
@@ -124,8 +128,7 @@ fn a_descriptor_is_followed_to_the_index_beside_it_and_a_catalog_is_not() {
 
 #[test]
 fn a_registry_speaking_a_newer_contract_is_refused() {
-    let future: Value =
-        serde_json::from_str(r#"{ "apiVersion": 2, "modules": ["a.b"] }"#).unwrap();
+    let future: Value = serde_json::from_str(r#"{ "apiVersion": 2, "modules": ["a.b"] }"#).unwrap();
     let err = index_url(&future, "https://r.example/registry.json").unwrap_err();
     assert!(err.to_string().contains("apiVersion 2"), "{err}");
 }

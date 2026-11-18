@@ -33,8 +33,8 @@ use session::{
 };
 use verify_email::{check_verification, confirm_verification};
 
-pub(crate) use session::{auth_result, issue_tokens};
 pub(super) use session::mint_device_tokens;
+pub(crate) use session::{auth_result, issue_tokens};
 
 /// PIN routes live in [`super::pin`]; invitations in [`super::invites`].
 pub fn routes() -> Router<SharedState> {

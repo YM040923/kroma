@@ -79,12 +79,7 @@ pub async fn reset_user(
     let (row_token, owner_id, target_id) = (token.clone(), user.id.clone(), id.clone());
     query(&state.db, move |pool| {
         db::create_reset(
-            &pool,
-            &row_token,
-            &target_id,
-            &code_hash,
-            &owner_id,
-            expires_at,
+            &pool, &row_token, &target_id, &code_hash, &owner_id, expires_at,
         )
     })
     .await?;
@@ -124,17 +119,14 @@ pub async fn send_email_verification(
     let address = target.email.clone();
     query(&state.db, move |pool| {
         db::create_verification(
-            &pool,
-            &row_token,
-            &target_id,
-            &address,
-            &owner_id,
-            expires_at,
+            &pool, &row_token, &target_id, &address, &owner_id, expires_at,
         )
     })
     .await?;
     let base = super::super::web_base(&state);
-    let url = base.as_ref().map(|w| format!("{w}/verify-email?token={token}"));
+    let url = base
+        .as_ref()
+        .map(|w| format!("{w}/verify-email?token={token}"));
     let delivered = deliver(
         &state,
         &target,

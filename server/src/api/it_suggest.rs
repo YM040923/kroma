@@ -98,8 +98,7 @@ async fn a_hidden_seed_answers_like_an_unknown_one() {
 async fn a_seed_the_catalogue_does_not_hold_is_terminal_and_caches_nothing() {
     let t = test_app();
 
-    let (status, body) =
-        get(&t.app, "/api/items/no-such-item/ai-suggest", Some(&t.token)).await;
+    let (status, body) = get(&t.app, "/api/items/no-such-item/ai-suggest", Some(&t.token)).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["id"], "ai:suggest");

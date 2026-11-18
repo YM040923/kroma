@@ -39,6 +39,19 @@ const Item = z.object({
   price: z.number().default(0),
 });
 const View = z.object({ sourceUrl: z.string().default(''), tasks: z.array(Task), items: z.array(Item) });
+const CalendarEntry = z.object({
+  date: z.string(),
+  title: z.string(),
+  season: z.number().default(0),
+  episode: z.number().default(0),
+  episodeName: z.string().default(''),
+  poster: z.string().default(''),
+  taskId: z.string().default(''),
+});
+const CalendarView = z.object({
+  entries: z.array(CalendarEntry),
+  updatedAt: z.number().default(0),
+});
 const Preference = z.object({
   minSizeGb: z.number().default(0),
   maxSizeGb: z.number().default(0),
@@ -54,6 +67,7 @@ const SourceConfig = z.object({
 });
 export type SubscriptionTask = z.infer<typeof Task>;
 export type SubscriptionItem = z.infer<typeof Item>;
+export type SubscriptionCalendarEntry = z.infer<typeof CalendarEntry>;
 export type SubscriptionPreference = z.infer<typeof Preference>;
 export type SubscriptionConfig = z.infer<typeof SourceConfig>;
 export interface SubscriptionConfigInput {
@@ -89,4 +103,5 @@ export const useSubscriptionsApi = moduleApiHook((api) => ({
   source: (url: string) => api.post('/source', { url }, View),
   config: () => api.get('/config', SourceConfig),
   saveConfig: (body: SubscriptionConfigInput) => api.post('/config', body, SourceConfig),
+  calendar: () => api.get('/calendar', CalendarView),
 }));

@@ -212,7 +212,11 @@ async fn check_password(
         return Ok(());
     }
     match record_fail(state, uid).await? {
-        0 => Err(lerr(loc, StatusCode::UNAUTHORIZED, "auth.passwordCurrentWrong")),
+        0 => Err(lerr(
+            loc,
+            StatusCode::UNAUTHORIZED,
+            "auth.passwordCurrentWrong",
+        )),
         secs => Err(locked_response(loc, secs)),
     }
 }

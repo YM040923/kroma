@@ -347,7 +347,10 @@ async fn the_relay_probe_needs_the_relay_chosen_and_a_public_address() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let reason = body["error"].as_str().unwrap_or_default();
-    assert!(!reason.is_empty() && !reason.starts_with("admin."), "{reason}");
+    assert!(
+        !reason.is_empty() && !reason.starts_with("admin."),
+        "{reason}"
+    );
 
     t.state.settings.set_patch(
         &t.state.db,
@@ -365,7 +368,10 @@ async fn the_relay_probe_needs_the_relay_chosen_and_a_public_address() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let reason = body["error"].as_str().unwrap_or_default();
-    assert!(!reason.is_empty() && !reason.starts_with("admin."), "{reason}");
+    assert!(
+        !reason.is_empty() && !reason.starts_with("admin."),
+        "{reason}"
+    );
 }
 
 #[tokio::test]

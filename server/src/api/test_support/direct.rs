@@ -6,7 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use axum::http::StatusCode;
 use serde_json::Value;
 
-use super::{TestApp, raw};
+use super::{raw, TestApp};
 
 pub const NEIGHBOUR: SocketAddr =
     SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20)), 51000);

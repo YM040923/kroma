@@ -95,7 +95,12 @@ async fn a_stranger_waits_for_an_admin_and_gets_in_once_approved() {
     assert_eq!(asked, json!({ "status": "requested" }));
     assert_eq!(db::user_count(&round.t.state.db).unwrap(), 1);
 
-    let (_, requests) = get(&round.t.app, "/api/admin/join-requests", Some(&round.t.token)).await;
+    let (_, requests) = get(
+        &round.t.app,
+        "/api/admin/join-requests",
+        Some(&round.t.token),
+    )
+    .await;
     assert_eq!(requests["waiting"][0]["email"], json!("lea@id.test"));
     assert_eq!(requests["waiting"][0]["provider"], json!("Home"));
     let id = requests["waiting"][0]["id"].as_str().unwrap();
@@ -124,7 +129,12 @@ async fn a_stranger_waits_for_an_admin_and_gets_in_once_approved() {
 async fn a_declined_stranger_is_refused_until_the_request_is_removed() {
     let round = at_provider(|_| {});
     round.sign_in(lea()).await;
-    let (_, requests) = get(&round.t.app, "/api/admin/join-requests", Some(&round.t.token)).await;
+    let (_, requests) = get(
+        &round.t.app,
+        "/api/admin/join-requests",
+        Some(&round.t.token),
+    )
+    .await;
     let id = requests["waiting"][0]["id"].as_str().unwrap().to_string();
 
     let (status, _) = send(
@@ -140,7 +150,12 @@ async fn a_declined_stranger_is_refused_until_the_request_is_removed() {
         round.sign_in(lea()).await,
         json!({ "status": "refused", "reason": "blocked" })
     );
-    let (_, requests) = get(&round.t.app, "/api/admin/join-requests", Some(&round.t.token)).await;
+    let (_, requests) = get(
+        &round.t.app,
+        "/api/admin/join-requests",
+        Some(&round.t.token),
+    )
+    .await;
     assert_eq!(requests["waiting"], json!([]));
     assert_eq!(requests["declined"][0]["id"], json!(id));
 
@@ -196,7 +211,10 @@ async fn an_invitation_accepted_with_the_provider_creates_the_account() {
 
     let uninvited = round.sign_in(lea()).await;
     let invited = round
-        .sign_in_with(json!({ "provider": "p0", "invite": invite["token"] }), lea())
+        .sign_in_with(
+            json!({ "provider": "p0", "invite": invite["token"] }),
+            lea(),
+        )
         .await;
 
     assert_eq!(uninvited, json!({ "status": "invitationOnly" }));
@@ -254,7 +272,14 @@ async fn an_outcome_needs_the_secret_and_the_code_and_is_given_once() {
         .await;
     let returned = round.through(&started, lea()).await;
     let finish = |keys: Value| async {
-        send(&round.t.app, "POST", "/api/auth/sso/finish", None, Some(keys)).await
+        send(
+            &round.t.app,
+            "POST",
+            "/api/auth/sso/finish",
+            None,
+            Some(keys),
+        )
+        .await
     };
 
     let mut without_code = returned.keys();
@@ -299,7 +324,9 @@ async fn a_callback_nobody_started_or_played_twice_is_refused() {
         .approve(started["authorizeUrl"].as_str().unwrap(), lea());
 
     let (made_up, _) = round
-        .follow(&format!("{ORIGIN}/api/auth/sso/callback?code=x&state=made-up"))
+        .follow(&format!(
+            "{ORIGIN}/api/auth/sso/callback?code=x&state=made-up"
+        ))
         .await;
     let (first, _) = round.follow(&redirect).await;
     let (replayed, _) = round.follow(&redirect).await;
@@ -497,15 +524,28 @@ async fn an_app_cannot_begin_a_flow_under_an_origin_the_operator_did_not_name() 
 #[tokio::test]
 async fn a_waiting_request_is_listed_under_a_name_no_account_has() {
     let round = at_provider(|_| {});
-    seed_session(&round.t.state, "other@test.dev", "lea", &[Permission::Playback]);
+    seed_session(
+        &round.t.state,
+        "other@test.dev",
+        "lea",
+        &[Permission::Playback],
+    );
     round.sign_in(lea()).await;
 
-    let (_, requests) = get(&round.t.app, "/api/admin/join-requests", Some(&round.t.token)).await;
+    let (_, requests) = get(
+        &round.t.app,
+        "/api/admin/join-requests",
+        Some(&round.t.token),
+    )
+    .await;
     let waiting = &requests["waiting"][0];
     let (status, approved) = send(
         &round.t.app,
         "POST",
-        &format!("/api/admin/join-requests/{}/approve", waiting["id"].as_str().unwrap()),
+        &format!(
+            "/api/admin/join-requests/{}/approve",
+            waiting["id"].as_str().unwrap()
+        ),
         Some(&round.t.token),
         Some(json!({ "username": waiting["username"], "permissions": ["playback"] })),
     )

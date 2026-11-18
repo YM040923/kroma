@@ -55,12 +55,28 @@ pub struct Item {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
+pub struct CalendarEntry {
+    pub date: String,
+    pub title: String,
+    pub season: i64,
+    pub episode: i64,
+    pub episode_name: String,
+    pub poster: String,
+    pub task_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
 pub struct Stored {
     /// Where releases are searched for. A local service that speaks the
     /// source's own protocol; the module never talks to the site itself.
     pub source_url: String,
     /// Last discovery pass, so opening the page does not hammer the source.
     pub last_discovery_at: i64,
+    /// Upcoming episodes, cached so opening the calendar does not read TMDB
+    /// once per task on every visit.
+    pub last_calendar_at: i64,
+    pub calendar: Vec<CalendarEntry>,
     pub tasks: Vec<Task>,
     pub items: Vec<Item>,
 }

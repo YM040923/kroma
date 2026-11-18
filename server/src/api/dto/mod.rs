@@ -19,11 +19,11 @@ pub use auth::{
     SessionResult, VerificationCreated,
 };
 pub use pairing::{PairingPoll, QuickConnectInit};
+pub use search::{
+    one_per_title, PersonDetailResponse, PersonHit, PersonResponse, SearchHit, SearchResponse,
+};
 pub use sso::{
     BrandView, Discovered, FlowResult, FlowStarted, GateMethod, IdentityView, JoinRequestView,
     JoinRequests, LookView, MethodView, PresetView, ProviderView, SignInAdmin, SignInMethods,
     TestReportView,
-};
-pub use search::{
-    one_per_title, PersonDetailResponse, PersonHit, PersonResponse, SearchHit, SearchResponse,
 };

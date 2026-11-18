@@ -1,6 +1,10 @@
 {
   "nav.subscriptions": "Subscriptions",
   "subscriptions.action": "Subscribe",
+  "subscriptions.calendar": "Calendar",
+  "subscriptions.calendarEmpty": "No upcoming episodes for the enabled series subscriptions.",
+  "subscriptions.calendarHint": "Upcoming episodes of enabled series subscriptions, with TMDB air dates. Nothing is unlocked from here.",
+  "subscriptions.calendarLoading": "Reading air dates…",
   "subscriptions.add": "Subscribe",
   "subscriptions.added": "Added",
   "subscriptions.dialogTitle": "Subscribe from a source",

@@ -124,8 +124,13 @@ async fn verified_artifact(
     entry: &CatalogModule,
     on_progress: kroma_module_supervisor::FetchProgress<'_>,
 ) -> Result<(String, Vec<u8>)> {
-    let artifact = catalog::pick_artifact(entry)
-        .ok_or_else(|| anyhow!("'{}' is {}", entry.id, super::refusal::Refusal::Native.reason()))?;
+    let artifact = catalog::pick_artifact(entry).ok_or_else(|| {
+        anyhow!(
+            "'{}' is {}",
+            entry.id,
+            super::refusal::Refusal::Native.reason()
+        )
+    })?;
     if !artifact.url.starts_with("https://") {
         bail!(
             "'{}' artifact URL must be https (got '{}')",
@@ -318,7 +323,9 @@ pub async fn update_all(
         // this one no longer needs to.
         let mut planner = Planner::new(state, &modules);
         let result = match planner.roots(&[entry.id.as_str()]) {
-            Ok(()) => run_plan(sup, &op, &planner.plan, Unattended::Yes).await.map(|_| ()),
+            Ok(()) => run_plan(sup, &op, &planner.plan, Unattended::Yes)
+                .await
+                .map(|_| ()),
             Err(e) => Err(e),
         };
         match result {

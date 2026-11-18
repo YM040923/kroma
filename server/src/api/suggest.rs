@@ -133,8 +133,7 @@ fn section(
     items: Vec<crate::model::SectionItem>,
 ) -> Response {
     let title = i18n::t(locale, "content.aiSuggestions", &[]);
-    Json(Some(Section::rail("ai:suggest", title, reason, items)))
-    .into_response()
+    Json(Some(Section::rail("ai:suggest", title, reason, items))).into_response()
 }
 
 // A cached row that was never asked for the reader's language is regenerated,

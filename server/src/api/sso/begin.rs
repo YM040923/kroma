@@ -60,7 +60,16 @@ pub async fn start(
 ) -> Response {
     let invite = body.invite.filter(|token| !token.trim().is_empty());
     let intent = Intent::SignIn { invite };
-    begin(&state, loc, &headers, &addr, &body.provider, intent, &body.client).await
+    begin(
+        &state,
+        loc,
+        &headers,
+        &addr,
+        &body.provider,
+        intent,
+        &body.client,
+    )
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,7 +90,16 @@ pub async fn link(
     Json(body): Json<LinkBody>,
 ) -> Response {
     let intent = Intent::Link { user_id: user.id };
-    begin(&state, loc, &headers, &addr, &body.provider, intent, &body.client).await
+    begin(
+        &state,
+        loc,
+        &headers,
+        &addr,
+        &body.provider,
+        intent,
+        &body.client,
+    )
+    .await
 }
 
 /// Opens a flow for `intent` at `provider_id`. A test may run against a
@@ -108,7 +126,13 @@ pub(crate) async fn begin(
     let testing = matches!(intent, Intent::Test { .. });
     let provider = sign_in_config(state)
         .provider(provider_id)
-        .filter(|p| if testing { p.is_configured() } else { p.is_live() })
+        .filter(|p| {
+            if testing {
+                p.is_configured()
+            } else {
+                p.is_live()
+            }
+        })
         .cloned();
     let Some(provider) = provider else {
         return lerr(loc, StatusCode::NOT_FOUND, "sso.providerUnknown");

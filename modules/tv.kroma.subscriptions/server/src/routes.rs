@@ -8,7 +8,7 @@ use kroma_module_sdk::http::Fetch;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::store::{self, Item, Task};
+use crate::store::{self, CalendarEntry, Item, Task};
 
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
@@ -76,6 +76,7 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/subscriptions/{id}/scan", post(scan::<S>))
         .route("/source", post(set_source::<S>))
         .route("/config", get(get_config::<S>).post(set_config::<S>))
+        .route("/calendar", get(calendar::<S>))
         .route("/search", post(search::<S>))
         .route("/subscribe", post(subscribe::<S>))
         .route("/subscriptions/{id}/execute", post(execute::<S>))
@@ -110,6 +111,69 @@ async fn set_config<S: HostCtx + Clone + Send + Sync + 'static>(State(host): Sta
     source_json(&source, "/config", Some(&body))
         .map(Json)
         .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))
+}
+
+/// Upcoming episodes of the enabled series subscriptions. TMDB air dates come
+/// from the host, so the module never holds a provider key; the answer is
+/// cached because a page visit must not read every task's season again.
+async fn calendar<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser) -> Result<Json<Value>, axum::response::Response> {
+    require(&host, &user)?;
+    let mut stored = store::load();
+    let now = kroma_module_sdk::primitives::now_ms();
+    if now - stored.last_calendar_at < 15 * 60 * 1000 {
+        return Ok(Json(serde_json::json!({
+            "entries": stored.calendar,
+            "updatedAt": stored.last_calendar_at,
+        })));
+    }
+    let today: String = kroma_module_sdk::primitives::now_iso8601()
+        .chars()
+        .take(10)
+        .collect();
+    let mut entries = Vec::new();
+    for task in stored
+        .tasks
+        .iter()
+        .filter(|task| task.enabled && task.kind == "show" && task.tmdb_id > 0 && task.season > 0)
+    {
+        for episode in host.metadata_episodes(task.tmdb_id as u64, task.season as u32) {
+            let Some(date) = episode.air_date.filter(|date| date.len() >= 10) else {
+                continue;
+            };
+            if date < today {
+                continue;
+            }
+            if task.episode_start > 0 && (episode.episode as i64) < task.episode_start {
+                continue;
+            }
+            entries.push(CalendarEntry {
+                date,
+                title: task.name.clone(),
+                season: task.season,
+                episode: episode.episode as i64,
+                episode_name: episode.name.unwrap_or_default(),
+                poster: task.poster.clone(),
+                task_id: task.id.clone(),
+            });
+        }
+    }
+    entries.sort_by(|a, b| {
+        a.date
+            .cmp(&b.date)
+            .then(a.title.cmp(&b.title))
+            .then(a.season.cmp(&b.season))
+            .then(a.episode.cmp(&b.episode))
+    });
+    entries.dedup_by(|a, b| {
+        a.title == b.title && a.season == b.season && a.episode == b.episode
+    });
+    stored.last_calendar_at = now;
+    stored.calendar = entries.clone();
+    let _ = store::save(&stored);
+    Ok(Json(serde_json::json!({
+        "entries": entries,
+        "updatedAt": now,
+    })))
 }
 
 fn validate(body: &TaskBody) -> Result<(), String> {

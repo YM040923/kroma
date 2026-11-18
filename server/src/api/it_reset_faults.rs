@@ -59,7 +59,10 @@ async fn a_good_link_whose_account_cannot_be_read_greets_nobody() {
     let t = test_app();
     let (uid, _) = seed_session(&t.state, "abe@test.dev", "abe", &[Permission::Playback]);
     mint(&t, "tok", &uid, "CODE1234");
-    sql(&t, "ALTER TABLE users RENAME COLUMN username TO username_gone");
+    sql(
+        &t,
+        "ALTER TABLE users RENAME COLUMN username TO username_gone",
+    );
 
     let (status, body) = get(&t.app, "/api/auth/reset/tok", None).await;
     assert_eq!(status, StatusCode::OK);

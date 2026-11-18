@@ -3,7 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use axum::http::StatusCode;
 use serde_json::json;
 
-use crate::api::test_support::{NEIGHBOUR, get, get_from, offer, proof_of, raw, test_app};
+use crate::api::test_support::{get, get_from, offer, proof_of, raw, test_app, NEIGHBOUR};
 
 const UNNAMED_PROXY: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(172, 18, 0, 2)), 51000);
 

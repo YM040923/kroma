@@ -65,7 +65,12 @@ pub async fn get_from(
     token: Option<&str>,
     headers: &[(&str, &str)],
 ) -> (StatusCode, axum::http::HeaderMap, Value) {
-    drive(app, build_request_from(peer, "GET", uri, token, None), headers).await
+    drive(
+        app,
+        build_request_from(peer, "GET", uri, token, None),
+        headers,
+    )
+    .await
 }
 
 async fn drive(

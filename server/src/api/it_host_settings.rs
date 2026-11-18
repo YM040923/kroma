@@ -2,8 +2,8 @@ use axum::http::StatusCode;
 use serde_json::json;
 
 use crate::api::test_support::{
-    TestApp, installed_module, read_setting as read, store_settings as store, test_app,
-    write_settings as write,
+    installed_module, read_setting as read, store_settings as store, test_app,
+    write_settings as write, TestApp,
 };
 
 const HOST_TOKEN: &str = "test-host-token";

@@ -147,7 +147,6 @@ pub(super) fn parse_passkeys(blobs: &[String]) -> Vec<(String, Passkey)> {
         .collect()
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,11 +156,12 @@ mod tests {
         if let Ok(mut m) = CEREMONIES.lock() {
             m.clear();
         }
-        let webauthn = WebauthnBuilder::new("example.com", &Url::parse("https://example.com").unwrap())
-            .unwrap()
-            .rp_name("KROMA")
-            .build()
-            .unwrap();
+        let webauthn =
+            WebauthnBuilder::new("example.com", &Url::parse("https://example.com").unwrap())
+                .unwrap()
+                .rp_name("KROMA")
+                .build()
+                .unwrap();
         let (_, auth) = webauthn.start_discoverable_authentication().unwrap();
 
         for _ in 0..(MAX_CEREMONIES + 500) {
@@ -185,10 +185,22 @@ mod tests {
     fn a_pinned_origin_is_the_only_one_accepted() {
         let allowed = vec!["https://kroma.example".to_string()];
 
-        assert!(relying_party(&headers_with_origin("https://kroma.example"), "en", &allowed).is_ok());
+        assert!(relying_party(
+            &headers_with_origin("https://kroma.example"),
+            "en",
+            &allowed
+        )
+        .is_ok());
         // Same host, another port: the relay a sibling service could mount.
-        assert!(relying_party(&headers_with_origin("https://kroma.example:8443"), "en", &allowed).is_err());
-        assert!(relying_party(&headers_with_origin("https://evil.example"), "en", &allowed).is_err());
+        assert!(relying_party(
+            &headers_with_origin("https://kroma.example:8443"),
+            "en",
+            &allowed
+        )
+        .is_err());
+        assert!(
+            relying_party(&headers_with_origin("https://evil.example"), "en", &allowed).is_err()
+        );
     }
 
     #[test]

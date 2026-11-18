@@ -71,7 +71,9 @@ impl ProviderRound {
     /// Follows a provider's redirect into the callback: the status, and where
     /// the browser is sent next.
     pub async fn follow(&self, redirect: &str) -> (StatusCode, String) {
-        let path = redirect.strip_prefix(ORIGIN).expect("a redirect to this server");
+        let path = redirect
+            .strip_prefix(ORIGIN)
+            .expect("a redirect to this server");
         let (status, headers, _) = raw(&self.t.app, "GET", path, None, None, &[]).await;
         let location = headers
             .get("location")
@@ -83,12 +85,16 @@ impl ProviderRound {
 
     /// A started flow taken through the provider as `claims` and back.
     pub async fn through(&self, started: &Value, claims: Value) -> Returned {
-        let redirect = self
-            .idp
-            .approve(started["authorizeUrl"].as_str().expect("authorizeUrl"), claims);
+        let redirect = self.idp.approve(
+            started["authorizeUrl"].as_str().expect("authorizeUrl"),
+            claims,
+        );
         let (status, location) = self.follow(&redirect).await;
         assert_eq!(status, StatusCode::SEE_OTHER);
-        assert!(location.starts_with(&format!("{ORIGIN}/sso?")), "{location}");
+        assert!(
+            location.starts_with(&format!("{ORIGIN}/sso?")),
+            "{location}"
+        );
         Returned {
             flow_id: started["flowId"].as_str().expect("flowId").to_string(),
             secret: started["secret"].as_str().expect("secret").to_string(),

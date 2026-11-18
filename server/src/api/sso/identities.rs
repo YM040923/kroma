@@ -45,7 +45,8 @@ pub async fn list(State(state): State<SharedState>, AuthUser(user): AuthUser) ->
 /// counts while passkeys are on, and an identity counts while a provider at
 /// its issuer is live.
 pub(crate) fn has_a_way_in(config: &SignIn, user: &User, means: &db::SignInMeans) -> bool {
-    let password_works = config.password() || user.permissions.contains(&Permission::SettingsManage);
+    let password_works =
+        config.password() || user.permissions.contains(&Permission::SettingsManage);
     let signs_in = |identity: &db::LinkedIdentity| {
         providers_at(config, &identity.issuer).any(Provider::is_live)
     };

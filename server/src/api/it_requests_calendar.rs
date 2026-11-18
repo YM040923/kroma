@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use serde_json::json;
 
-use crate::api::test_support::{TestApp, get, seed_session, test_app};
+use crate::api::test_support::{get, seed_session, test_app, TestApp};
 use crate::db;
 use crate::model::Permission;
 

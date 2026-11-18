@@ -5,9 +5,7 @@
 use axum::http::StatusCode;
 use serde_json::json;
 
-use crate::api::test_support::{
-    get, raw, seed_session, seed_session_pw, send, test_app, TestApp,
-};
+use crate::api::test_support::{get, raw, seed_session, seed_session_pw, send, test_app, TestApp};
 use crate::db;
 use crate::model::Permission;
 use crate::services::auth;
@@ -59,7 +57,10 @@ async fn redeem(t: &TestApp, token: &str, code: &str, password: &str) -> (Status
         Some(json!({ "token": token, "code": code, "password": password })),
     )
     .await;
-    (status, body["error"].as_str().unwrap_or_default().to_string())
+    (
+        status,
+        body["error"].as_str().unwrap_or_default().to_string(),
+    )
 }
 
 #[tokio::test]

@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::api::test_support::{get, raw, seed_session, send, test_app};
 use crate::model::Permission;
@@ -69,12 +69,10 @@ async fn rules_written_read_back_with_the_purposes_the_page_can_offer() {
     assert_eq!(body["defaultAction"], json!("allow"));
     assert_eq!(body["rules"][0]["id"], json!("it-block"));
     assert_eq!(body["rules"][0]["note"], json!("Bloqué pour le test"));
-    assert!(
-        body["purposes"]
-            .as_array()
-            .unwrap()
-            .contains(&json!({ "caller": "core", "purpose": "metadata" }))
-    );
+    assert!(body["purposes"]
+        .as_array()
+        .unwrap()
+        .contains(&json!({ "caller": "core", "purpose": "metadata" })));
 }
 
 #[tokio::test]
@@ -171,14 +169,12 @@ async fn a_core_call_the_rules_block_shows_up_in_the_journal_and_the_summary() {
     assert!(!flow.to_string().contains("s3cret"));
     let (_, summary) = get(&t.app, "/api/admin/network/summary?days=1", Some(&t.token)).await;
     assert!(summary["totals"]["blocked"].as_i64().unwrap() >= 1);
-    assert!(
-        summary["rows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|row| row["purpose"] == json!("it-network-blocked")
-                && row["verdict"] == json!("blocked"))
-    );
+    assert!(summary["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|row| row["purpose"] == json!("it-network-blocked")
+            && row["verdict"] == json!("blocked")));
 }
 
 #[tokio::test]
@@ -233,14 +229,25 @@ fn phone_on_the_tunnel() -> [(&'static str, &'static str); 4] {
 async fn a_client_on_the_tunnel_is_tallied_with_its_address_and_device() {
     let t = test_app();
 
-    raw(&t.app, "GET", "/api/health", None, None, &phone_on_the_tunnel()).await;
+    raw(
+        &t.app,
+        "GET",
+        "/api/health",
+        None,
+        None,
+        &phone_on_the_tunnel(),
+    )
+    .await;
 
     let (status, body) = get(&t.app, "/api/admin/network/inbound?days=1", Some(&t.token)).await;
     assert_eq!(status, StatusCode::OK);
     let row = &body["rows"][0];
     assert_eq!(row["address"], json!("203.0.113.9"));
     assert_eq!(row["via"], json!("tunnel"));
-    assert_eq!(row["userAgent"], json!("Kroma/1.0 (iPhone 17 Pro; iOS 26.0)"));
+    assert_eq!(
+        row["userAgent"],
+        json!("Kroma/1.0 (iPhone 17 Pro; iOS 26.0)")
+    );
     assert_eq!(row["count"], json!(1));
     assert!(row["bytesOut"].as_i64().unwrap() > 0, "{row}");
 }
@@ -269,7 +276,9 @@ async fn a_cf_ray_from_an_untrusted_peer_says_nothing_about_a_tunnel() {
             40000,
         ))));
 
-    tower::ServiceExt::oneshot(t.app.clone(), req).await.unwrap();
+    tower::ServiceExt::oneshot(t.app.clone(), req)
+        .await
+        .unwrap();
 
     let (_, body) = get(&t.app, "/api/admin/network/inbound?days=1", Some(&t.token)).await;
     assert_eq!(body["rows"][0]["via"], json!("lan"));

@@ -2,7 +2,9 @@ use super::*;
 
 use crate::model::Permission;
 
-use crate::api::test_support::{demo_item_id, demo_library_ids, demo_show_id, grant_libraries, seed_session, test_app, TestApp};
+use crate::api::test_support::{
+    demo_item_id, demo_library_ids, demo_show_id, grant_libraries, seed_session, test_app, TestApp,
+};
 use crate::db::metadata_core::{self, MetaCore};
 
 const SINTEL: u64 = 45745;
@@ -73,7 +75,10 @@ fn a_viewer_who_may_request_sees_the_request_someone_else_made() {
 fn only_a_member_granted_its_library_learns_the_title_is_in_it() {
     let t = test_app();
     let matrix = demo_item_id("The Matrix");
-    let core = MetaCore { tmdb_id: Some(MATRIX), ..MetaCore::default() };
+    let core = MetaCore {
+        tmdb_id: Some(MATRIX),
+        ..MetaCore::default()
+    };
     metadata_core::set_core(&t.state.db, metadata_core::ITEM, &matrix, &core).unwrap();
     let (films, shows) = demo_library_ids();
     let users = [granted(&t, "ana", films), granted(&t, "bo", shows)];

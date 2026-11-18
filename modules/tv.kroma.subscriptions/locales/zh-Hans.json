@@ -1,6 +1,10 @@
 {
   "nav.subscriptions": "订阅任务",
   "subscriptions.action": "订阅",
+  "subscriptions.calendar": "日历",
+  "subscriptions.calendarEmpty": "已启用的剧集订阅没有待播剧集。",
+  "subscriptions.calendarHint": "已启用剧集订阅的待播剧集，日期来自 TMDB。这里不会发起解锁。",
+  "subscriptions.calendarLoading": "正在读取播出日期…",
   "subscriptions.add": "订阅",
   "subscriptions.added": "已加入",
   "subscriptions.dialogTitle": "订阅来源",

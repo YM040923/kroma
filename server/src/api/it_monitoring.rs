@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use serde_json::json;
 
-use crate::api::test_support::{TestApp, get, seed_session, send, test_app};
+use crate::api::test_support::{get, seed_session, send, test_app, TestApp};
 use crate::db;
 use crate::model::{MinAvailability, MonitoredTitle, Permission, RequestKind};
 
@@ -251,7 +251,6 @@ async fn the_library_index_lists_a_title_nothing_monitors() {
     assert_eq!(dune["kind"], json!("movie"));
 }
 
-
 #[tokio::test]
 async fn monitoring_a_title_without_a_tmdb_key_is_refused() {
     let t = test_app();
@@ -341,12 +340,7 @@ async fn a_season_ledger_without_a_tmdb_key_is_refused() {
     let token = admin(&t);
     seed_monitored(&t, 95396);
 
-    let (status, _) = get(
-        &t.app,
-        "/api/monitoring/show/95396/ledger/1",
-        Some(&token),
-    )
-    .await;
+    let (status, _) = get(&t.app, "/api/monitoring/show/95396/ledger/1", Some(&token)).await;
 
     assert_ne!(status, StatusCode::OK);
 }

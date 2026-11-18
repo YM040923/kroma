@@ -87,10 +87,15 @@ async fn a_cleared_image_nothing_names_stays_missing() {
 async fn a_cleared_image_a_show_names_is_asked_of_its_enrichment() {
     let t = test_app();
     let show_id = demo_episode().show_id.expect("episode show id");
-    crate::db::set_show_metadata(&t.state.db, &show_id, &art_metadata()).expect("set show metadata");
+    crate::db::set_show_metadata(&t.state.db, &show_id, &art_metadata())
+        .expect("set show metadata");
 
     let (status, body) = get(&t.app, "/api/images/feedfeedfeedfeed.webp", None).await;
 
-    assert_eq!(status, StatusCode::NOT_FOUND, "no provider key, so nothing to refill from");
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "no provider key, so nothing to refill from"
+    );
     assert_eq!(body["error"], json!("image not found"));
 }

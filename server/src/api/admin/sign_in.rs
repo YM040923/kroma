@@ -196,5 +196,14 @@ pub async fn test_provider(
     super::require(&user, Permission::SettingsManage)?;
     let intent = Intent::Test { user_id: user.id };
     let from_this_page = sso::FlowClient::default();
-    Ok(sso::begin(&state, loc, &headers, &addr, &body.provider, intent, &from_this_page).await)
+    Ok(sso::begin(
+        &state,
+        loc,
+        &headers,
+        &addr,
+        &body.provider,
+        intent,
+        &from_this_page,
+    )
+    .await)
 }

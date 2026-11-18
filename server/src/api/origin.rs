@@ -15,9 +15,9 @@ use axum::response::Response;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, Any, CorsLayer};
 
 use crate::api::error::json_error;
-use kroma_config::Config;
 use crate::services::direct::{origin_of, PublicOrigins};
 use crate::state::SharedState;
+use kroma_config::Config;
 
 // KROMA's own televisions-in-a-browser client. An ordinary page on the web, and
 // trusted for one reason: this project publishes it.

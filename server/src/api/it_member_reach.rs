@@ -1,9 +1,7 @@
 use axum::http::StatusCode;
 use serde_json::json;
 
-use crate::api::test_support::{
-    household_where_the_viewer_only_sees_films, raw, send, test_app,
-};
+use crate::api::test_support::{household_where_the_viewer_only_sees_films, raw, send, test_app};
 use crate::model::Permission;
 
 #[tokio::test]

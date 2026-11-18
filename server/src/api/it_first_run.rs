@@ -135,7 +135,9 @@ async fn a_public_address_cannot_claim_a_fresh_server() {
     let (status, _) = register_from(&t.app, "203.0.113.7", "intruder@test.dev", "intruder").await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert!(crate::db::list_users(&t.state.db).expect("the roster").is_empty());
+    assert!(crate::db::list_users(&t.state.db)
+        .expect("the roster")
+        .is_empty());
 }
 
 #[tokio::test]
@@ -178,5 +180,7 @@ async fn a_public_ipv6_address_cannot_claim_a_fresh_server() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert!(crate::db::list_users(&t.state.db).expect("the roster").is_empty());
+    assert!(crate::db::list_users(&t.state.db)
+        .expect("the roster")
+        .is_empty());
 }

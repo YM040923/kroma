@@ -62,7 +62,8 @@ async fn a_device_that_never_named_its_app_is_unknown_and_never_outdated() {
     let t = test_app();
 
     let silent = device_after_exchange(&t, &[]).await;
-    let garbled = device_after_exchange(&test_app(), &[(APP_VERSION_HEADER, "not a version")]).await;
+    let garbled =
+        device_after_exchange(&test_app(), &[(APP_VERSION_HEADER, "not a version")]).await;
 
     for device in [silent, garbled] {
         assert_eq!(device["app"], Value::Null);
@@ -105,12 +106,7 @@ async fn the_calling_device_is_listed_first_whatever_was_seen_last() {
     )
     .await;
 
-    let (_, devices) = get(
-        &t.app,
-        "/api/auth/me/sessions",
-        mine["token"].as_str(),
-    )
-    .await;
+    let (_, devices) = get(&t.app, "/api/auth/me/sessions", mine["token"].as_str()).await;
 
     assert_eq!(devices[0]["current"], json!(true));
     assert!(devices.as_array().unwrap().len() >= 3);
@@ -133,7 +129,15 @@ async fn signing_every_other_device_out_keeps_only_the_calling_one() {
     .await;
     let token = mine["token"].as_str().expect("session token");
 
-    let (status, _, _) = raw(&t.app, "DELETE", "/api/auth/me/sessions", Some(token), None, &[]).await;
+    let (status, _, _) = raw(
+        &t.app,
+        "DELETE",
+        "/api/auth/me/sessions",
+        Some(token),
+        None,
+        &[],
+    )
+    .await;
     let (_, devices) = get(&t.app, "/api/auth/me/sessions", Some(token)).await;
 
     assert_eq!(status, StatusCode::NO_CONTENT);

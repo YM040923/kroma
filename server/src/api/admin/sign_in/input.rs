@@ -108,7 +108,9 @@ fn provider_from(input: ProviderInput, from_env: bool) -> Result<Provider, &'sta
         .unwrap_or(defaults.icon);
     if scopes.len() > MAX_LIST_ENTRIES
         || required_groups.len() > MAX_LIST_ENTRIES
-        || scopes.iter().any(|scope| too_long(scope) || !is_scope_token(scope))
+        || scopes
+            .iter()
+            .any(|scope| too_long(scope) || !is_scope_token(scope))
         || required_groups.iter().any(too_long)
         || too_long(&group_claim)
         || too_long(&input.client_id)
@@ -117,7 +119,8 @@ fn provider_from(input: ProviderInput, from_env: bool) -> Result<Provider, &'sta
     {
         return Err("sso.providerInvalid");
     }
-    let libraries = crate::api::admin::users::library_scope(input.libraries).ok_or("admin.tooManyLibraries")?;
+    let libraries =
+        crate::api::admin::users::library_scope(input.libraries).ok_or("admin.tooManyLibraries")?;
     Ok(Provider {
         id: input.id.trim().to_string(),
         label,

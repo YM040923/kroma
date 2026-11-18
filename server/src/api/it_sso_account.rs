@@ -19,7 +19,11 @@ fn member(round: &ProviderRound, email: &str, username: &str) -> (String, String
 
 async fn link(round: &ProviderRound, token: &str, claims: Value) -> Value {
     let (status, started) = round
-        .begin("/api/auth/me/identities", Some(token), json!({ "provider": "p0" }))
+        .begin(
+            "/api/auth/me/identities",
+            Some(token),
+            json!({ "provider": "p0" }),
+        )
         .await;
     assert_eq!(status, StatusCode::OK, "{started}");
     let returned = round.through(&started, claims).await;
@@ -27,7 +31,9 @@ async fn link(round: &ProviderRound, token: &str, claims: Value) -> Value {
 }
 
 async fn identities(round: &ProviderRound, token: &str) -> Value {
-    get(&round.t.app, "/api/auth/me/identities", Some(token)).await.1
+    get(&round.t.app, "/api/auth/me/identities", Some(token))
+        .await
+        .1
 }
 
 #[tokio::test]
@@ -143,13 +149,24 @@ async fn a_claim_needs_a_session_and_a_flow_that_left_an_identity_waiting() {
     let signed_in = round.through(&started, lea()).await;
     let claim = |token: Option<&'static str>, keys: Value| {
         let app = round.t.app.clone();
-        async move { send(&app, "POST", "/api/auth/sso/claim", token, Some(keys)).await.0 }
+        async move {
+            send(&app, "POST", "/api/auth/sso/claim", token, Some(keys))
+                .await
+                .0
+        }
     };
     let token: &'static str = Box::leak(token.into_boxed_str());
 
-    assert_eq!(claim(None, signed_in.keys()).await, StatusCode::UNAUTHORIZED);
     assert_eq!(
-        claim(Some(token), json!({ "flowId": "x", "secret": "y", "code": "z" })).await,
+        claim(None, signed_in.keys()).await,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        claim(
+            Some(token),
+            json!({ "flowId": "x", "secret": "y", "code": "z" })
+        )
+        .await,
         StatusCode::NOT_FOUND
     );
     assert_eq!(
@@ -166,7 +183,10 @@ async fn a_claimed_join_request_leaves_the_admins_list() {
         .begin("/api/auth/sso/start", None, json!({ "provider": "p0" }))
         .await;
     let returned = round.through(&started, lea()).await;
-    assert_eq!(round.finish(&returned).await.1, json!({ "status": "requested" }));
+    assert_eq!(
+        round.finish(&returned).await.1,
+        json!({ "status": "requested" })
+    );
 
     send(
         &round.t.app,
@@ -177,7 +197,12 @@ async fn a_claimed_join_request_leaves_the_admins_list() {
     )
     .await;
 
-    let (_, requests) = get(&round.t.app, "/api/admin/join-requests", Some(&round.t.token)).await;
+    let (_, requests) = get(
+        &round.t.app,
+        "/api/admin/join-requests",
+        Some(&round.t.token),
+    )
+    .await;
     assert_eq!(requests["waiting"], json!([]));
 }
 

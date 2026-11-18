@@ -66,10 +66,7 @@ pub struct ResetBody {
 
 /// `GET /api/auth/reset/:token` → `{ valid, username? }`. Public, so the reset
 /// page can greet the user without leaking their email.
-pub async fn check_reset(
-    State(state): State<SharedState>,
-    Path(token): Path<String>,
-) -> Response {
+pub async fn check_reset(State(state): State<SharedState>, Path(token): Path<String>) -> Response {
     let reset = match query(&state.db, move |pool| db::get_reset(&pool, &token)).await {
         Ok(Some(r)) => r,
         Ok(None) => {
