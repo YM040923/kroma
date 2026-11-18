@@ -15,6 +15,9 @@ interface ArtImage {
   height: number;
   language?: string | null;
   votes: number;
+  /** A library's candidates name the title they came from; provider images
+   *  carry no note and fall back to language/textless. */
+  note?: string | null;
 }
 
 interface ArtView {
@@ -184,12 +187,14 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
                   >
                     <img src={image.url} alt="" style={IMG(tab === 'poster' ? '2 / 3' : '16 / 9')} />
                     <Row between gap={8} px={8} py={6}>
-                      <Text variant="meta" color="textDim">
-                        {image.language || t('artwork.textless')}
+                      <Text variant="meta" color="textDim" lines={1} minW={0}>
+                        {image.note ?? (image.language || t('artwork.textless'))}
                       </Text>
-                      <Text variant="meta" color="textDim">
-                        {image.width}×{image.height}
-                      </Text>
+                      {image.width > 0 ? (
+                        <Text variant="meta" color="textDim">
+                          {image.width}×{image.height}
+                        </Text>
+                      ) : null}
                     </Row>
                     {active ? (
                       <Badge tone="success">{t('artwork.current')}</Badge>

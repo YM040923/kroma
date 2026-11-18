@@ -188,7 +188,9 @@ async fn get_artwork(
 }
 
 /// A library's candidates are the posters and backdrops its titles already
-/// carry, deduplicated and capped so the grid stays one screenful.
+/// carry, deduplicated and capped so the grid stays one screenful. Each one
+/// names the title it came from: a library has no TMDB entry of its own, so
+/// that note is the only label a picker can show.
 async fn library_artwork(state: &SharedState, page: &Page) -> Response {
     let items = match query(&state.db, |pool| db::list_items(&pool, None)).await {
         Ok(items) => items,
@@ -200,8 +202,10 @@ async fn library_artwork(state: &SharedState, page: &Page) -> Response {
         .find(|def| def.id == page.id)
         .map(|def| def.name.clone())
         .unwrap_or_default();
-    let mut posters: Vec<String> = Vec::new();
-    let mut backdrops: Vec<String> = Vec::new();
+    let mut seen_poster: Vec<String> = Vec::new();
+    let mut seen_backdrop: Vec<String> = Vec::new();
+    let mut posters: Vec<serde_json::Value> = Vec::new();
+    let mut backdrops: Vec<serde_json::Value> = Vec::new();
     for item in items
         .iter()
         .filter(|item| item.library == name || item.library == page.id)
@@ -209,15 +213,23 @@ async fn library_artwork(state: &SharedState, page: &Page) -> Response {
         let Some(meta) = item.metadata.as_ref() else {
             continue;
         };
-        if let Some(url) = meta.poster_url.as_ref() {
-            if posters.len() < 24 && !posters.contains(url) {
-                posters.push(url.clone());
+        for (url, seen, into, cap) in [
+            (meta.poster_url.as_ref(), &mut seen_poster, &mut posters, 24usize),
+            (meta.backdrop_url.as_ref(), &mut seen_backdrop, &mut backdrops, 24usize),
+        ] {
+            let Some(url) = url else { continue };
+            if into.len() >= cap || seen.contains(url) {
+                continue;
             }
-        }
-        if let Some(url) = meta.backdrop_url.as_ref() {
-            if backdrops.len() < 24 && !backdrops.contains(url) {
-                backdrops.push(url.clone());
-            }
+            seen.push(url.clone());
+            into.push(json!({
+                "url": url,
+                "width": 0,
+                "height": 0,
+                "language": null,
+                "votes": 0,
+                "note": item.title,
+            }));
         }
     }
     Json(json!({
