@@ -90,8 +90,14 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
     setBusy(true);
     setError('');
     try {
-      setView((await call('GET')) as ArtView);
+      const next = (await call('GET')) as ArtView;
+      setView(next);
       setSelected({});
+      // A library's titles may carry backdrops only; opening on an empty
+      // poster grid reads as "no artwork" when there is plenty one tab over.
+      if (next.posters.length === 0 && next.backdrops.length > 0) {
+        setTab('backdrop');
+      }
     } catch {
       setError(t('artwork.loadFailed'));
     } finally {
