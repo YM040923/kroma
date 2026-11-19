@@ -2,10 +2,11 @@
 //! pin one. The override lives in `art_overrides`, never in the scraped
 //! metadata, so the enrichment pass cannot erase it.
 
-use axum::extract::{Path, State};
+use axum::body::Bytes;
+use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
@@ -19,7 +20,12 @@ use crate::model::Permission;
 use crate::state::SharedState;
 
 pub fn routes() -> Router<SharedState> {
-    Router::new().route("/items/{id}/artwork", get(get_artwork).put(put_artwork))
+    Router::new()
+        .route("/items/{id}/artwork", get(get_artwork).put(put_artwork))
+        .route(
+            "/items/{id}/artwork/cover",
+            post(upload_library_cover).layer(DefaultBodyLimit::max(10 * 1024 * 1024)),
+        )
 }
 
 struct Page {
@@ -197,6 +203,59 @@ async fn get_artwork(
 /// carry, deduplicated and capped so the grid stays one screenful. Each one
 /// names the title it came from: a library has no TMDB entry of its own, so
 /// that note is the only label a picker can show.
+/// `POST /api/items/{libraryId}/artwork/cover` (Bearer, body = raw `image/*`)
+/// stores an uploaded or client-composited library cover and makes it Primary.
+async fn upload_library_cover(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<String>,
+    body: Bytes,
+) -> Response {
+    let page = match page(&state, &user, &id).await {
+        Ok(page) => page,
+        Err(response) => return response,
+    };
+    if page.kind != db::art_overrides::LIBRARY_KIND {
+        return json_error(StatusCode::BAD_REQUEST, "a library cover is uploaded on a library id");
+    }
+    if body.is_empty() {
+        return json_error(StatusCode::BAD_REQUEST, "empty image");
+    }
+    let data_dir = state.config.data_dir.clone();
+    let bytes = body.to_vec();
+    let stored = service(move || {
+        Ok(crate::infra::image::store_upload(
+            &data_dir,
+            &bytes,
+            Some(1920),
+            "lib-",
+        ))
+    })
+    .await;
+    let url = match stored {
+        Ok(Some(url)) => url,
+        Ok(None) => return json_error(StatusCode::UNSUPPORTED_MEDIA_TYPE, "image unreadable"),
+        Err(response) => return response,
+    };
+    let subject = page.id.clone();
+    let target = url.clone();
+    if let Err(response) = query(&state.db, move |pool| {
+        db::art_overrides::set(
+            &pool,
+            db::art_overrides::LIBRARY_KIND,
+            &subject,
+            db::art_overrides::POSTER,
+            &target,
+            "upload",
+        )
+    })
+    .await
+    {
+        return response;
+    }
+    Json(json!({ "saved": true, "url": url })).into_response()
+}
+
 async fn library_artwork(state: &SharedState, page: &Page) -> Response {
     let items = match query(&state.db, |pool| db::list_items(&pool, None)).await {
         Ok(items) => items,
@@ -244,6 +303,8 @@ async fn library_artwork(state: &SharedState, page: &Page) -> Response {
             "backdrop": page.backdrop,
             "logo": page.logo,
         },
+        "name": name,
+        "library": true,
         "posters": posters,
         "backdrops": backdrops,
     }))
