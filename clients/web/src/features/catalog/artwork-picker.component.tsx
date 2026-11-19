@@ -179,7 +179,8 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
       const next = (await call('GET')) as ArtView;
       setView(next);
       setSelected({});
-      setPicked(next.library ? next.posters.slice(0, 4).map((image) => image.url) : []);
+      const candidates = next.posters.length > 0 ? next.posters : next.backdrops;
+      setPicked(next.library ? candidates.slice(0, 4).map((image) => image.url) : []);
       // A library's titles may carry backdrops only; opening on an empty
       // poster grid reads as "no artwork" when there is plenty one tab over.
       if (next.posters.length === 0 && next.backdrops.length > 0) {
@@ -288,6 +289,7 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
   };
 
   const images = view ? (tab === 'poster' ? view.posters : view.backdrops) : [];
+  const candidates = view ? (view.posters.length > 0 ? view.posters : view.backdrops) : [];
 
   return (
     <>
@@ -341,13 +343,13 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
               <Text variant="meta" color="textDim" mb={8}>
                 {t('artwork.generateHint')}
               </Text>
-              {view.posters.length === 0 ? (
+              {candidates.length === 0 ? (
                 <Text variant="meta" color="textDim">
                   {t('artwork.empty')}
                 </Text>
               ) : (
                 <div style={GRID}>
-                  {view.posters.map((image) => {
+                  {candidates.map((image) => {
                     const active = picked.includes(image.url);
                     return (
                       <button
