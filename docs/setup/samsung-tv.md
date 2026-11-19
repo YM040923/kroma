@@ -17,15 +17,13 @@ can run:
 ## Before you begin
 
 - A Samsung smart TV from 2017 or later.
-- A Mac or a Linux computer on the same network as the TV, with
-  [Node.js](https://nodejs.org) 22 or later. `node --version` prints the
-  version. On Windows, follow
-  [Optional: install with Tizen Studio](#optional-install-with-tizen-studio)
-  instead.
+- A Mac, a Windows PC or a Linux computer on the same network as the TV, with
+  [Node.js](https://nodejs.org) 22.12 or later. `node --version` prints the
+  version.
 - A Samsung account, the same kind you use on the TV. It is free.
 - The address of your computer on the network, such as `192.168.1.20`. On a
-  Mac, it is in **System Settings** > **Wi-Fi** > **Details**. On Linux, run
-  `hostname -I`. The installer also shows it.
+  Mac, it is in **System Settings** > **Wi-Fi** > **Details**. On Windows, run
+  `ipconfig`. On Linux, run `hostname -I`. The installer also shows it.
 
 ## Turn on developer mode on the TV
 
@@ -285,6 +283,18 @@ downloaded, or with a profile whose distributor certificate does not list the
 TV. Sign it again with your Samsung profile, as in
 [Sign and install KROMA](#sign-and-install-kroma).
 
+### The TV runs an older Tizen than this KROMA needs
+
+The version of KROMA you chose asks for a newer Tizen than the TV runs, so the
+TV would refuse it. Install the canary version: choose **Canary** when the
+installer asks which version of KROMA, or run:
+
+```bash
+npx @kromatv/installer install 192.168.1.62 --source canary
+```
+
+Replace `192.168.1.62` with the address of your TV.
+
 ### The TV refuses the `.tpk`
 
 A TV from 2020 or earlier cannot run the native app. The installer sends it
@@ -320,6 +330,13 @@ and sign in within five minutes.
 Developer mode accepts one computer: the one whose address you entered. Check
 that the address in the TV's **Developer mode** window is your computer's
 current address, and restart the TV after you change it.
+
+### `No server answered at this address` on a TV from 2017 to 2020
+
+The address of your server starts with `https://`, and the server accepts
+only TLS 1.3. These TVs run the web app, and their built-in browser cannot use
+TLS 1.3. Allow TLS 1.2 on the server: see
+[HTTPS, reverse proxies and remote access](network.md#with-the-remote-access-module).
 
 ### KROMA disappeared from the TV
 

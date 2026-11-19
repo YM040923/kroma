@@ -9,6 +9,7 @@ import {
   AuthConfig,
   AuthResult,
   Invite,
+  InviteCheck,
   InviteCreated,
   type Permission,
   PublicUser,
@@ -19,7 +20,6 @@ import {
 } from './schemas';
 
 const Me = z.object({ user: User });
-const InviteCheck = z.object({ valid: z.boolean(), expiresAt: z.number().optional() });
 const AvatarUploaded = z.object({ avatarUrl: z.string() });
 
 /** Accounts, sessions, invitations and profile/PIN. */
@@ -90,7 +90,8 @@ export default function accountsApi(ctx: RequestContext) {
 
     /** Public login-gate config read before any credential: whether the profile
      * roster is public and whether any account exists yet. */
-    config: () => ctx.get('/auth/config', AuthConfig, { auth: 'public' }),
+    config: (opts?: { signal?: AbortSignal }) =>
+      ctx.get('/auth/config', AuthConfig, { auth: 'public', ...opts }),
 
     /** Public profile list for the "Qui regarde ?" picker (no emails). Empty when
      * the `publicUserList` setting is off. */
@@ -153,7 +154,8 @@ export default function accountsApi(ctx: RequestContext) {
     createInvite: (opts?: { permissions?: Permission[]; expiresInDays?: number }) =>
       ctx.post('/invites', InviteCreated, { body: opts ?? {} }),
 
-    /** Check an invite token's validity (public, used by the join page). */
+    /** Check an invite token's validity (public, used by the join page). The
+     * invitation of an account that waits also names that account. */
     checkInvite: (token: InviteToken) =>
       ctx.get('/invites/:token', InviteCheck, { params: { token } }),
 

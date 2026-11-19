@@ -5,113 +5,21 @@ import type { EngineOptions } from './base-engine';
 import { NATIVE_SEEK_AHEAD } from './base-engine';
 import { nativeBufferBudget } from '@kromatv/ui/native-player';
 import type { EngineListeners } from './engine';
+import { bilingual } from './engine.fixture';
 import { ExpoVideoEngine } from './expo-video-engine';
+import { type FakeVideoPlayer, players } from './expo-video.fixture';
 
 // The native expo-video backend (AVPlayer on Apple TV, Media3 on Android TV),
 // driven against a fake `createVideoPlayer` recording the players it hands out.
 
-const { players, FakePlayer } = vi.hoisted(() => {
-  interface Sub {
-    event: string;
-    handler: (payload: unknown) => void;
-    removed: boolean;
-  }
-
-  class RecordedPlayer {
-    uri: string;
-    currentTime = 0;
-    timeUpdateEventInterval = 0;
-    availableAudioTracks: { id: string }[] = [];
-    audioTrack: unknown = null;
-    bufferOptions: unknown = null;
-    plays = 0;
-    pauses = 0;
-    released = false;
-    replaced: string[] = [];
-    replaceThrows = false;
-    throwOnRead = false;
-    subs: Sub[] = [];
-    private durationValue = 0;
-    private bufferedValue = 0;
-
-    constructor(uri: string) {
-      this.uri = uri;
-    }
-
-    get duration(): number {
-      if (this.throwOnRead) {
-        throw new Error('native shared object released');
-      }
-      return this.durationValue;
-    }
-    set duration(value: number) {
-      this.durationValue = value;
-    }
-    get bufferedPosition(): number {
-      if (this.throwOnRead) {
-        throw new Error('native shared object released');
-      }
-      return this.bufferedValue;
-    }
-    set bufferedPosition(value: number) {
-      this.bufferedValue = value;
-    }
-
-    play(): void {
-      this.plays += 1;
-    }
-    pause(): void {
-      this.pauses += 1;
-    }
-    release(): void {
-      this.released = true;
-    }
-    replace(source: { uri: string }): void {
-      if (this.replaceThrows) {
-        throw new Error('will not take a new source');
-      }
-      this.uri = source.uri;
-      this.replaced.push(source.uri);
-    }
-    addListener(event: string, handler: (payload: unknown) => void): { remove(): void } {
-      const sub: Sub = { event, handler, removed: false };
-      this.subs.push(sub);
-      return {
-        remove: () => {
-          sub.removed = true;
-        },
-      };
-    }
-    emit(event: string, payload: unknown = {}): void {
-      for (const sub of this.subs) {
-        if (sub.event === event && !sub.removed) {
-          sub.handler(payload);
-        }
-      }
-    }
-    emitStale(event: string, payload: unknown = {}): void {
-      for (const sub of this.subs) {
-        if (sub.event === event) {
-          sub.handler(payload);
-        }
-      }
-    }
-  }
-
-  return { players: [] as RecordedPlayer[], FakePlayer: RecordedPlayer };
+vi.mock('expo-video', async () => {
+  const { fakeCreateVideoPlayer } = await import('./expo-video.fixture');
+  return { createVideoPlayer: fakeCreateVideoPlayer };
 });
-
-vi.mock('expo-video', () => ({
-  createVideoPlayer: (source: { uri: string }) => {
-    const player = new FakePlayer(source.uri);
-    players.push(player);
-    return player;
-  },
-}));
 
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 
-type Fake = InstanceType<typeof FakePlayer>;
+type Fake = FakeVideoPlayer;
 
 const client = fakeClient({
   media: {
@@ -122,6 +30,15 @@ const client = fakeClient({
 });
 const item = { id: 'ev1' } as unknown as MediaItem;
 const budget = nativeBufferBudget();
+
+const twoLanguages = bilingual(item);
+
+function listed(): { id: string; language: string }[] {
+  return [
+    { id: 'audio-0', language: 'en' },
+    { id: 'audio-1', language: 'fr' },
+  ];
+}
 
 function mkListeners(): EngineListeners {
   return {
@@ -162,11 +79,39 @@ function current(e: ExpoVideoEngine): Fake {
   return e.videoPlayer as unknown as Fake;
 }
 
+function serverStarts(...starts: string[]) {
+  const answers = [...starts];
+  const fetch = vi.fn(() => {
+    const start = answers.shift() ?? null;
+    return Promise.resolve({ status: 200, headers: { get: () => start } });
+  });
+  vi.stubGlobal('fetch', fetch);
+  return fetch;
+}
+
+function heldStarts() {
+  const pending: Array<(start: string) => void> = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      () =>
+        new Promise((resolve) => {
+          pending.push((start) => resolve({ status: 200, headers: { get: () => start } }));
+        }),
+    ),
+  );
+  return pending;
+}
+
+const answered = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 beforeEach(() => {
   players.length = 0;
+  serverStarts();
 });
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe('ExpoVideoEngine construction', () => {
@@ -470,58 +415,139 @@ describe('ExpoVideoEngine seeking', () => {
 
 describe('ExpoVideoEngine audio', () => {
   it('direct: switches track in place, with no server round trip', () => {
-    const { e } = make({ direct: true });
+    const { e } = make({ direct: true, item: twoLanguages });
     const player = current(e);
-    player.availableAudioTracks = [{ id: 'en' }, { id: 'fr' }];
+    player.availableAudioTracks = listed();
+    player.emit('statusChange', { status: 'readyToPlay' });
+
     e.setAudioRendition(1);
-    expect(player.audioTrack).toEqual({ id: 'fr' });
+
+    expect(player.audioTrack).toEqual({ id: 'audio-1', language: 'fr' });
     expect(player.replaced).toEqual([]);
   });
 
   it('direct: selects the chosen track once the file is ready', () => {
-    const { e } = make({ direct: true, initialRendition: 1 });
+    const { e } = make({ direct: true, item: twoLanguages, initialRendition: 1 });
     const player = current(e);
-    player.availableAudioTracks = [{ id: 'en' }, { id: 'fr' }];
+    player.availableAudioTracks = listed();
 
     player.emit('statusChange', { status: 'readyToPlay' });
 
-    expect(player.audioTrack).toEqual({ id: 'fr' });
+    expect(player.audioTrack).toEqual({ id: 'audio-1', language: 'fr' });
     expect(player.replaced).toEqual([]);
   });
 
   it('direct: selects the chosen track only once', () => {
-    const { e } = make({ direct: true, initialRendition: 1 });
+    const { e } = make({ direct: true, item: twoLanguages, initialRendition: 1 });
     const player = current(e);
-    player.availableAudioTracks = [{ id: 'en' }, { id: 'fr' }];
+    player.availableAudioTracks = listed();
     player.emit('statusChange', { status: 'readyToPlay' });
-    player.audioTrack = { id: 'en' };
+    player.audioTrack = listed()[0];
 
     player.emit('statusChange', { status: 'readyToPlay' });
 
-    expect(player.audioTrack).toEqual({ id: 'en' });
+    expect(player.audioTrack).toEqual({ id: 'audio-0', language: 'en' });
   });
 
-  it('direct: a track the player does not expose re-opens the source', () => {
-    // Re-anchoring the direct file brings back the same track list, so this is a
-    // no-op reload rather than the master fallback the master branch gets.
+  it('direct: asks for the language where the player lists the tracks in its own order', () => {
+    const { e } = make({ direct: true, item: twoLanguages, initialRendition: 0 });
+    const player = current(e);
+    player.availableAudioTracks = [
+      { id: 'audio-0', language: 'fr' },
+      { id: 'audio-1', language: 'en' },
+    ];
+
+    player.emit('statusChange', { status: 'readyToPlay' });
+
+    expect(player.audioTrack).toEqual({ id: 'audio-1', language: 'en' });
+  });
+
+  it('direct: asks at open even when the player claims the track already plays', () => {
+    const { e } = make({ direct: true, item: twoLanguages, initialRendition: 0 });
+    const player = current(e);
+    player.availableAudioTracks = listed();
+    player.claimed = listed()[0];
+
+    player.emit('statusChange', { status: 'readyToPlay' });
+
+    expect(player.asked).toEqual([{ id: 'audio-0', language: 'en' }]);
+  });
+
+  it('direct: a pick of the track already chosen asks the player again', () => {
+    const { e } = make({ direct: true, item: twoLanguages, initialRendition: 0 });
+    const player = current(e);
+    player.availableAudioTracks = listed();
+    player.emit('statusChange', { status: 'readyToPlay' });
+
+    e.setAudioRendition(0);
+
+    expect(player.asked).toHaveLength(2);
+  });
+
+  it('direct: holds the pick until the player lists its tracks', () => {
+    const { e } = make({ direct: true, item: twoLanguages, initialRendition: 1 });
+    const player = current(e);
+    player.emit('statusChange', { status: 'readyToPlay' });
+    player.availableAudioTracks = listed();
+
+    player.emit('availableAudioTracksChange', { availableAudioTracks: listed() });
+
+    expect(player.audioTrack).toEqual({ id: 'audio-1', language: 'fr' });
+  });
+
+  it('direct: a list that arrives without the wanted track plays through the remux', () => {
+    const { e } = make({ direct: true, item: twoLanguages, initialRendition: 1 });
+    const player = current(e);
+    player.emit('statusChange', { status: 'readyToPlay' });
+    player.availableAudioTracks = [{ id: 'audio-0', language: 'en' }];
+
+    player.emit('availableAudioTracksChange', {
+      availableAudioTracks: player.availableAudioTracks,
+    });
+
+    expect(player.replaced).toEqual(['master:ev1:false:0:1']);
+  });
+
+  it('direct: asks nothing of the player for a file with one audio track', () => {
     const { e } = make({ direct: true });
     const player = current(e);
-    player.availableAudioTracks = [{ id: 'en' }];
-    e.setAudioRendition(1);
-    expect(player.replaced).toEqual(['stream:ev1']);
+    player.availableAudioTracks = listed();
+
+    player.emit('statusChange', { status: 'readyToPlay' });
+
+    expect(player.asked).toEqual([]);
   });
 
-  it('direct: re-opening for a missing track holds the resume seek until ready', () => {
-    const { e } = make({ direct: true, startSec: 42 });
+  it('direct: a track the player does not list plays through the server remux', () => {
+    const { e } = make({ direct: true, item: twoLanguages });
     const player = current(e);
     player.emit('statusChange', { status: 'readyToPlay' });
-    player.availableAudioTracks = [{ id: 'en' }];
-    player.currentTime = 0;
+    player.availableAudioTracks = [{ id: 'audio-0', language: 'en' }];
+
     e.setAudioRendition(1);
-    expect(player.replaced).toEqual(['stream:ev1']);
-    expect(player.currentTime).toBe(0);
+
+    expect(player.replaced).toEqual(['master:ev1:false:0:1']);
+  });
+
+  it('direct: a track missing at open plays through the remux from the resume point', () => {
+    const { e } = make({ direct: true, item: twoLanguages, initialRendition: 1, startSec: 42 });
+    const player = current(e);
+    player.availableAudioTracks = [{ id: 'audio-0', language: 'en' }];
+
     player.emit('statusChange', { status: 'readyToPlay' });
-    expect(player.currentTime).toBe(42);
+
+    expect(player.replaced).toEqual(['master:ev1:false:42:1']);
+    expect(player.currentTime).toBe(0);
+  });
+
+  it('direct: a track missing at open never reports the replaced file ready', () => {
+    const { e, listeners } = make({ direct: true, item: twoLanguages, initialRendition: 1 });
+    const player = current(e);
+    player.availableAudioTracks = [{ id: 'audio-0', language: 'en' }];
+
+    player.emit('statusChange', { status: 'readyToPlay' });
+
+    expect(listeners.onReady).not.toHaveBeenCalled();
   });
 
   it('setAudioRendition is inert once the engine is destroyed', () => {
@@ -737,5 +763,62 @@ describe('what the stats panel asks the engine', () => {
     current(e).throwOnRead = true;
     expect(() => e.debugRows?.()).not.toThrow();
     expect(rowsOf(e).Plane).toBeTruthy();
+  });
+});
+
+describe('ExpoVideoEngine master start', () => {
+  it('counts a master from the start the server says its remux began at', async () => {
+    serverStarts('96.043');
+    const { e, listeners } = make({ direct: false, startSec: 100 });
+
+    await answered();
+    current(e).emit('timeUpdate', { currentTime: 2 });
+
+    expect(e.position()).toBeCloseTo(98.043);
+    expect(listeners.onTime).toHaveBeenLastCalledWith(e.position());
+  });
+
+  it('counts a re-anchored master from the start the server names for it', async () => {
+    serverStarts('96.043', '48.048');
+    const { e } = make({ direct: false, startSec: 100 });
+    await answered();
+
+    e.seekTo(50);
+    await answered();
+
+    expect(current(e).replaced).toEqual(['master:ev1:false:50:0']);
+    expect(e.position()).toBeCloseTo(48.048);
+  });
+
+  it('keeps the start of the newest anchor when an older one answers last', async () => {
+    const pending = heldStarts();
+    const { e } = make({ direct: false, startSec: 300 });
+
+    e.seekTo(120);
+    pending[1]?.('118.118');
+    await answered();
+    pending[0]?.('296.296');
+    await answered();
+
+    expect(e.position()).toBeCloseTo(118.118);
+  });
+
+  it('keeps the anchor it asked for when the server names no start', async () => {
+    serverStarts();
+    const { e } = make({ direct: false, startSec: 300 });
+
+    await answered();
+
+    expect(e.position()).toBe(300);
+  });
+
+  it('asks the server nothing for a master at the top of the film or a direct file', async () => {
+    const fetch = serverStarts('7');
+
+    make({ direct: false, startSec: 0 });
+    make({ direct: true, startSec: 300 });
+    await answered();
+
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

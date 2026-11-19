@@ -9,9 +9,11 @@ use kroma_sqlite::{open_with, Legacy, Pool, Schema};
 mod ddl;
 mod legacy;
 mod migrations;
+mod probe_technical;
 mod steps;
 mod stored_tokens;
 mod titled_wanted;
+mod waiting_accounts;
 
 pub(crate) use ddl::{FILE_COLS, ITEM_COLS, SCHEMA};
 pub(crate) use migrations::MIGRATIONS;
@@ -29,9 +31,42 @@ pub(crate) const CORE: Schema<'static> = Schema {
 pub fn init(path: &Path) -> Result<Pool> {
     let pool = open_with(path, 8)?;
     let mut conn = pool.get()?;
+    rewind_fork_v20(&mut conn)?;
     kroma_sqlite::migrate(&mut conn, &CORE, Some(path))?;
     drop(conn);
     Ok(pool)
+}
+
+/// A fork build shipped `0019_art_overrides` and `0020_probe_technical` while
+/// upstream used those same numbers for other steps. A database written by
+/// that fork is at version 19 or 20 with the fork tables/columns but without
+/// the upstream steps; rewind it to 18 so the upstream 0019–0024 steps run and
+/// the fork steps, now 0025/0026, can no-op over the existing schema.
+fn rewind_fork_v20(conn: &mut Connection) -> Result<()> {
+    let version = kroma_sqlite::user_version(conn)?;
+    if version != 19 && version != 20 {
+        return Ok(());
+    }
+    let fork_schema = table_exists(conn, "art_overrides")? || column_exists(conn, "files", "probe_version")?;
+    let upstream_schema = column_exists(conn, "downloads", "protocol")?
+        && column_exists(conn, "users", "waiting")?;
+    if fork_schema && !upstream_schema {
+        conn.pragma_update(None, "user_version", 18)?;
+    }
+    Ok(())
+}
+
+fn table_exists(conn: &Connection, name: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?1)",
+        [name],
+        |r| r.get(0),
+    )?)
+}
+
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let sql = format!("SELECT EXISTS (SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1)");
+    Ok(conn.query_row(&sql, [column], |r| r.get(0))?)
 }
 
 /// Re-derives what the legacy migrations used to fill in on every boot, for rows
@@ -311,6 +346,33 @@ mod tests {
     }
 
     #[test]
+    fn a_download_recorded_before_protocols_reads_as_a_torrent() {
+        let dir = kroma_testing::temp_dir("schema-protocol");
+        let path = dir.path().join("kroma.db");
+        let old = legacy_database(&path);
+        old.get()
+            .unwrap()
+            .execute_batch(
+                "INSERT INTO downloads (id, client_id, client_ref, kind, tmdb_id, release_title, \
+                     magnet_or_url, grabbed_at) \
+                 VALUES ('d1', 'embedded', '', 'movie', 603, 'R', 'm', 0);",
+            )
+            .unwrap();
+        drop(old);
+
+        let pool = init(&path).unwrap();
+
+        let protocol: String = pool
+            .get()
+            .unwrap()
+            .query_row("SELECT protocol FROM downloads WHERE id = 'd1'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(protocol, "torrent");
+    }
+
+    #[test]
     fn a_title_taken_off_monitoring_stays_off_after_a_restart() {
         let dir = kroma_testing::temp_dir("schema-unmonitor");
         let path = dir.path().join("kroma.db");
@@ -363,3 +425,13 @@ mod tests {
         assert_eq!(series.as_deref(), Some("House of the Dragon"));
     }
 }
+
+/// For each core table, the versions of the schema that last changed it and
+/// last changed it in a way a module built before reads wrongly, as JSON. The
+/// tests derive it from the baseline and the steps, and fail while it is stale.
+pub const CORE_TABLE_VERSIONS: &str = include_str!("schema/table_versions.json");
+
+#[cfg(test)]
+mod shape;
+#[cfg(test)]
+mod table_versions;

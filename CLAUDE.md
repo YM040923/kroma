@@ -179,8 +179,8 @@ separate tags.
 
 A point is named by whoever defines it: a module writes `definesPoints` for what
 it invents (`<its id>/<local name>`), `contributes` for what it answers, and
-`consumes` for what it calls. The five the CORE calls, `acquisition`,
-`transcriber`, `embedder`, `network` and `trailer`, are bare because the core has no manifest
+`consumes` for what it calls. The six the CORE calls, `acquisition`,
+`transcriber`, `embedder`, `network`, `trailer` and `importer`, are bare because the core has no manifest
 to define one in and nothing else may. See [`docs/module-plugin-model.md`](docs/module-plugin-model.md)
 for the model and what is still missing from it, and
 [`modules/README.md`](modules/README.md#calling-another-module) for how to write
@@ -276,6 +276,8 @@ apps/      the web properties, deployed to Cloudflare
   kit/      @kromatv/kit: the workbench, as a site and as a phone/TV app
   modules/  @kromatv/modules-site: the official .kmod catalog
   packages/ @kromatv/package-source: the release listing DSM downloads from
+  lingua/   @kromatv/lingua: lingua.kroma.tv, translate the catalogs and send
+            each contributor's edits as a pull request (`lingua.json` at the root)
 ```
 
 A client ships the product; an app is a website about it. The two never import
@@ -370,7 +372,8 @@ the build on anything a legacy engine cannot parse.
   [`packages/shots/README.md`](packages/shots/README.md#attaching-any-image)).
   Never commit an image, push a branch or create a release to host one.
 - **English for code, comments, identifiers and commit messages.** User-facing copy
-  is French. That is content, not code. No emoji in the product.
+  is written in English, the source language, and kept complete in French.
+  That is content, not code. No emoji in the product.
 - Every user-visible string is a translation key. The core catalogs are one
   folder per language under `packages/core/src/locales/`, a file per namespace
   or a folder of files where one is split, and `i18n.json` beside them is the

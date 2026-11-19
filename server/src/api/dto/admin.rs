@@ -100,6 +100,10 @@ pub struct AdminLibrary {
     pub scrape: crate::services::settings::ScrapeOptions,
     /// The operator-picked cover, if one is set.
     pub cover: Option<String>,
+    /// One of the demo libraries, which nobody added and which go once
+    /// somebody adds a folder.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub demo: bool,
 }
 
 /// One weekly bucket of the play-history chart.

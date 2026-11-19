@@ -167,12 +167,12 @@ jobs:
       name: ${{ github.ref == 'refs/heads/main' && 'release' || '' }}
       deployment: false
     if: ${{ (contains(fromJSON('["stable","candidate"]'), inputs.channel) || github.event_name == 'workflow_dispatch') && (github.event_name != 'workflow_dispatch' || contains(fromJSON('["all","mobile"]'), github.event.inputs.targets)) }}
-    # macos-26, NOT macos-15: Expo SDK 57 pulls Swift packages built with Swift
-    # tools 6.2 (expo-modules-jsi), and the macos-15 image tops out at Xcode 16.4
-    # / Swift 6.1. That mismatch fails as "Could not resolve package
-    # dependencies: package 'apple' is using Swift tools version 6.2.0" thousands
-    # of lines into an xcodebuild log, so the guard step below states it plainly.
-    runs-on: macos-26
+    # xcode-27, NOT macos-26: from April 2027 App Store Connect refuses a build
+    # made with an SDK older than iOS 27 (ITMS-90725), and the macos-26 image
+    # tops out at Xcode 26.6 / iOS 26.5. Expo's Swift packages also need Swift
+    # tools 6.2 (expo-modules-jsi); the guard step below states that in one line
+    # instead of a package-resolution error deep in an xcodebuild log.
+    runs-on: xcode-27
     permissions:
       contents: read # only reads the repo and uploads run artifacts
       actions: write # retires the previous DerivedData cache entry
@@ -189,14 +189,14 @@ jobs:
         with:
           node-version: '22'
 
-      # Select the newest Xcode the image carries and assert its Swift is new
-      # enough for the Expo SDK's Swift packages. Checking here turns a runner
-      # image drift into one readable line instead of a package-resolution error
-      # buried in a 10k-line archive log.
+      # Select the newest Xcode the image carries, never a beta (App Store
+      # Connect refuses a build from one), and assert its Swift and SDK are new
+      # enough. Checking here turns a runner image drift into one readable line
+      # instead of an error buried in a 10k-line archive log or an upload.
       - name: Select Xcode
         run: |
           set -euo pipefail
-          newest=$(find /Applications -maxdepth 1 -name 'Xcode*.app' | sort -V | tail -1)
+          newest=$(find /Applications -maxdepth 1 -name 'Xcode*.app' ! -iname '*beta*' | sort -V | tail -1)
           [ -n "$newest" ] || { echo "no Xcode on this runner"; exit 1; }
           sudo xcode-select -s "$newest"
           echo "using $newest"
@@ -210,6 +210,12 @@ jobs:
           # Expo SDK 57's expo-modules-jsi declares swift-tools-version 6.2.
           if [ "$(printf '%s\n6.2\n' "$swift_version" | sort -V | head -1)" != "6.2" ]; then
             echo "::error::Swift $swift_version is too old for the Expo SDK (needs 6.2+). Bump the runner image."
+            exit 1
+          fi
+          sdk_version=$(xcrun --sdk iphoneos --show-sdk-version)
+          echo "iOS SDK $sdk_version"
+          if [ "${sdk_version%%.*}" -lt 27 ]; then
+            echo "::error::iOS SDK $sdk_version is older than 27, which App Store Connect requires from April 2027 (ITMS-90725). Run on an image with Xcode 27."
             exit 1
           fi
 
@@ -426,8 +432,10 @@ jobs:
           # built frameworks - without them every link runs again too.
           #
           # What goes is only what regenerates for free: the source index no
-          # build reads, the logs, and SPM checkouts that are re-fetched.
-          rm -rf "$dd/Index.noindex" "$dd/Logs" "$dd/SourcePackages/checkouts" || true
+          # build reads, the logs, SPM checkouts that are re-fetched, and the
+          # compilation cache, whose sparse data file a cancelled run leaves
+          # gigabytes long for the next restore to write out in full.
+          rm -rf "$dd/Index.noindex" "$dd/Logs" "$dd/SourcePackages/checkouts" "$dd/CompilationCache.noindex" || true
           echo "DerivedData now $(du -sh "$dd" | cut -f1)"
 
       - name: Save DerivedData

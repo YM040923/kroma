@@ -7,6 +7,7 @@ mod episodes;
 mod jobs;
 mod lang;
 mod nfo;
+mod pins;
 mod process;
 mod run;
 

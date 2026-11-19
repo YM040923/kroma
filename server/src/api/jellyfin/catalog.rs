@@ -49,7 +49,8 @@ fn scoped_catalog(
 ) -> (Vec<MediaItem>, Vec<Show>) {
     let mut episode_parent = false;
     if let Some(parent) = param(params, "ParentId") {
-        let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+        let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+            .unwrap_or_default();
         if let Some(def) = defs.iter().find(|d| d.id == parent || d.name == parent) {
             items.retain(|i| i.library == def.id || i.library == def.name);
             shows.retain(|s| s.library == def.id || s.library == def.name);

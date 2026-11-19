@@ -14,7 +14,7 @@ import {
 } from '@kromatv/ui/kit';
 import { useState } from 'react';
 import { createCallable } from 'react-call';
-import { FolderField, FolderListEditor } from '#web/features/admin/folder-field.component';
+import { FolderField, FolderListEditor } from '#web/shared/ui/folder-field.component';
 import { useAsyncAction } from '#web/features/admin/shell';
 import { ArtworkButton } from '#web/features/catalog/artwork-picker.component';
 import { useAuth } from '#web/shared/lib/auth';

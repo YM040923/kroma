@@ -11,6 +11,7 @@
 //! sharing a session.
 
 mod admission;
+mod boxes;
 mod covered;
 mod cut;
 mod ffmpeg;
@@ -22,6 +23,7 @@ mod mode;
 mod naming;
 mod progress;
 mod reclaim;
+mod retime;
 mod session;
 mod software;
 mod start;
@@ -111,12 +113,14 @@ impl HlsEngine {
 
     /// The media playlist for [`Asked`]. Returns the playlist text + the REAL
     /// stream start (s) - the keyframe at-or-before the anchor - for the
-    /// client's `baseSec`.
+    /// client's `baseSec`. The playlist names its first segment as where to
+    /// start, so a player joins at that start even while the remux is still
+    /// writing it, rather than at its live edge.
     pub async fn master(&self, asked: Asked<'_>) -> Result<(String, f64), Refusal> {
         let key = session_key(asked.item_id, asked.mode, asked.anchor, asked.audio);
         let (bytes, start) = self.sessions.master(&key, &asked).await?;
         let playlist = String::from_utf8(bytes).map_err(|_| Refusal::Unavailable)?;
-        Ok((playlist, start))
+        Ok((cut::from_its_first_segment(playlist), start))
     }
 
     /// Every remux running right now, newest first: what it is producing, on

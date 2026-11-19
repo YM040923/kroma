@@ -13,12 +13,17 @@ mod rank;
 mod refusals;
 mod shapes;
 mod tags;
+mod terms;
 mod upgrades;
 
 const GB: u64 = 1_073_741_824;
 
 fn p(name: &str) -> ParsedRelease {
     parse_release_name(name)
+}
+
+fn rule(result: Result<Judged, Reject>) -> String {
+    result.unwrap_err().rule
 }
 
 fn legacy() -> LegacySettings {
@@ -130,10 +135,11 @@ fn single(spec: Spec) -> FormatSet {
     .unwrap()
 }
 
-fn cand(size_gb: u64, seeders: u32) -> Candidate {
+fn cand(size_gb: u64, seeders: u32) -> Candidate<'static> {
     Candidate {
         size_bytes: Some(size_gb * GB),
         seeders: Some(seeders),
         indexer_priority: 0,
+        protocol: "torrent",
     }
 }

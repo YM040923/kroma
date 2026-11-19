@@ -422,7 +422,8 @@ async fn user_views(
 }
 
 async fn views_payload(state: &SharedState) -> Result<Value, Response> {
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+        .unwrap_or_default();
     let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
     let covers = query(&state.db, |pool| {
         db::art_overrides::all(&pool, db::art_overrides::LIBRARY_KIND)
@@ -473,7 +474,8 @@ async fn item_detail(
     if id.is_empty() {
         return Err(json_error(StatusCode::NOT_FOUND, "item not found"));
     }
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+        .unwrap_or_default();
     if let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) {
         let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
         let picked = query(&state.db, {
@@ -1251,7 +1253,8 @@ async fn items(
         .get("StartIndex")
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(0);
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+        .unwrap_or_default();
     let wanted = defs
         .iter()
         .find(|def| def.id == parent || def.name == parent);
@@ -1486,7 +1489,8 @@ async fn latest(
 ) -> Result<Json<Value>, Response> {
     let (user, access) = user_of(&state, &headers, &params).await?;
     let parent = params.get("ParentId").cloned().unwrap_or_default();
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+        .unwrap_or_default();
     let wanted = defs
         .iter()
         .find(|def| def.id == parent || def.name == parent);
@@ -1936,7 +1940,8 @@ async fn image_art(
     } else {
         // A library has no row of its own; an operator-picked cover wins,
         // otherwise the first title's art is what a CollectionFolder shows.
-        let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+        let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+        .unwrap_or_default();
         if let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) {
             let picked = query(&state.db, {
                 let id = def.id.clone();
@@ -2237,7 +2242,8 @@ async fn grouping_options(
     Path(_params): Path<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+        .unwrap_or_default();
     let options: Vec<Value> = defs
         .iter()
         .map(|def| json!({ "Name": def.name, "Id": def.id }))
@@ -2251,7 +2257,8 @@ async fn virtual_folders(
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+        .unwrap_or_default();
     let folders: Vec<Value> = defs
         .iter()
         .map(|def| {

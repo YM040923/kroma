@@ -224,12 +224,14 @@ pub fn set_library_scrape(
 /// backward compatibility.
 ///
 /// With nothing configured at all, the demo library under `<data>/demo-media` is
-/// the seed.
-pub fn library_defs(settings: &Settings, config: &crate::config::Config) -> Vec<LibraryDef> {
-    if let Value::Array(_) = settings.get("libraries") {
-        if let Ok(defs) = serde_json::from_value::<Vec<LibraryDef>>(settings.get("libraries")) {
-            return defs;
-        }
+/// the seed. A saved list that cannot be read is an error and never falls back
+/// to a seed: a scan of the seed would remove the libraries the owner saved.
+pub fn library_defs(
+    settings: &Settings,
+    config: &crate::config::Config,
+) -> Result<Vec<LibraryDef>, super::UnreadableLibraryList> {
+    if let Some(saved) = super::stored_library_defs(settings)? {
+        return Ok(saved);
     }
     let mut defs = Vec::new();
     if !config.movies_dirs.is_empty() {
@@ -274,20 +276,31 @@ pub fn library_defs(settings: &Settings, config: &crate::config::Config) -> Vec<
         }
     }));
     if defs.is_empty() {
-        return demo_defs(config);
+        return Ok(demo_defs(config));
     }
-    defs
+    Ok(defs)
 }
 
 // Only the ones that EXIST. A definition for a folder nobody wrote would scan as
 // zero items with folders configured, which is how an unmounted share looks: the
 // scan would keep the stored index and the row-only demo seed would never run.
+const DEMO_MOVIES: &str = "lib|demo|movies";
+const DEMO_SHOWS: &str = "lib|demo|shows";
+
+/// Whether `id` names a demo library: what a server with no media of its own
+/// shows until somebody points it at a folder.
+pub fn is_demo_library(id: &str) -> bool {
+    [DEMO_MOVIES, DEMO_SHOWS]
+        .iter()
+        .any(|seed| crate::services::scan::short_hash(seed) == id)
+}
+
 fn demo_defs(config: &crate::config::Config) -> Vec<LibraryDef> {
     let (movies, shows) = crate::services::demo::media::roots(&config.data_dir);
     let mut defs = Vec::new();
     if movies.is_dir() {
         defs.push(LibraryDef {
-            id: crate::services::scan::short_hash("lib|demo|movies"),
+            id: crate::services::scan::short_hash(DEMO_MOVIES),
             name: "Films (Démo)".to_string(),
             kind: "movies".to_string(),
             folders: vec![movies.to_string_lossy().to_string()],
@@ -296,7 +309,7 @@ fn demo_defs(config: &crate::config::Config) -> Vec<LibraryDef> {
     }
     if shows.is_dir() {
         defs.push(LibraryDef {
-            id: crate::services::scan::short_hash("lib|demo|shows"),
+            id: crate::services::scan::short_hash(DEMO_SHOWS),
             name: "Séries (Démo)".to_string(),
             kind: "shows".to_string(),
             folders: vec![shows.to_string_lossy().to_string()],
@@ -306,14 +319,10 @@ fn demo_defs(config: &crate::config::Config) -> Vec<LibraryDef> {
     defs
 }
 
-pub fn set_library_defs(settings: &Settings, pool: &Pool, defs: &[LibraryDef]) {
-    let mut patch = BTreeMap::new();
-    patch.insert("libraries".to_string(), json!(defs));
-    settings.set_patch(pool, patch);
-}
-
+/// Every folder of every library. None when the saved list cannot be read.
 pub fn all_folders(settings: &Settings, config: &crate::config::Config) -> Vec<PathBuf> {
     library_defs(settings, config)
+        .unwrap_or_default()
         .into_iter()
         .flat_map(|d| d.folders.into_iter().map(PathBuf::from))
         .collect()
@@ -505,7 +514,7 @@ mod tests {
         cfg.movies_dirs = vec![PathBuf::from("/media/films")];
         cfg.series_dirs = vec![PathBuf::from("/media/series")];
         cfg.media_dirs = vec![PathBuf::from("/media/Misc")];
-        let defs = library_defs(&s, &cfg);
+        let defs = library_defs(&s, &cfg).unwrap();
         assert_eq!(defs.len(), 3);
         assert_eq!(defs[0].name, "Films");
         assert_eq!(defs[0].kind, "movies");
@@ -513,22 +522,6 @@ mod tests {
         assert_eq!(defs[1].kind, "shows");
         assert_eq!(defs[2].name, "Misc");
         assert!(defs[2].kind.is_empty());
-    }
-
-    #[test]
-    fn a_libraries_array_that_is_not_definitions_seeds_from_the_config_instead() {
-        let pool = test_pool();
-        let s = settings(&pool);
-        s.set_patch(
-            &pool,
-            BTreeMap::from([("libraries".to_string(), json!([1, 2, 3]))]),
-        );
-        let mut cfg = test_config();
-        cfg.movies_dirs = vec![PathBuf::from("/media/films")];
-
-        let defs = library_defs(&s, &cfg);
-        assert_eq!(defs.len(), 1);
-        assert_eq!(defs[0].name, "Films");
     }
 
     #[test]
@@ -584,7 +577,7 @@ mod tests {
         let mut cfg = test_config();
         cfg.data_dir = PathBuf::from("/nonexistent/kroma-data");
 
-        assert!(library_defs(&s, &cfg).is_empty());
+        assert!(library_defs(&s, &cfg).unwrap().is_empty());
     }
 
     #[test]
@@ -598,7 +591,7 @@ mod tests {
         std::fs::create_dir_all(&movies).unwrap();
         std::fs::create_dir_all(&shows).unwrap();
 
-        let defs = library_defs(&s, &cfg);
+        let defs = library_defs(&s, &cfg).unwrap();
 
         assert_eq!(defs.len(), 2);
         assert_eq!(defs[0].kind, "movies");
@@ -620,7 +613,7 @@ mod tests {
         cfg.data_dir = dir.path().to_path_buf();
         cfg.movies_dirs = vec![PathBuf::from("/media/films")];
 
-        let defs = library_defs(&s, &cfg);
+        let defs = library_defs(&s, &cfg).unwrap();
 
         assert_eq!(defs.len(), 1);
         assert_eq!(defs[0].name, "Films");
@@ -638,7 +631,7 @@ mod tests {
         cfg.data_dir = dir.path().to_path_buf();
         cfg.media_dirs = vec![PathBuf::from("/media/4k Shows")];
 
-        let defs = library_defs(&s, &cfg);
+        let defs = library_defs(&s, &cfg).unwrap();
 
         assert_eq!(defs.len(), 1, "KROMA_MEDIA_DIRS alone configures a library");
         assert_eq!(defs[0].name, "4k Shows");
@@ -657,8 +650,8 @@ mod tests {
             folders: vec!["/a".to_string(), "/b".to_string()],
             auto_scan: false,
         }];
-        set_library_defs(&s, &pool, &defs);
-        let got = library_defs(&s, &cfg);
+        super::super::set_library_defs(&s, &pool, &defs);
+        let got = library_defs(&s, &cfg).unwrap();
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].name, "Cinema");
         assert!(!got[0].auto_scan);

@@ -81,7 +81,8 @@ async fn page(state: &SharedState, user: &crate::model::User, id: &str) -> Resul
 /// already carry, and its "current" is whatever a client shows today (the
 /// override, else the first title's poster).
 async fn library_page(state: &SharedState, id: &str) -> Result<Option<Page>, Response> {
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+        .unwrap_or_default();
     let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) else {
         return Ok(None);
     };
@@ -115,7 +116,8 @@ async fn library_cover(
     state: &SharedState,
     id: &str,
 ) -> Result<(Option<String>, Option<String>), Response> {
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+        .unwrap_or_default();
     let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) else {
         return Ok((None, None));
     };
@@ -261,7 +263,8 @@ async fn library_artwork(state: &SharedState, page: &Page) -> Response {
         Ok(items) => items,
         Err(response) => return response,
     };
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config);
+    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
+        .unwrap_or_default();
     let name = defs
         .iter()
         .find(|def| def.id == page.id)

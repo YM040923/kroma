@@ -24,6 +24,7 @@ export const AdminLibrary = z.object({
   autoScan: z.boolean(),
   scrape: ScrapeOptions,
   cover: z.string().nullish(),
+  demo: z.boolean().default(false),
 });
 export type AdminLibrary = z.infer<typeof AdminLibrary>;
 

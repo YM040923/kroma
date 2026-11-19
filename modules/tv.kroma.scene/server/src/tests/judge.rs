@@ -1,9 +1,5 @@
 use super::*;
 
-fn rule(result: Result<Judged, Reject>) -> String {
-    result.unwrap_err().rule
-}
-
 #[test]
 fn a_forbidden_term_refuses_the_release() {
     let f = fixture();
@@ -20,6 +16,21 @@ fn too_few_seeders_refuse_the_release() {
     let result = f.judge("Movie.2020.1080p.WEB-DL.x265", 2, 1, movie());
 
     assert_eq!(rule(result), "seeders");
+}
+
+#[test]
+fn a_release_that_reports_no_swarm_is_not_held_to_the_minimum_seeders() {
+    let f = fixture();
+    let swarmless = Candidate {
+        seeders: None,
+        ..cand(2, 0)
+    };
+
+    let judged = f
+        .judge_with("Movie.2020.1080p.WEB-DL.x265", swarmless, movie())
+        .unwrap();
+
+    assert_eq!(judged.seeders, None);
 }
 
 #[test]
@@ -199,69 +210,11 @@ fn a_pack_of_another_season_is_refused() {
 }
 
 #[test]
-fn a_required_term_must_be_in_the_name() {
-    let mut f = fixture();
-    f.profile.must_contain = vec!["VOSTFR".into()];
-
-    let missing = f.judge("Movie.2020.1080p.WEB.x265", 2, 10, movie());
-    let present = f.judge("Movie.2020.VOSTFR.1080p.WEB.x265", 2, 10, movie());
-
-    assert_eq!(rule(missing), "missing-required-keyword");
-    assert!(present.is_ok());
-}
-
-#[test]
-fn one_required_term_out_of_several_is_enough() {
-    let mut f = fixture();
-    f.profile.must_contain = vec!["VOSTFR".into(), "MULTi".into()];
-
-    let one = f.judge("Movie.2020.MULTi.1080p.WEB.x265", 2, 10, movie());
-    let neither = f.judge("Movie.2020.1080p.WEB.x265", 2, 10, movie());
-
-    assert!(one.is_ok());
-    assert_eq!(rule(neither), "missing-required-keyword");
-}
-
-#[test]
-fn a_term_is_found_wherever_it_sits_in_the_name() {
-    let mut f = fixture();
-    f.profile.must_not_contain = vec!["WEB-DL".into()];
-
-    let result = f.judge("Movie.2020.1080p.WEB-DL.x265", 2, 10, movie());
-
-    assert_eq!(rule(result), "forbidden-keyword");
-}
-
-#[test]
-fn a_term_between_slashes_is_a_regular_expression() {
-    let mut f = fixture();
-    f.profile.must_contain = vec!["/x26[45]$/".into()];
-
-    let present = f.judge("Movie.2020.1080p.WEB-DL.x265", 2, 10, movie());
-    let missing = f.judge("Movie.2020.1080p.WEB-DL.AV1", 2, 10, movie());
-
-    assert!(present.is_ok());
-    assert_eq!(rule(missing), "missing-required-keyword");
-}
-
-#[test]
-fn a_term_that_cannot_be_read_is_skipped_rather_than_refusing_everything() {
-    let mut f = fixture();
-    f.profile.must_contain = vec!["/(/".into(), "  ".into()];
-    f.profile.must_not_contain = vec!["/(/".into()];
-
-    let result = f.judge("Movie.2020.1080p.WEB-DL.x265", 2, 10, movie());
-
-    assert!(result.is_ok());
-}
-
-#[test]
 fn a_release_with_no_reported_size_is_still_judged() {
     let f = fixture();
     let sizeless = Candidate {
         size_bytes: None,
-        seeders: Some(10),
-        indexer_priority: 0,
+        ..cand(0, 10)
     };
 
     let judged = f

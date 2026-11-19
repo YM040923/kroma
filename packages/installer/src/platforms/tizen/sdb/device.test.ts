@@ -261,6 +261,29 @@ describe('launching and uninstalling', () => {
     expect(commands).toEqual([`0 was_execute ${appId}`, `0 execute ${appId}`]);
   });
 
+  it('moves past a launch shape the set closes as it opens', async () => {
+    const { set, device, commands } = await television({
+      shells: `${SHELL}0 was_execute`,
+      answers: { was_execute: 'sh: command not found' },
+    });
+    set.serve(`${SHELL}/usr/bin/app_launcher`, (session) => session.end('result: launched'));
+    const appId = applicationId();
+
+    const result = await device.launch(appId);
+
+    expect(result.verdict).toBe('success');
+    expect(commands).toEqual([`0 was_execute ${appId}`]);
+    expect(set.opened).toContain(`${SHELL}0 execute ${appId}`);
+  });
+
+  it('gives up on a launch when the set drops the connection, rather than trying the next shape', async () => {
+    const { set, device } = await television({ shells: `${SHELL}0 was_execute` });
+    set.serve(`${SHELL}0 was_execute`, () => set.reset());
+
+    await expect(device.launch(applicationId())).rejects.toThrow();
+    expect(set.opened.filter((service) => service.includes('execute'))).toHaveLength(1);
+  });
+
   it('uninstalls by package id', async () => {
     const { device, commands } = await television({
       answers: { vd_appuninstall: 'uninstall completed' },

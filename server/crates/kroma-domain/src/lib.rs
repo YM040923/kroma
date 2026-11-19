@@ -10,6 +10,8 @@ pub mod admin;
 pub mod app_version;
 pub mod cast;
 pub mod crash;
+pub mod import;
+pub mod imports;
 pub mod jobs;
 pub mod library;
 pub mod matching;
@@ -26,9 +28,11 @@ pub mod reports;
 pub mod requests;
 pub mod section;
 pub mod slug;
+pub mod watching;
 
-// Flat re-export (mirrors the server's former `model.rs`). `naming`, `matching`,
-// `people` and `slug` are intentionally not globbed here; reach them via their module path.
+// Flat re-export (mirrors the server's former `model.rs`). `import`, `imports`, `naming`,
+// `matching`, `people` and `slug` are intentionally not globbed here; reach them via their
+// module path.
 pub use accounts::*;
 pub use admin::*;
 pub use app_version::*;

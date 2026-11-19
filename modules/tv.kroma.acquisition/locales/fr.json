@@ -117,7 +117,7 @@
   "acq.minFormatScore": "Score minimum",
   "acq.minFormatScoreHint": "Une version qui score moins est refusée.",
   "acq.minSeeders": "Seeders minimum",
-  "acq.minSeedersHint": "Une version avec moins de seeders est refusée.",
+  "acq.minSeedersHint": "Un torrent avec moins de seeders est refusé. Une version Usenet n'en a pas et n'y est pas soumise.",
   "acq.minUpgradeIncrement": "Gain minimum",
   "acq.minUpgradeIncrementHint": "De combien une version doit mieux scorer pour remplacer un fichier de même qualité.",
   "acq.modeExcluded": "Ne doit pas",
@@ -230,7 +230,7 @@
   "acq.tabTrial": "Essai",
   "acq.tabs": "Sections de l'acquisition",
   "acq.termExample": "ex. {term}",
-  "acq.termsHint": "Un mot-clé par ligne, cherché en entier dans le nom de la version.",
+  "acq.termsHint": "Un terme par ligne, cherché en mots entiers dans le nom de la version : TS ne trouve pas DTS. Entre barres obliques, un terme est une expression régulière.",
   "acq.testName": "Nom de la version",
   "acq.testNoFormats": "Aucun format ne correspond.",
   "acq.testOriginal": "Langue d'origine",
@@ -294,5 +294,10 @@
   "acq.noneAccepted": "Aucune version ne passe les règles du profil.",
   "acq.noneRefused": "Le profil n'a refusé aucune version.",
   "acq.openOnIndexer": "Ouvrir sur {indexer}",
-  "acq.seasonNumber": "Saison {season}"
+  "acq.seasonNumber": "Saison {season}",
+  "protocol.torrent": "Torrent",
+  "protocol.usenet": "Usenet",
+  "acq.preferredProtocol": "Protocole préféré",
+  "acq.preferredProtocolHint": "Entre deux versions de même qualité et de même score, celle-ci l'emporte.",
+  "acq.protocolAny": "Indifférent"
 }

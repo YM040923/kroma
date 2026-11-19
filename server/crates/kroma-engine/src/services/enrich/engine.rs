@@ -45,6 +45,7 @@ pub(super) fn engine_for(state: &SharedState, api_key: String) -> Engine {
         language: crate::services::settings::metadata_language(&state.settings, &state.config),
         scrape: crate::services::settings::all_library_scrape(&state.settings),
         folders: crate::services::settings::library_defs(&state.settings, &state.config)
+            .unwrap_or_default()
             .into_iter()
             .map(|def| (def.id, def.folders))
             .collect(),

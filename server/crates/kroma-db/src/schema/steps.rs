@@ -37,6 +37,20 @@ pub(super) const STEPS: &[Step] = &[
     sql_step!("0016_device_app"),
     sql_step!("0017_device_address"),
     sql_step!("0018_suggestion_languages"),
-    sql_step!("0019_art_overrides"),
-    sql_step!("0020_probe_technical"),
+    sql_step!("0019_downloads_protocol"),
+    Step {
+        name: "0020_waiting_accounts",
+        run: Run::Code(super::waiting_accounts::rebuild_users),
+        rebuilds: true,
+    },
+    sql_step!("0021_imports"),
+    sql_step!("0022_import_folders"),
+    sql_step!("0023_import_held_states"),
+    sql_step!("0024_import_identities"),
+    sql_step!("0025_art_overrides"),
+    Step {
+        name: "0026_probe_technical",
+        run: Run::Code(super::probe_technical::apply),
+        rebuilds: false,
+    },
 ];

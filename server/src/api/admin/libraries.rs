@@ -8,12 +8,12 @@ use axum::Json;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::api::error::lerr;
+use crate::api::error::{lerr, lerr_with};
 use crate::api::extract::AuthUser;
 use crate::api::util::query;
 use crate::db;
 use crate::infra::events::ServerEvent;
-use crate::model::Permission;
+use crate::model::{Permission, User};
 use crate::services::settings::{self, LibraryDef};
 use crate::state::SharedState;
 use axum::routing::{get, patch, post};
@@ -36,12 +36,28 @@ pub fn routes() -> Router<SharedState> {
         .route("/libraries/{id}/scan", post(scan_library))
 }
 
+async fn configured(state: &SharedState, user: &User) -> Result<Vec<LibraryDef>, Response> {
+    if let Ok(defs) = settings::library_defs(&state.settings, &state.config) {
+        return Ok(defs);
+    }
+    let notice = query(&state.db, |pool| {
+        Ok(settings::unreadable_list_notice(&pool))
+    })
+    .await?;
+    Err(lerr_with(
+        super::user_locale(user),
+        StatusCode::CONFLICT,
+        notice.key,
+        &[("libraries", &notice.libraries)],
+    ))
+}
+
 pub async fn list_libraries(
     State(state): State<SharedState>,
     AuthUser(user): AuthUser,
 ) -> Result<Response, Response> {
     super::require_any_admin(&user)?;
-    let defs = settings::library_defs(&state.settings, &state.config);
+    let defs = configured(&state, &user).await?;
     let stats = query(&state.db, move |pool| db::library_stats(&pool)).await?;
     let covers = query(&state.db, |pool| {
         db::art_overrides::all(&pool, db::art_overrides::LIBRARY_KIND)
@@ -66,6 +82,7 @@ pub async fn list_libraries(
                 cover: covers
                     .get(&d.id)
                     .and_then(|art| art.get("poster").or_else(|| art.get("backdrop")).cloned()),
+                demo: settings::is_demo_library(&d.id),
             }
         })
         .collect();
@@ -106,7 +123,8 @@ pub async fn create_library(
             "admin.nameRequired",
         ));
     }
-    let mut defs = settings::library_defs(&state.settings, &state.config);
+    let mut defs = configured(&state, &user).await?;
+    defs.retain(|held| !settings::is_demo_library(&held.id));
     let id = crate::services::scan::short_hash(&format!(
         "lib|{name}|{}",
         crate::services::auth::random_token()
@@ -144,7 +162,7 @@ pub async fn update_library(
     Json(body): Json<UpdateLibraryBody>,
 ) -> Result<Response, Response> {
     super::require(&user, Permission::LibraryManage)?;
-    let mut defs = settings::library_defs(&state.settings, &state.config);
+    let mut defs = configured(&state, &user).await?;
     let Some(def) = defs.iter_mut().find(|d| d.id == id) else {
         return Err(lerr(
             super::user_locale(&user),
@@ -191,7 +209,7 @@ pub async fn delete_library(
     AxPath(id): AxPath<String>,
 ) -> Result<Response, Response> {
     super::require(&user, Permission::LibraryManage)?;
-    let mut defs = settings::library_defs(&state.settings, &state.config);
+    let mut defs = configured(&state, &user).await?;
     let before = defs.len();
     defs.retain(|d| d.id != id);
     if defs.len() == before {
@@ -229,7 +247,7 @@ fn clean_folders(folders: Vec<String>) -> Vec<String> {
 // Goes through the job manager so it shares the `library.scan` single-flight
 // guard and its follow-up pipeline; a no-op when a scan is already running.
 fn spawn_rescan(state: SharedState) {
-    let _ = state.jobs.trigger(
+    let _ = state.jobs.trigger_after(
         state.clone(),
         crate::services::jobs::JobKey("library.scan"),
         "library-edit",

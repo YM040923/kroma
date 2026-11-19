@@ -49,8 +49,11 @@ format upgrade must clear.
 minimum number of seeders. A release is kept when it carries at least one of the must-contain
 terms and none of the must-not ones.
 
-**MOD-81** (AGREED) - A term is found anywhere in the release name, ignoring case. Written
-between slashes it is a regular expression, searched the same way and as case-insensitively.
+**MOD-81** (AGREED) - A term matches whole words of the release name, ignoring case. Dots,
+dashes, underscores, spaces, brackets and commas separate the words, so `TS` refuses
+`Film.2020.HD-TS` but not a release with DTS audio. A term of several words matches them side
+by side, however the name separates them. Written between slashes a term is a regular
+expression, searched anywhere in the name, also ignoring case.
 
 **MOD-82** (AGREED) - A term that is empty, or an expression that does not compile, refuses
 nothing and requires nothing.
@@ -149,6 +152,40 @@ beside the file and both are kept. Only a file of the same edition is ever repla
 
 **MOD-79** (AGREED) - A file an upgrade replaces goes to the recycle bin when one is set, and is
 cleared after a number of days, 30 by default. With no bin it is deleted at once.
+
+## Protocols
+
+Status: **AGREED**
+
+A release reaches disk through a protocol: BitTorrent, Usenet, or one added later. The rules
+above judge what a release is; this section is how its protocol changes what happens to it.
+
+**MOD-95** (AGREED) - A release names the protocol that downloads it. A release that names
+none is a torrent.
+
+**MOD-96** (AGREED) - The minimum number of seeders, and seeders as a tie-break, apply only to
+a release that reports seeders. A release from a protocol with no swarm, such as Usenet, is
+judged on everything else.
+
+**MOD-97** (AGREED) - A grab goes to the enabled download client ranked first among those that
+take its release's protocol. When no enabled client takes it, the grab fails and names the
+protocol.
+
+**MOD-98** (AGREED) - A download whose client is still verifying, repairing or unpacking it is
+not imported until the client reports it done.
+
+**MOD-99** (AGREED) - A download its client gave up on fails at once (MOD-72), without waiting
+for the stall limit.
+
+**MOD-100** (AGREED) - A profile can name a preferred protocol. Between two releases of the same
+quality, format score and revision, the one of the preferred protocol ranks first (MOD-64).
+
+**MOD-101** (AGREED) - The VPN kill switch holds torrent grabs only. While it is closed, a release
+of another protocol is still grabbed, and an automatic search skips the torrents it would have
+grabbed.
+
+**MOD-102** (AGREED) - A manual add says which protocol its link is when the enabled download
+clients take more than one. Only a torrent offers its files to choose from.
 
 ## Not in scope
 

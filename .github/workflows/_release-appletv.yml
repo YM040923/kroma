@@ -58,12 +58,10 @@ jobs:
       name: ${{ github.ref == 'refs/heads/main' && 'release' || '' }}
       deployment: false
     if: ${{ (contains(fromJSON('["stable","candidate"]'), inputs.channel) || github.event_name == 'workflow_dispatch') && (github.event_name != 'workflow_dispatch' || contains(fromJSON('["all","tv"]'), github.event.inputs.targets)) }}
-    # macos-26, NOT macos-15, for the reason the phone job spells out: Expo SDK
-    # 57 pulls Swift packages built with Swift tools 6.2 (expo-modules-jsi), and
-    # the macos-15 image tops out at Xcode 16.4 / Swift 6.1. The guard step below
-    # states that in one line instead of letting it surface as a package
-    # resolution error thousands of lines into an xcodebuild log.
-    runs-on: macos-26
+    # xcode-27, NOT macos-26, like the phone job: Apple's yearly SDK floor has
+    # covered tvOS too (tvOS 26 from April 2026), and the macos-26 image tops
+    # out at Xcode 26.6.
+    runs-on: xcode-27
     permissions:
       contents: read # only reads the repo and uploads run artifacts
       actions: write # retires the previous DerivedData cache entry
@@ -83,7 +81,7 @@ jobs:
       - name: Select Xcode
         run: |
           set -euo pipefail
-          newest=$(find /Applications -maxdepth 1 -name 'Xcode*.app' | sort -V | tail -1)
+          newest=$(find /Applications -maxdepth 1 -name 'Xcode*.app' ! -iname '*beta*' | sort -V | tail -1)
           [ -n "$newest" ] || { echo "no Xcode on this runner"; exit 1; }
           sudo xcode-select -s "$newest"
           echo "using $newest"
@@ -95,6 +93,12 @@ jobs:
           # Expo SDK 57's expo-modules-jsi declares swift-tools-version 6.2.
           if [ "$(printf '%s\n6.2\n' "$swift_version" | sort -V | head -1)" != "6.2" ]; then
             echo "::error::Swift $swift_version is too old for the Expo SDK (needs 6.2+). Bump the runner image."
+            exit 1
+          fi
+          sdk_version=$(xcrun --sdk appletvos --show-sdk-version)
+          echo "tvOS SDK $sdk_version"
+          if [ "${sdk_version%%.*}" -lt 27 ]; then
+            echo "::error::tvOS SDK $sdk_version is older than 27. Run on an image with Xcode 27, as the phone job does."
             exit 1
           fi
 
@@ -172,16 +176,20 @@ jobs:
 
       # The build number is minutes-since-2020, so a restored project carries
       # the one from the run that cached it and App Store Connect would refuse
-      # the duplicate. Re-stamp the plist rather than regenerate the project.
+      # the duplicate. Re-stamp the plists rather than regenerate the project:
+      # the app's and KromaTopShelf-Info.plist, whose pair must match the app's.
       - name: Re-stamp the restored project
         if: steps.signing.outputs.ready == 'true' && steps.ios-cache.outputs.cache-hit == 'true'
         run: |
           set -euo pipefail
-          plist=$(find clients/tv-native/ios -maxdepth 2 -name Info.plist | head -1)
-          [ -n "$plist" ] || { echo "::error::no Info.plist in the restored project"; exit 1; }
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ inputs.triplet }}" "$plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ inputs.build }}" "$plist"
-          echo "re-stamped $plist"
+          stamped=0
+          while IFS= read -r plist; do
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ inputs.triplet }}" "$plist"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ inputs.build }}" "$plist"
+            echo "re-stamped $plist"
+            stamped=$((stamped + 1))
+          done < <(find clients/tv-native/ios -maxdepth 2 -name '*Info.plist' -not -path '*/Pods/*')
+          [ "$stamped" -gt 0 ] || { echo "::error::no Info.plist in the restored project"; exit 1; }
           echo "export NODE_BINARY=$(command -v node)" > clients/tv-native/ios/.xcode.env.local
 
       - name: Prebuild the tvOS project
@@ -309,8 +317,9 @@ jobs:
           # built frameworks - without them every link runs again too.
           #
           # What goes is only what regenerates for free: the source index no
-          # build reads, the logs, and SPM checkouts that are re-fetched.
-          rm -rf "$dd/Index.noindex" "$dd/Logs" "$dd/SourcePackages/checkouts" || true
+          # build reads, the logs, SPM checkouts that are re-fetched, and the
+          # compilation cache the phone job explains.
+          rm -rf "$dd/Index.noindex" "$dd/Logs" "$dd/SourcePackages/checkouts" "$dd/CompilationCache.noindex" || true
           echo "DerivedData now $(du -sh "$dd" | cut -f1)"
 
       - name: Save DerivedData

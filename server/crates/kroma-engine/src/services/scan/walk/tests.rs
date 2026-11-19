@@ -1,5 +1,10 @@
+use super::super::batches::BatchSize;
+use super::super::found::Found;
 use super::*;
-use crate::model::Kind;
+use crate::model::{Kind, MediaItem, Show};
+use crate::services::settings::LibraryDef;
+use std::collections::HashMap;
+use std::convert::Infallible;
 use std::ffi::OsStr;
 
 #[test]
@@ -63,32 +68,27 @@ fn scan_into(lib_id: &str, root: &Path) -> ScanOutcome {
 }
 
 fn scan_into_kind(lib_id: &str, root: &Path, tv_library: bool) -> ScanOutcome {
-    let mut items = HashMap::new();
-    let mut shows = HashMap::new();
-    let mut mtimes = HashMap::new();
-    let mut item_ids = HashSet::new();
-    let mut movie_seen = false;
-    let mut episode_seen = false;
+    let def = LibraryDef {
+        id: lib_id.into(),
+        name: "Library".into(),
+        kind: if tv_library { "shows".into() } else { String::new() },
+        folders: vec![root.to_string_lossy().into_owned()],
+        auto_scan: true,
+    };
+    let mut found = Found::default();
+    let mut lib = LibraryWalk::new(&def, &mut found);
+    let mut unobserved = |_: &crate::db::ScanBatch<'_>| Ok::<(), Infallible>(());
+    let mut batches = Batches::new(BatchSize::LIVE, &mut unobserved);
 
-    let unreadable = scan_root(
-        lib_id,
-        root,
-        tv_library,
-        &mut items,
-        &mut shows,
-        &mut mtimes,
-        &mut item_ids,
-        &mut movie_seen,
-        &mut episode_seen,
-    );
+    let Ok(unreadable) = scan_root(root, &mut lib, &mut batches);
 
     ScanOutcome {
-        items,
-        shows,
-        mtimes,
-        item_ids,
-        movie_seen,
-        episode_seen,
+        item_ids: lib.item_ids,
+        movie_seen: lib.movie_seen,
+        episode_seen: lib.episode_seen,
+        items: found.items,
+        shows: found.shows,
+        mtimes: found.mtimes,
         unreadable,
     }
 }
@@ -402,4 +402,37 @@ fn a_tv_library_drops_an_unnumbered_file_from_a_season_folder() {
 
     let films = scan_into_kind("lib1", root, false);
     assert_eq!(films.items.len(), 2, "a film library still takes the file");
+}
+
+#[test]
+fn takes_says_of_each_file_what_a_walk_does_with_it() {
+    let dir = temp_scan_dir();
+    let files = [
+        "Heat (1995)/Heat (1995).mkv",
+        "Heat (1995)/Heat (1995).wmv",
+        "Heat (1995)/poster.jpg",
+        "@eaDir/Ronin (1998).mkv",
+        ".trash/Thief (1981).mkv",
+        "Dark/.extras/Dark S01E01.mkv",
+        "Dark/Season 01/Dark S01E02.MKV",
+        ".Alien (1979).mkv",
+    ];
+    for file in files {
+        let path = dir.path().join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, b"x").unwrap();
+    }
+
+    let walked = scan_into("lib", dir.path());
+
+    let written: HashSet<String> = walked
+        .items
+        .values()
+        .flat_map(|item| &item.files)
+        .filter_map(|file| file.rel_path.clone())
+        .collect();
+    for file in files {
+        assert_eq!(takes(Path::new(file)), written.contains(file), "{file}");
+    }
+    assert_eq!(written.len(), 3);
 }

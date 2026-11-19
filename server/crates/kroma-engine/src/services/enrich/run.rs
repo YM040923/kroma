@@ -7,6 +7,7 @@ use std::thread;
 use tracing::{info, warn};
 
 use crate::db;
+use crate::db::imports::Lead;
 use crate::infra::events::ServerEvent;
 use crate::infra::metadata::Target;
 use crate::model::{MediaItem, Show};
@@ -15,7 +16,8 @@ use crate::services::search::SearchEngine;
 use crate::state::SharedState;
 
 use super::engine::{engine_for, Counters, Engine};
-use super::jobs::{art_intact, build_jobs, load_pins, pin_for, Job};
+use super::jobs::{art_intact, build_jobs, Job};
+use super::pins::{lead_for, load_pins};
 use super::process::process_job;
 
 // TMDB allows ~50 rps; every worker is another SQLite writer.
@@ -141,13 +143,17 @@ pub fn enrich_one(state: &SharedState, id: &str, is_show: bool) -> anyhow::Resul
             .as_ref()
             .map(|m| m.tmdb_id)
             .filter(|&i| i != 0);
-        let pin = pin_for(state, db::metadata_core::SHOW, id).filter(|&p| Some(p) != on_file);
+        let lead = lead_for(state, db::metadata_core::SHOW, id);
+        let pin = lead
+            .as_ref()
+            .and_then(Lead::tmdb)
+            .filter(|&p| Some(p) != on_file);
         let intact = art_intact(&state.config.data_dir, show.metadata.as_ref());
         // A per-library choice only lands on titles matched after it was set;
         // the stored blob carries no language marker, so a forced re-fetch is
         // what makes an existing match pick the new language and artwork up.
         let relocalize = has_library_scrape(state, &show.library);
-        Job {
+        let job = Job {
             id: show.id.clone(),
             library: show.library.clone(),
             target: Target::Tv,
@@ -157,7 +163,9 @@ pub fn enrich_one(state: &SharedState, id: &str, is_show: bool) -> anyhow::Resul
             resolved_tmdb: on_file.filter(|_| pin.is_none() && intact && !relocalize),
             pin,
             refetch: on_file.filter(|_| pin.is_none() && (!intact || relocalize)),
-        }
+            unasked: None,
+        };
+        job.asking(lead.and_then(Lead::unasked))
     } else {
         let Some(item) = db::get_item(&state.db, id)? else {
             return Ok(());
@@ -167,10 +175,14 @@ pub fn enrich_one(state: &SharedState, id: &str, is_show: bool) -> anyhow::Resul
             .as_ref()
             .map(|m| m.tmdb_id)
             .filter(|&i| i != 0);
-        let pin = pin_for(state, db::metadata_core::ITEM, id).filter(|&p| Some(p) != on_file);
+        let lead = lead_for(state, db::metadata_core::ITEM, id);
+        let pin = lead
+            .as_ref()
+            .and_then(Lead::tmdb)
+            .filter(|&p| Some(p) != on_file);
         let intact = art_intact(&state.config.data_dir, item.metadata.as_ref());
         let relocalize = has_library_scrape(state, &item.library);
-        Job {
+        let job = Job {
             id: item.id.clone(),
             library: item.library.clone(),
             target: Target::Movie,
@@ -180,7 +192,9 @@ pub fn enrich_one(state: &SharedState, id: &str, is_show: bool) -> anyhow::Resul
             resolved_tmdb: on_file.filter(|_| pin.is_none() && intact && !relocalize),
             pin,
             refetch: on_file.filter(|_| pin.is_none() && (!intact || relocalize)),
-        }
+            unasked: None,
+        };
+        job.asking(lead.and_then(Lead::unasked))
     };
     let eng = engine_for(state, api_key);
     let counters = Counters::default();

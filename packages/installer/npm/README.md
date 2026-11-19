@@ -1,7 +1,7 @@
 # @kromatv/installer
 
-Install [KROMA](https://kroma.tv) on the TVs on your network, from a Mac or a
-Linux computer:
+Install [KROMA](https://kroma.tv) on the TVs on your network, from a Mac, a
+Windows PC or a Linux computer:
 
 ```bash
 npx @kromatv/installer
@@ -37,7 +37,7 @@ native app, use `--no-web` the same way.
 
 ## Before you begin
 
-- [Node.js](https://nodejs.org) 22 or later, on macOS or Linux.
+- [Node.js](https://nodejs.org) 22.12 or later, on macOS, Windows or Linux.
 - The computer and the TV on the same network.
 - One step on the TV itself. It is done once, and no tool can do it over the
   network:
@@ -100,6 +100,12 @@ address of the TV, and sign in to your Samsung account when the browser opens.
 A KROMA signed with another certificate is already on the TV. Delete it: in
 **Apps**, hold the select button on the KROMA tile, then choose **Delete**.
 Install again.
+
+### A Samsung TV runs an older Tizen than this KROMA needs
+
+The version of KROMA you chose asks for a newer Tizen than the TV runs. Choose
+**Canary** when the installer asks which version, or install with
+`--source canary`.
 
 ### A Samsung TV from 2020 or earlier refuses the app
 

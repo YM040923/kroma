@@ -298,6 +298,13 @@ not implement is refused by name, even when its `minServer` is met
 **MOD-93** (SHIPPED) - `minServer` is the floor for a server capability the module needs. It is
 no longer the whole compatibility contract.
 
+**MOD-107** (SHIPPED) - A module that reaches the core database is checked against the core
+database the server carries, at install, at every start and in the Store, and its author
+declares nothing for it. A module that needs a newer core database than the server's is refused
+naming both versions, and the Store offers the newest version that runs instead. A module built
+before the server changed a table it reaches, in a way it would read wrongly, is refused naming
+the table.
+
 ## Module UI
 
 Status: **SHIPPED**
@@ -357,7 +364,8 @@ a curated library has no need to carry any of it.
 
 - **Downloads and acquisition** (`tv.kroma.torrents`, `tv.kroma.acquisition`,
   `tv.kroma.indexer`, `tv.kroma.torznab`, `tv.kroma.vpn`, and the download engines
-  `tv.kroma.engine.qbittorrent` / `tv.kroma.engine.transmission`). Getting bytes onto disk
+  `tv.kroma.engine.qbittorrent` / `tv.kroma.engine.transmission` for BitTorrent and
+  `tv.kroma.engine.sabnzbd` / `tv.kroma.engine.nzbget` for Usenet). Getting bytes onto disk
   is out of scope for the library, which only *observes* what appears, [`library/`](../library/).
   This stack carries the heaviest and most legally sensitive native code in the product; it
   is exactly what should be optional, isolated and removable.
@@ -376,6 +384,28 @@ a curated library has no need to carry any of it.
 - **Scene parsing** (`tv.kroma.scene`). A shared library the acquisition and downloads
   modules link, rather than a module of its own, because it sits on a hot path that must
   not become a network hop.
+
+## Importers
+
+Status: **AGREED**, from [RFC 719](../../rfcs/719-guided-setup-and-import.md).
+
+Bringing a household over from another media server is [`admin/import.md`](../admin/import.md).
+The part that speaks to the other server is a module, because an owner runs it once and the
+other server changes on its own schedule.
+
+**MOD-103** (AGREED) - Each importer is a module, one per kind of server, and a server that
+never imports carries none. The guided setup and the admin console install the one the owner
+chose from the official registry.
+
+**MOD-104** (AGREED) - The servers KROMA can import from are the importers the official
+registry lists. A new importer appears in the choice without a server release.
+
+**MOD-105** (AGREED) - An importer reads the other server and describes what it found. The
+core decides what becomes of it and does every write. An importer has no access to accounts,
+invitations, visibility, watch state or watch history.
+
+**MOD-106** (AGREED) - The sign-in to the other server is the importer's to keep, among its
+own data. The core never holds it, and removing the importer removes it.
 
 ## Not in scope
 
