@@ -32,12 +32,15 @@ fn query_value<'a>(params: &'a HashMap<String, String>, key: &str) -> Option<&'a
     })
 }
 
-fn metadata_locale(state: &SharedState, headers: &HeaderMap, params: &HashMap<String, String>) -> &'static str {
+fn metadata_locale(state: &SharedState, _headers: &HeaderMap, params: &HashMap<String, String>) -> &'static str {
+    // Jellyfin clients disagree on what they send: 小幻 renders a Chinese UI
+    // while requesting these endpoints without a Chinese Accept-Language. The
+    // library's own metadata language is the only answer both clients share,
+    // so a request header only speaks when it names the same language.
     let configured = crate::services::settings::metadata_language(&state.settings, &state.config);
-    let language = query_value(params, "MetadataLanguage").map(String::as_str)
-        .or_else(|| headers.get(header::ACCEPT_LANGUAGE).and_then(|value| value.to_str().ok()))
-        .unwrap_or(&configured);
-    crate::i18n::content_locale(crate::i18n::detect_locale(None, Some(language)))
+    let asked = query_value(params, "MetadataLanguage").map(String::as_str);
+    let tag = asked.unwrap_or(&configured);
+    crate::i18n::content_locale(crate::i18n::detect_locale(None, Some(tag)))
 }
 
 async fn localized_items(state: &SharedState, locale: &'static str) -> Result<Vec<MediaItem>, Response> {
@@ -250,7 +253,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/Sessions/Capabilities/Full", post(no_content))
         .route("/QuickConnect/Enabled", get(quick_connect_enabled))
         .route("/DisplayPreferences/{id}", get(display_preferences))
-        .route("/Shows/NextUp", get(next_up))
+        .route("/Shows/NextUp", get(empty_items))
         .route("/Shows/{id}/Episodes/{episode_id}/Similar", get(empty_items))
 }
 
@@ -932,10 +935,22 @@ fn provider_ids(meta: Option<&crate::model::Metadata>) -> Value {
 }
 
 
+fn reduced_ratio(width: u32, height: u32) -> Option<String> {
+    fn gcd(a: u32, b: u32) -> u32 {
+        if b == 0 { a } else { gcd(b, a % b) }
+    }
+    (width > 0 && height > 0).then(|| {
+        let divisor = gcd(width, height).max(1);
+        format!("{}:{}", width / divisor, height / divisor)
+    })
+}
+
 fn media_streams(item: &MediaItem) -> Value {
     let mut streams = Vec::new();
     if let Some(video) = item.video.as_ref() {
         let technical = video.technical.as_ref();
+        let aspect = technical.and_then(|t| t.aspect_ratio.clone())
+            .or_else(|| video.width.zip(video.height).and_then(|(w, h)| reduced_ratio(w, h)));
         streams.push(json!({
             "Type": "Video",
             "Index": technical.and_then(|t| t.stream_index).unwrap_or(0),
@@ -946,7 +961,7 @@ fn media_streams(item: &MediaItem) -> Value {
             "VideoRange": if video.hdr { "HDR" } else { "SDR" },
             "Profile": technical.and_then(|t| t.profile.clone()),
             "Level": technical.and_then(|t| t.level),
-            "AspectRatio": technical.and_then(|t| t.aspect_ratio.clone()),
+            "AspectRatio": aspect,
             "RealFrameRate": technical.and_then(|t| t.frame_rate),
             "BitRate": technical.and_then(|t| t.bit_rate),
             "PixelFormat": technical.and_then(|t| t.pixel_format.clone()),
@@ -956,6 +971,7 @@ fn media_streams(item: &MediaItem) -> Value {
             "IsDefault": true,
         }));
     }
+    let any_default = item.audio_tracks.iter().any(|audio| audio.default);
     for (i, audio) in item.audio_tracks.iter().enumerate() {
         let technical = audio.technical.as_ref();
         streams.push(json!({
@@ -963,14 +979,14 @@ fn media_streams(item: &MediaItem) -> Value {
             "Index": technical.and_then(|t| t.stream_index).unwrap_or(i as u32 + 1),
             "Codec": audio.codec,
             "Channels": audio.channels,
-            "Language": audio.language,
+            "Language": audio.language.clone().or_else(|| Some("und".to_string())),
             "Title": audio.title,
             "DisplayTitle": audio.title,
             "Profile": technical.and_then(|t| t.profile.clone()),
             "SampleRate": technical.and_then(|t| t.sample_rate),
             "BitRate": technical.and_then(|t| t.bit_rate),
             "ChannelLayout": technical.and_then(|t| t.channel_layout.clone()),
-            "IsDefault": audio.default,
+            "IsDefault": audio.default || (!any_default && i == 0),
         }));
     }
     for (i, subtitle) in item.subtitles.iter().enumerate() {
@@ -1000,11 +1016,10 @@ fn media_source(
     access: &str,
 ) -> Value {
     let ticket = crate::services::media_ticket::for_access_token(&state.media_ticket_key, access);
-    let path = item
-        .abs_path
-        .clone()
-        .filter(|p| p.starts_with("http://") || p.starts_with("https://"))
-        .unwrap_or_else(|| format!("/api/items/{}/stream?t={ticket}", item.id));
+    // Never put the drive's signed URL in a DTO: media info would show the
+    // module/115 address. The server stream is the same bytes and the module
+    // sign is logged when the redirect is served.
+    let path = format!("/api/items/{}/stream?t={ticket}", item.id);
     let size = source_size(item);
     let bitrate = size.zip(item.duration_ms).filter(|(_, ms)| *ms > 0)
         .map(|(bytes, ms)| bytes.saturating_mul(8000) / ms);
@@ -1019,7 +1034,7 @@ fn media_source(
         "SupportsDirectPlay": true,
         "SupportsDirectStream": true,
         "SupportsTranscoding": false,
-        "IsRemote": item.abs_path.as_deref().is_some_and(|p| p.starts_with("http")),
+        "IsRemote": false,
         "MediaStreams": media_streams(item),
     })
 }
@@ -1694,7 +1709,11 @@ async fn image_art(
         .await?;
         let own = overrides.get(art_key).cloned().or_else(|| {
             item.metadata.as_ref().and_then(|meta| {
-                if backdrop {
+                // An episode's own still travels in `backdropUrl`; Primary must
+                // use it too, or every card in a season shows the series art.
+                if item.show_id.is_some() {
+                    meta.backdrop_url.clone().or_else(|| meta.poster_url.clone())
+                } else if backdrop {
                     meta.backdrop_url.clone()
                 } else {
                     meta.poster_url.clone()
@@ -1966,9 +1985,7 @@ async fn ancestors(
     Ok(Json(json!([])))
 }
 
-/// The next unwatched episode of every show the caller has started, in
-/// Jellyfin's on-deck order: continue after the highest watched episode, never
-/// back-filling an earlier skipped one.
+#[allow(dead_code)]
 async fn next_up(
     State(state): State<SharedState>,
     headers: HeaderMap,

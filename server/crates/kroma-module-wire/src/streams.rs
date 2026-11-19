@@ -56,7 +56,7 @@ impl ColorInfo {
 
 /// Version of successfully collected technical probe information. This is not a
 /// promise that every optional field exists in the source container.
-pub const MEDIA_PROBE_VERSION: u32 = 1;
+pub const MEDIA_PROBE_VERSION: u32 = 2;
 
 /// Container-global stream index, codec-specific ffprobe level, display aspect
 /// ratio (e.g. `16:9`), frames/second and bits/second. Never inferred from file size.

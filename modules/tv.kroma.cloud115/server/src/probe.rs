@@ -490,6 +490,7 @@ mod mp4 {
                     Kind::Audio => {
                         let mut audio = track.audio;
                         audio.index = audio_index;
+                        audio.default = audio_index == 0;
                         audio_index += 1;
                         probed.audio_tracks.push(audio);
                     }
@@ -584,30 +585,50 @@ mod mp4 {
             .filter(|(_, delta)| *delta > 0)
             .map(|(scale, delta)| scale as f64 / delta as f64)
             .filter(|fps| fps.is_finite() && *fps > 0.0);
-        let video_technical = entries.first().map(|(kind, body)| {
+        let bit_rate = mdhd.and_then(mdhd_timing)
+            .zip(find(&stbl_boxes, b"stsz").and_then(sample_bytes))
+            .filter(|((_, ticks), _)| *ticks > 0)
+            .map(|((scale, ticks), bytes)| bytes.saturating_mul(8).saturating_mul(u64::from(scale)) / ticks)
+            .filter(|rate| *rate > 0);
+        let (video_technical, video_bit_depth) = entries.first().map(|(kind, body)| {
             let mut technical = VideoTechnical {
                 stream_index: Some(ordinal),
                 frame_rate,
+                bit_rate,
                 ..VideoTechnical::default()
             };
+            let mut depth = None;
             if let Some(config) = find(&boxes(body, 78, body.len()), if kind == b"hvc1" || kind == b"hev1" { b"hvcC" } else { b"avcC" }) {
                 let (profile, level) = codec_config(kind, config);
                 technical.profile = profile;
                 technical.level = level;
+                if kind == b"hvc1" || kind == b"hev1" {
+                    let (bits, pixels) = hevc_pixels(config);
+                    depth = bits;
+                    technical.pixel_format = pixels;
+                }
             }
-            technical
-        });
+            (technical, depth)
+        }).map_or((None, None), |(tech, depth)| (Some(tech), depth));
         let sample_rate = entries.first().and_then(|(_, body)| audio_sample_rate(body));
+        let channel_layout = channels.and_then(|count| match count {
+            1 => Some("mono".to_string()),
+            2 => Some("stereo".to_string()),
+            _ => None,
+        });
         let video = Video {
             technical: video_technical,
             codec: codec.clone(),
             width,
             height,
+            bit_depth: video_bit_depth,
             ..Video::default()
         };
         let audio_technical = AudioTechnical {
             stream_index: Some(ordinal),
             sample_rate,
+            bit_rate,
+            channel_layout,
             ..AudioTechnical::default()
         };
 
@@ -641,12 +662,61 @@ mod mp4 {
         .filter(|scale| *scale > 0)
     }
 
+    fn mdhd_timing(mdhd: &[u8]) -> Option<(u32, u64)> {
+        if *mdhd.first()? == 1 {
+            let scale = be32(mdhd.get(20..24)?);
+            let ticks = u64::from_be_bytes(mdhd.get(24..32)?.try_into().ok()?);
+            (scale > 0 && ticks > 0).then_some((scale, ticks))
+        } else {
+            let scale = be32(mdhd.get(12..16)?);
+            let ticks = u64::from(be32(mdhd.get(16..20)?));
+            (scale > 0 && ticks > 0).then_some((scale, ticks))
+        }
+    }
+
+    /// Sum of every sample's size: the track's bytes, which over the track's
+    /// own duration is its average bitrate.
+    fn sample_bytes(stsz: &[u8]) -> Option<u64> {
+        if stsz.len() < 12 {
+            return None;
+        }
+        let fixed = be32(&stsz[4..8]);
+        let count = be32(&stsz[8..12]) as usize;
+        if fixed > 0 {
+            return Some(u64::from(fixed).saturating_mul(count as u64));
+        }
+        let end = 12usize.checked_add(count.checked_mul(4)?)?;
+        if end > stsz.len() {
+            return None;
+        }
+        Some((0..count)
+            .map(|i| u64::from(be32(&stsz[12 + i * 4..16 + i * 4])))
+            .sum())
+    }
+
     fn first_sample_delta(stts: &[u8]) -> Option<u32> {
         (stts.len() >= 16).then(|| be32(&stts[12..16])).filter(|delta| *delta > 0)
     }
 
     fn audio_sample_rate(entry: &[u8]) -> Option<u32> {
         (entry.len() >= 28).then(|| be32(&entry[24..28]) >> 16).filter(|rate| *rate > 0)
+    }
+
+    fn hevc_pixels(config: &[u8]) -> (Option<u32>, Option<String>) {
+        let chroma = config.get(16).map(|value| value & 0x03);
+        let depth = config.get(17)
+            .map(|value| 8 + u32::from(value & 0x07))
+            .filter(|bits| *bits >= 8);
+        let pixels = match (chroma, depth) {
+            (Some(1), Some(8)) => Some("yuv420p".to_string()),
+            (Some(1), Some(10)) => Some("yuv420p10le".to_string()),
+            (Some(2), Some(8)) => Some("yuv422p".to_string()),
+            (Some(2), Some(10)) => Some("yuv422p10le".to_string()),
+            (Some(3), Some(8)) => Some("yuv444p".to_string()),
+            (Some(3), Some(10)) => Some("yuv444p10le".to_string()),
+            _ => None,
+        };
+        (depth, pixels)
     }
 
     fn codec_config(kind: &[u8; 4], config: &[u8]) -> (Option<String>, Option<u32>) {
