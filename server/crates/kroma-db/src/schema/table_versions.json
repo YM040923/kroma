@@ -8,6 +8,10 @@
       "broke": 1,
       "changed": 1
     },
+    "art_overrides": {
+      "broke": 25,
+      "changed": 25
+    },
     "audio_analysis": {
       "broke": 1,
       "changed": 1
@@ -41,8 +45,8 @@
       "changed": 1
     },
     "files": {
-      "broke": 1,
-      "changed": 1
+      "broke": 26,
+      "changed": 26
     },
     "identities": {
       "broke": 15,
@@ -129,8 +133,8 @@
       "changed": 1
     },
     "metadata_core": {
-      "broke": 1,
-      "changed": 1
+      "broke": 26,
+      "changed": 26
     },
     "metric_samples": {
       "broke": 1,
@@ -205,8 +209,8 @@
       "changed": 1
     },
     "season_meta": {
-      "broke": 1,
-      "changed": 1
+      "broke": 26,
+      "changed": 26
     },
     "sessions": {
       "broke": 13,
@@ -253,5 +257,5 @@
       "changed": 1
     }
   },
-  "version": 24
+  "version": 26
 }

@@ -15,6 +15,10 @@ type CodeSteps = [(&'static str, &'static [&'static str])];
 const CODE_STEP_TABLES: &CodeSteps = &[
     ("0013_stored_tokens", &["access_tokens", "sessions"]),
     ("0020_waiting_accounts", &["users"]),
+    (
+        "0026_probe_technical",
+        &["files", "season_meta", "metadata_core"],
+    ),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
