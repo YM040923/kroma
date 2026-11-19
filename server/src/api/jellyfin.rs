@@ -561,7 +561,14 @@ async fn unmark_played(
     let id = path.get("id").cloned().unwrap_or_default();
     crate::api::visibility::gate_item(&state, &user, &id).await?;
     let uid = user.id.clone();
-    query(&state.db, move |pool| db::unmark_watched(&pool, &uid, &id)).await?;
+    query(&state.db, {
+        let uid = uid.clone();
+        let id = id.clone();
+        move |pool| db::unmark_watched(&pool, &uid, &id)
+    })
+    .await?;
+    // Jellyfin's "mark unplayed" also clears the resume point.
+    query(&state.db, move |pool| db::delete_progress(&pool, &uid, &id)).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -713,6 +720,9 @@ fn movie_dto(state: &SharedState, item: &MediaItem) -> Value {
         "Container": if item.container == "strm" { "mkv" } else { item.container.as_str() },
         "Overview": item.metadata.as_ref().and_then(|m| m.overview.clone()),
         "CommunityRating": item.metadata.as_ref().and_then(|m| m.rating),
+        "OfficialRating": item.metadata.as_ref().and_then(|m| m.certification.clone()),
+        "Genres": item.metadata.as_ref().map(|m| m.genres.clone()).unwrap_or_default(),
+        "DateCreated": item.added_at,
         "ImageTags": image_tag(poster.as_ref()),
         "BackdropImageTags": if item.metadata.as_ref().and_then(|m| m.backdrop_url.as_ref()).is_some() { json!(["1"]) } else { json!([]) },
         "UserData": { "Played": false, "PlaybackPositionTicks": 0, "PlayCount": 0, "IsFavorite": false },
@@ -731,6 +741,9 @@ fn series_dto(state: &SharedState, show: &Show) -> Value {
         "ProductionYear": show.year,
         "Overview": show.metadata.as_ref().and_then(|m| m.overview.clone()),
         "CommunityRating": show.metadata.as_ref().and_then(|m| m.rating),
+        "OfficialRating": show.metadata.as_ref().and_then(|m| m.certification.clone()),
+        "Genres": show.metadata.as_ref().map(|m| m.genres.clone()).unwrap_or_default(),
+        "DateCreated": show.added_at,
         "ImageTags": image_tag(poster.as_ref()),
         "BackdropImageTags": if show.metadata.as_ref().and_then(|m| m.backdrop_url.as_ref()).is_some() { json!(["1"]) } else { json!([]) },
         "ChildCount": show.episode_count,
