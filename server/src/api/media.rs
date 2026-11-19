@@ -13,7 +13,7 @@ use crate::api::util::query;
 use crate::api::{etag, visibility};
 use crate::db;
 use crate::i18n::ContentLocale;
-use crate::model::{show_card, MediaCard, MediaItem};
+use crate::model::{show_card, MediaCard, MediaItem, Show, ShowDetail};
 use crate::state::SharedState;
 use axum::routing::get;
 use axum::Router;
@@ -129,6 +129,103 @@ pub fn items_in_view(items: Vec<MediaItem>, view: Option<ListView>) -> Response 
     }
 }
 
+/// Two rows describe one series when they sit in the same library and matched
+/// the same TMDB show (the scan hashes the folder title, so a stray space or a
+/// missing 的 creates a second row).
+fn same_show(a: &Show, b: &Show) -> bool {
+    if a.library != b.library {
+        return false;
+    }
+    match (
+        a.metadata.as_ref().map(|meta| meta.tmdb_id).filter(|id| *id > 0),
+        b.metadata.as_ref().map(|meta| meta.tmdb_id).filter(|id| *id > 0),
+    ) {
+        (Some(left), Some(right)) => left == right,
+        _ => a.id == b.id,
+    }
+}
+
+fn merge_show_rows(shows: Vec<Show>) -> Vec<Show> {
+    let mut out: Vec<Show> = Vec::new();
+    for show in shows {
+        if let Some(existing) = out.iter_mut().find(|existing| same_show(existing, &show)) {
+            let total = existing.episode_count.saturating_add(show.episode_count);
+            let seasons = existing.season_count.max(show.season_count);
+            if show.episode_count > existing.episode_count {
+                let mut chosen = show;
+                chosen.episode_count = total;
+                chosen.season_count = seasons;
+                *existing = chosen;
+            } else {
+                existing.episode_count = total;
+                existing.season_count = seasons;
+            }
+        } else {
+            out.push(show);
+        }
+    }
+    out
+}
+
+async fn merged_show_detail(state: &SharedState, id: &str) -> Result<Option<ShowDetail>, Response> {
+    let all = query(&state.db, |pool| db::list_shows(&pool, None)).await?;
+    let Some(target) = all.iter().find(|show| show.id == id).cloned() else {
+        return Ok(None);
+    };
+    let mut group: Vec<Show> = all.into_iter().filter(|show| same_show(show, &target)).collect();
+    group.sort_by(|a, b| {
+        if a.episode_count != b.episode_count {
+            b.episode_count.cmp(&a.episode_count)
+        } else if a.added_at != b.added_at {
+            a.added_at.cmp(&b.added_at)
+        } else {
+            a.id.cmp(&b.id)
+        }
+    });
+    let canonical = group[0].clone();
+    let canonical_id = canonical.id.clone();
+    let Some(mut detail) = query(&state.db, move |pool| db::get_show(&pool, &canonical_id)).await? else {
+        return Ok(None);
+    };
+    for member in group.iter().filter(|show| show.id != canonical.id) {
+        let member_id = member.id.clone();
+        let Some(other) = query(&state.db, move |pool| db::get_show(&pool, &member_id)).await? else {
+            continue;
+        };
+        for season in other.seasons {
+            match detail.seasons.iter_mut().find(|existing| existing.number == season.number) {
+                Some(existing) => {
+                    for episode in season.episodes {
+                        let known = existing.episodes.iter().any(|known| {
+                            known.episode == episode.episode
+                                && (known.id == episode.id || known.rel_path == episode.rel_path)
+                        });
+                        if !known {
+                            existing.episodes.push(episode);
+                        }
+                    }
+                    existing.episodes.sort_by(|a, b| a.episode.cmp(&b.episode).then_with(|| a.id.cmp(&b.id)));
+                    if existing.name.is_none() {
+                        existing.name = season.name;
+                    }
+                    if existing.overview.is_none() {
+                        existing.overview = season.overview;
+                    }
+                    if existing.poster_url.is_none() {
+                        existing.poster_url = season.poster_url;
+                    }
+                }
+                None => detail.seasons.push(season),
+            }
+        }
+    }
+    detail.seasons.sort_by_key(|season| season.number);
+    detail.show = canonical;
+    detail.show.episode_count = detail.seasons.iter().map(|season| season.episodes.len() as u32).sum();
+    detail.show.season_count = detail.seasons.len() as u32;
+    Ok(Some(detail))
+}
+
 /// `GET /api/shows` (optional `?library=`) → `Show[]`, without cast or crew with
 /// `?view=card`. Personalises each show's `progress` (series completion) for the
 /// calling account.
@@ -141,7 +238,7 @@ pub async fn list_shows(
     let uid = user.id.clone();
     let library = q.library;
     let mut shows = query(&state.db, move |pool| {
-        let mut shows = db::list_shows(&pool, library.as_deref())?;
+        let mut shows = merge_show_rows(db::list_shows(&pool, library.as_deref())?);
         let prog = db::show_progress(&pool, &uid).unwrap_or_default();
         for s in &mut shows {
             s.progress = prog.get(&s.id).copied();
@@ -167,16 +264,16 @@ pub async fn get_show(
 ) -> Result<Response, Response> {
     visibility::gate_show(&state, &user, &id).await?;
     let uid = user.id;
+    let detail = merged_show_detail(&state, &id)
+        .await?
+        .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "show not found"))?;
     let detail = query(&state.db, move |pool| {
-        let Some(mut detail) = db::get_show(&pool, &id)? else {
-            return Ok(None);
-        };
+        let mut detail = detail;
         detail.show.progress = db::show_progress_one(&pool, &uid, &detail.show.id).unwrap_or(None);
         db::localize::overlay_show_detail(&pool, &mut detail, locale)?;
-        Ok(Some(detail))
+        Ok(detail)
     })
-    .await?
-    .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "show not found"))?;
+    .await?;
     Ok(Json(detail).into_response())
 }
 

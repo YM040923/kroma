@@ -860,7 +860,9 @@ fn ticks(ms: Option<u64>) -> i64 {
 
 fn image_tag(art: Option<&String>) -> Value {
     match art {
-        Some(_) => json!({ "Primary": "1" }),
+        // The tag follows the image: an episode whose still changes (or a
+        // re-scraped poster) must not keep serving the old cached bytes.
+        Some(url) => json!({ "Primary": library_image_tag_value(url) }),
         None => json!({}),
     }
 }
@@ -986,7 +988,7 @@ fn media_streams(item: &MediaItem) -> Value {
             "SampleRate": technical.and_then(|t| t.sample_rate),
             "BitRate": technical.and_then(|t| t.bit_rate),
             "ChannelLayout": technical.and_then(|t| t.channel_layout.clone()),
-            "IsDefault": audio.default || (!any_default && i == 0),
+            "IsDefault": audio.default || (!any_default && item.audio_tracks.len() == 1),
         }));
     }
     for (i, subtitle) in item.subtitles.iter().enumerate() {
@@ -1020,12 +1022,17 @@ fn media_source(
     // module/115 address. The server stream is the same bytes and the module
     // sign is logged when the redirect is served.
     let path = format!("/api/items/{}/stream?t={ticket}", item.id);
+    let name = item.rel_path.as_deref()
+        .and_then(|path| std::path::Path::new(path).file_stem())
+        .and_then(|stem| stem.to_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| item.title.clone());
     let size = source_size(item);
     let bitrate = size.zip(item.duration_ms).filter(|(_, ms)| *ms > 0)
         .map(|(bytes, ms)| bytes.saturating_mul(8000) / ms);
     json!({
         "Id": item.id,
-        "Name": item.title,
+        "Name": name,
         "Path": client_url(headers, &path),
         "Container": if item.container == "strm" { "mkv" } else { item.container.as_str() },
         "RunTimeTicks": ticks(item.duration_ms),
@@ -1491,6 +1498,10 @@ async fn seasons(
 fn season_dto(state: &SharedState, show: &Show, season: &crate::model::Season, locale: &str) -> Value {
     let poster = season.poster_url.as_ref()
         .or_else(|| show.metadata.as_ref().and_then(|m| m.poster_url.as_ref()));
+    let year = season.air_date.as_deref()
+        .and_then(|date| date.get(..4))
+        .and_then(|year| year.parse::<u32>().ok())
+        .or(show.year);
     json!({
         "Name": season.name.clone().unwrap_or_else(|| season_name(locale, season.number)),
         "Id": format!("{}:s{}", show.id, season.number),
@@ -1502,7 +1513,8 @@ fn season_dto(state: &SharedState, show: &Show, season: &crate::model::Season, l
         "SeriesName": show.title,
         "IndexNumber": season.number,
         "ChildCount": season.episodes.len(),
-        "ProductionYear": show.year,
+        "ProductionYear": year,
+        "PremiereDate": season.air_date,
         "Overview": season.overview,
         "ImageTags": image_tag(poster),
         "UserData": { "Played": false, "PlaybackPositionTicks": 0 },
@@ -2183,10 +2195,12 @@ async fn search_hints(
             json!({ "SearchHints": [], "TotalRecordCount": 0 }),
         ));
     }
-    let mut items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
-    let mut shows = query(&state.db, |pool| db::list_shows(&pool, None)).await?;
+    let locale = metadata_locale(&state, &headers, &params);
+    let mut items = localized_items(&state, locale).await?;
+    let mut shows = localized_shows(&state, locale).await?;
     crate::api::visibility::keep_items(&user, &mut items);
     crate::api::visibility::keep_shows(&user, &mut shows);
+    let shows = dedupe_series(shows);
     let mut hints = Vec::new();
     for item in items
         .iter()
