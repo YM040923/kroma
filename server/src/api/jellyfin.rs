@@ -1022,7 +1022,21 @@ fn media_streams(item: &MediaItem) -> Value {
             "IsDefault": true,
         }));
     }
-    let any_default = item.audio_tracks.iter().any(|audio| audio.default);
+    // A file flag wins. Without one, the client should not be invited to start
+    // with a commentary/Dolby track when a standard AAC mix is present: Jellyfin
+    // clients pick the compatible stereo mix, so say which one that is.
+    let default_audio = item.audio_tracks.iter().position(|audio| audio.default)
+        .or_else(|| {
+            let standard = |audio: &crate::model::AudioStream| {
+                audio.codec.eq_ignore_ascii_case("aac")
+                    && audio.title.as_deref().is_some_and(|title| {
+                        title.contains("标准") || title.to_lowercase().contains("standard")
+                    })
+            };
+            item.audio_tracks.iter().position(standard)
+                .or_else(|| item.audio_tracks.iter().position(|audio| audio.codec.eq_ignore_ascii_case("aac")))
+                .or((!item.audio_tracks.is_empty()).then_some(0))
+        });
     for (i, audio) in item.audio_tracks.iter().enumerate() {
         let technical = audio.technical.as_ref();
         streams.push(json!({
@@ -1037,7 +1051,7 @@ fn media_streams(item: &MediaItem) -> Value {
             "SampleRate": technical.and_then(|t| t.sample_rate),
             "BitRate": technical.and_then(|t| t.bit_rate),
             "ChannelLayout": technical.and_then(|t| t.channel_layout.clone()),
-            "IsDefault": audio.default || (!any_default && item.audio_tracks.len() == 1),
+            "IsDefault": default_audio == Some(i),
         }));
     }
     for (i, subtitle) in item.subtitles.iter().enumerate() {

@@ -593,9 +593,22 @@ fn needs_probe(dir: &Path, stem: &str) -> bool {
     // A sidecar from a pass that could not read the video track's own
     // parameters is still incomplete even though its duration was written.
     let video_ok = value.get("video").is_none_or(|video| {
-        video.get("technical").is_some_and(|technical| !technical.is_null())
+        let technical = video.get("technical");
+        let present = technical.is_some_and(|technical| !technical.is_null());
+        let needs_profile = matches!(video.get("codec").and_then(serde_json::Value::as_str), Some("hevc" | "h264"));
+        present && (!needs_profile || technical
+            .and_then(|technical| technical.get("profile"))
+            .is_some_and(|profile| !profile.is_null()))
     });
-    !version_ok || !video_ok
+    let audio_ok = value.get("audio_tracks").is_none_or(|tracks| {
+        tracks.as_array().is_none_or(|tracks| tracks.iter().all(|track| {
+            let aac = track.get("codec").and_then(serde_json::Value::as_str) == Some("aac");
+            !aac || track.get("technical")
+                .and_then(|technical| technical.get("profile"))
+                .is_some_and(|profile| !profile.is_null())
+        }))
+    });
+    !version_ok || !video_ok || !audio_ok
 }
 
 /// Replace the size-only sidecar with one the scanner can describe the entry
