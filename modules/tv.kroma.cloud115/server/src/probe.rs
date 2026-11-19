@@ -432,7 +432,7 @@ mod mkv {
 // MP4 / ISO base media
 
 mod mp4 {
-    use super::{Audio, Probed, Subtitle, Video};
+    use super::{Audio, AudioTechnical, Probed, Subtitle, Video, VideoTechnical};
 
     fn be32(bytes: &[u8]) -> u32 {
         u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
@@ -477,11 +477,14 @@ mod mp4 {
             probed.duration_ms = mvhd_duration(mvhd);
         }
         let mut audio_index = 0u32;
+        let mut stream_index = 0u32;
         for (kind, body) in &children {
             if kind != b"trak" {
                 continue;
             }
-            if let Some(track) = track_of(body) {
+            let ordinal = stream_index;
+            stream_index += 1;
+            if let Some(track) = track_of(body, ordinal) {
                 match track.kind {
                     Kind::Video => probed.video = Some(track.video),
                     Kind::Audio => {
@@ -558,22 +561,55 @@ mod mp4 {
         audio: Audio,
     }
 
-    fn track_of(trak: &[u8]) -> Option<Track> {
+    fn track_of(trak: &[u8], ordinal: u32) -> Option<Track> {
         let children = boxes(trak, 0, trak.len());
         let (width, height) = find(&children, b"tkhd").map(tkhd_size).unwrap_or((None, None));
         let mdia = find(&children, b"mdia")?;
         let inner = boxes(mdia, 0, mdia.len());
-        let language = find(&inner, b"mdhd").and_then(mdhd_language);
+        let mdhd = find(&inner, b"mdhd");
+        let language = mdhd.and_then(mdhd_language);
+        let timescale = mdhd.and_then(mdhd_timescale);
         let handler = find(&inner, b"hdlr").and_then(handler_kind)?;
         let stbl = find(&inner, b"minf")
             .and_then(|minf| boxes(minf, 0, minf.len()).into_iter().find(|(k, _)| k == b"stbl"))
             .map(|(_, body)| body)?;
-        let stsd = find(&boxes(stbl, 0, stbl.len()), b"stsd")?;
+        let stbl_boxes = boxes(stbl, 0, stbl.len());
+        let stsd = find(&stbl_boxes, b"stsd")?;
         let entries = boxes(stsd, 8, stsd.len());
         let (codec, channels) = entries
             .first()
             .map(|(kind, body)| (sample_codec(kind), sample_channels(kind, body)))
             .unwrap_or(("unknown".to_string(), None));
+        let frame_rate = timescale.zip(find(&stbl_boxes, b"stts").and_then(first_sample_delta))
+            .filter(|(_, delta)| *delta > 0)
+            .map(|(scale, delta)| scale as f64 / delta as f64)
+            .filter(|fps| fps.is_finite() && *fps > 0.0);
+        let video_technical = entries.first().map(|(kind, body)| {
+            let mut technical = VideoTechnical {
+                stream_index: Some(ordinal),
+                frame_rate,
+                ..VideoTechnical::default()
+            };
+            if let Some(config) = find(&boxes(body, 78, body.len()), if kind == b"hvc1" || kind == b"hev1" { b"hvcC" } else { b"avcC" }) {
+                let (profile, level) = codec_config(kind, config);
+                technical.profile = profile;
+                technical.level = level;
+            }
+            technical
+        });
+        let sample_rate = entries.first().and_then(|(_, body)| audio_sample_rate(body));
+        let video = Video {
+            technical: video_technical,
+            codec: codec.clone(),
+            width,
+            height,
+            ..Video::default()
+        };
+        let audio_technical = AudioTechnical {
+            stream_index: Some(ordinal),
+            sample_rate,
+            ..AudioTechnical::default()
+        };
 
         let kind = match &handler {
             b"vide" => Kind::Video,
@@ -585,13 +621,9 @@ mod mp4 {
             kind,
             codec: codec.clone(),
             language: language.clone(),
-            video: Video {
-                codec: codec.clone(),
-                width,
-                height,
-                ..Video::default()
-            },
+            video,
             audio: Audio {
+                technical: Some(audio_technical),
                 index: 0,
                 codec,
                 channels,
@@ -599,6 +631,51 @@ mod mp4 {
                 ..Audio::default()
             },
         })
+    }
+
+    fn mdhd_timescale(mdhd: &[u8]) -> Option<u32> {
+        match *mdhd.first()? {
+            1 => Some(be32(mdhd.get(20..24)?)),
+            _ => Some(be32(mdhd.get(12..16)?)),
+        }
+        .filter(|scale| *scale > 0)
+    }
+
+    fn first_sample_delta(stts: &[u8]) -> Option<u32> {
+        (stts.len() >= 16).then(|| be32(&stts[12..16])).filter(|delta| *delta > 0)
+    }
+
+    fn audio_sample_rate(entry: &[u8]) -> Option<u32> {
+        (entry.len() >= 28).then(|| be32(&entry[24..28]) >> 16).filter(|rate| *rate > 0)
+    }
+
+    fn codec_config(kind: &[u8; 4], config: &[u8]) -> (Option<String>, Option<u32>) {
+        if kind == b"hvc1" || kind == b"hev1" {
+            let Some(byte) = config.get(1).copied() else { return (None, None) };
+            let profile = match byte & 0x1f {
+                1 => Some("Main".to_string()),
+                2 => Some("Main 10".to_string()),
+                3 => Some("Main Still Picture".to_string()),
+                4 => Some("Range Extensions".to_string()),
+                _ => None,
+            };
+            let level = config.get(12).map(|value| *value as u32).filter(|value| *value > 0);
+            (profile, level)
+        } else {
+            let Some(profile_idc) = config.get(1).copied() else { return (None, None) };
+            let profile = match profile_idc {
+                66 => Some("Baseline".to_string()),
+                77 => Some("Main".to_string()),
+                88 => Some("Extended".to_string()),
+                100 => Some("High".to_string()),
+                110 => Some("High 10".to_string()),
+                122 => Some("High 4:2:2".to_string()),
+                244 => Some("High 4:4:4".to_string()),
+                _ => None,
+            };
+            let level = config.get(3).map(|value| *value as u32).filter(|value| *value > 0);
+            (profile, level)
+        }
     }
 
     fn tkhd_size(tkhd: &[u8]) -> (Option<u32>, Option<u32>) {

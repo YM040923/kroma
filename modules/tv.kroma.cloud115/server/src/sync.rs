@@ -588,8 +588,14 @@ fn needs_probe(dir: &Path, stem: &str) -> bool {
     let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
         return true;
     };
-    value.get("probe_version").and_then(serde_json::Value::as_u64)
-        .unwrap_or(0) < u64::from(crate::probe::MEDIA_PROBE_VERSION)
+    let version_ok = value.get("probe_version").and_then(serde_json::Value::as_u64)
+        .unwrap_or(0) >= u64::from(crate::probe::MEDIA_PROBE_VERSION);
+    // A sidecar from a pass that could not read the video track's own
+    // parameters is still incomplete even though its duration was written.
+    let video_ok = value.get("video").is_none_or(|video| {
+        video.get("technical").is_some_and(|technical| !technical.is_null())
+    });
+    !version_ok || !video_ok
 }
 
 /// Replace the size-only sidecar with one the scanner can describe the entry
