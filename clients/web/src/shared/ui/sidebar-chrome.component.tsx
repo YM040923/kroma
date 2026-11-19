@@ -1,5 +1,5 @@
 import { useT } from '@kromatv/ui';
-import { Box, Drawer, IconButton, Row, styles, useStyles } from '@kromatv/ui/kit';
+import { Box, Button, Drawer, IconButton, Row, styles, useStyles } from '@kromatv/ui/kit';
 import { useRouterState } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
 import type { ViewStyle } from 'react-native';
@@ -18,8 +18,8 @@ const sDefinition = styles({
     top: 0,
     left: 0,
     zIndex: 30,
-    paddingTop: 'max(12px, env(safe-area-inset-top))',
-    paddingLeft: 'max(12px, env(safe-area-inset-left))',
+    paddingTop: 'max(8px, env(safe-area-inset-top))',
+    paddingLeft: 'max(4px, env(safe-area-inset-left))',
   },
   drawerHead: { pl: 20, pr: 12, pb: 12, ...safeAreaTop(20) },
 });
@@ -58,9 +58,9 @@ function LauncherButton({ open, onPress }: Readonly<{ open: boolean; onPress: ()
     <Box style={s.launcher}>
       <IconButton
         variant="glass"
-        diameter={40}
+        diameter={34}
         radius="md"
-        glyph={21}
+        glyph={18}
         icon="menu-2"
         label={t('nav.menu')}
         expanded={open}
@@ -102,6 +102,7 @@ interface LauncherProps {
  *  top-left corner, and the navigation it opens as an overlay sheet. The sheet
  *  closes itself on navigation and never reflows the page behind it. */
 export function HiddenSidebarLauncher({ brand, panelStyle, onExpand, children }: LauncherProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [openedAt, setOpenedAt] = useState(pathname);
@@ -128,6 +129,15 @@ export function HiddenSidebarLauncher({ brand, panelStyle, onExpand, children }:
       >
         <SheetHeader brand={brand} onExpand={expand} />
         <Drawer.Panel>{children}</Drawer.Panel>
+        <Drawer.Footer>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="chevron-right"
+            label={t('nav.expandSidebar')}
+            onPress={expand}
+          />
+        </Drawer.Footer>
       </Drawer.Root>
     </>
   );
