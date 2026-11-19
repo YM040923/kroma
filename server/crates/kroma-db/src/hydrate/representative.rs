@@ -41,6 +41,7 @@ mod apply_files_tests {
 
     fn video() -> VideoStream {
         VideoStream {
+            technical: None,
             codec: "hevc".into(),
             width: Some(3840),
             height: Some(2160),
@@ -65,6 +66,7 @@ mod apply_files_tests {
             size: Some(1000),
             edition: None,
             probed,
+            probe_version: None,
             unreadable: None,
             edition_id: None,
             abs_path: Some(abs.into()),

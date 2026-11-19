@@ -154,6 +154,7 @@ mod tests {
 
     fn vid(codec: &str, width: u32, hdr: bool) -> VideoStream {
         VideoStream {
+            technical: None,
             codec: codec.into(),
             width: Some(width),
             height: Some(width * 9 / 16),
@@ -167,6 +168,7 @@ mod tests {
 
     fn aud(codec: &str, ch: u32) -> AudioStream {
         AudioStream {
+            technical: None,
             index: 0,
             codec: codec.into(),
             channels: Some(ch),
@@ -268,6 +270,7 @@ mod tests {
             size: Some(1_000_000), // 1 MB -> 8 Mbit over 1 s = 8 Mb/s
             edition: None,
             probed: true,
+            probe_version: None,
             unreadable: None,
             edition_id: None,
             abs_path: None,

@@ -127,6 +127,10 @@ mod tests {
     fn season(episodes: Vec<MediaItem>) -> Season {
         Season {
             number: 1,
+            name: None,
+            overview: None,
+            poster_url: None,
+            air_date: None,
             episodes,
             cast: Vec::new(),
             missing: Vec::new(),

@@ -43,6 +43,7 @@ mod tests {
 
     fn stream(width: u32, height: u32, bit_depth: u32) -> VideoStream {
         VideoStream {
+            technical: None,
             codec: "hevc".to_string(),
             width: Some(width),
             height: Some(height),

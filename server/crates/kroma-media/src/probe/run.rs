@@ -155,6 +155,7 @@ fn fallback_from_extension(path: &Path) -> ProbeResult {
 
     ProbeResult {
         video: Some(VideoStream {
+            technical: None,
             codec: codec.to_string(),
             width: None,
             height: None,

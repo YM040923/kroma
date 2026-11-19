@@ -7,17 +7,25 @@ use anyhow::Result;
 
 use kroma_domain::{Kind, MediaItem, SectionItem};
 
-fn apply_item(item: &mut MediaItem, tr: &TransData) {
+pub(super) fn apply_item(item: &mut MediaItem, tr: &TransData) {
     apply(item.metadata.as_mut(), tr);
     if let Some(t) = &tr.title {
         item.title = t.clone();
         // An episode row prints `episodeTitle ?? title`, so leaving the scan's
         // name here keeps the filename's language on a card whose title has
         // just been translated.
-        if item.episode_title.is_some() {
+        if item.kind == Kind::Episode {
             item.episode_title = Some(t.clone());
         }
     }
+}
+
+/// Localize a real episode blob without replacing its still with show artwork.
+pub fn overlay_episode_metadata(pool: &Pool, item: &mut MediaItem, locale: &str) -> Result<()> {
+    if let Some(tr) = translations::resolve_one(pool, "episode", &item.id, locale)? {
+        apply_item(item, &tr);
+    }
+    Ok(())
 }
 
 /// Overlay `locale` onto a batch of items (movies/videos + episodes). Episodes

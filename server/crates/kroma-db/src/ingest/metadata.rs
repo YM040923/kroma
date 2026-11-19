@@ -50,6 +50,7 @@ pub fn store_localized(
         cast: core_meta.cast.clone(),
         crew: core_meta.crew.clone(),
         tmdb_genre_ids: core_meta.tmdb_genre_ids.clone(),
+        studios: core_meta.studios.clone(),
     };
     metadata_core::write_core(&conn, kind, id, &core)?;
     for (lang, m) in by_lang {
@@ -166,6 +167,33 @@ pub fn set_season_cast(pool: &Pool, show_id: &str, season: u32, cast: &[CastMemb
     Ok(())
 }
 
+/// Season-level text and artwork, separate from the episodes on disk.
+pub fn set_season_metadata(pool: &Pool, show_id: &str, season: u32, meta: &Metadata) -> Result<()> {
+    let conn = pool.get()?;
+    conn.execute(
+        "INSERT INTO season_meta (show_id,season,casts,metadata) VALUES (?1,?2,'[]',?3) \
+         ON CONFLICT(show_id,season) DO UPDATE SET metadata=excluded.metadata",
+        params![show_id, season, serde_json::to_string(meta)?],
+    )?;
+    Ok(())
+}
+
+pub fn season_metadata(pool: &Pool, show_id: &str) -> Result<HashMap<u32, Metadata>> {
+    let conn = pool.get()?;
+    let mut stmt = conn.prepare("SELECT season,metadata FROM season_meta WHERE show_id=?1")?;
+    let rows = stmt.query_map(params![show_id], |r| {
+        Ok((r.get::<_, u32>(0)?, r.get::<_, Option<String>>(1)?))
+    })?;
+    let mut out = HashMap::new();
+    for row in rows {
+        let (season, json) = row?;
+        if let Some(meta) = crate::parse_metadata(json) {
+            out.insert(season, meta);
+        }
+    }
+    Ok(out)
+}
+
 pub fn seasons_with_cast(pool: &Pool, show_id: &str) -> Result<std::collections::HashSet<u32>> {
     let conn = pool.get()?;
     let mut stmt = conn.prepare("SELECT season FROM season_meta WHERE show_id = ?1")?;
@@ -229,6 +257,25 @@ pub fn clear_subject_metadata(pool: &Pool, kind: &str, id: &str) -> Result<()> {
     if kind == metadata_core::SHOW {
         tx.execute("UPDATE shows SET metadata=NULL WHERE id=?1", params![id])?;
         tx.execute("DELETE FROM season_meta WHERE show_id=?1", params![id])?;
+        // A re-match changes the show under its episodes: stale stills, names,
+        // descriptions and season rows would otherwise outlive the identity
+        // they describe.
+        tx.execute(
+            "UPDATE items SET metadata=NULL WHERE show_id=?1 AND kind='episode'",
+            params![id],
+        )?;
+        tx.execute(
+            "DELETE FROM item_vectors WHERE id IN (SELECT id FROM items WHERE show_id=?1)",
+            params![id],
+        )?;
+        let prefix = format!("{id}:%");
+        tx.execute(
+            "DELETE FROM translations WHERE (subject_kind='episode' AND subject_id IN \
+                (SELECT id FROM items WHERE show_id=?1)) \
+             OR (subject_kind IN ('episode_guide','season','season_cast') AND subject_id LIKE ?2)",
+            params![id, prefix],
+        )?;
+        tx.execute("DELETE FROM episode_guide WHERE show_id=?1", params![id])?;
     } else {
         tx.execute("UPDATE items SET metadata=NULL WHERE id=?1", params![id])?;
         tx.execute("DELETE FROM item_vectors WHERE id=?1", params![id])?;

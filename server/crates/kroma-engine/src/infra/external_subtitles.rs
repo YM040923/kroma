@@ -164,6 +164,7 @@ mod tests {
             size: None,
             edition: None,
             probed,
+            probe_version: None,
             unreadable: None,
             edition_id: None,
             abs_path: Some(abs.to_string_lossy().into_owned()),

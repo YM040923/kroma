@@ -11,6 +11,7 @@ const COPY: StreamMode = StreamMode::new(VideoMode::Copy, AudioMode::Copy);
 
 fn video(codec: &str, width: u32, height: u32, bit_depth: Option<u32>) -> VideoStream {
     VideoStream {
+        technical: None,
         codec: codec.into(),
         width: Some(width),
         height: Some(height),
@@ -24,6 +25,7 @@ fn video(codec: &str, width: u32, height: u32, bit_depth: Option<u32>) -> VideoS
 
 fn audio(index: u32, codec: &str) -> AudioStream {
     AudioStream {
+        technical: None,
         index,
         codec: codec.into(),
         channels: Some(2),

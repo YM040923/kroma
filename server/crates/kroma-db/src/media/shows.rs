@@ -48,7 +48,7 @@ pub(super) fn row_to_show_bare(r: &Row) -> rusqlite::Result<Show> {
 // The stream columns a representative-video SELECT projects, in order and under
 // the `files` alias both callers below give it.
 const VIDEO_COLS: &str = "f.v_codec,f.v_width,f.v_height,f.v_hdr,f.v_bit_depth,\
-    f.v_hdr_format,f.v_dv_profile,f.v_color_primaries,f.v_color_transfer,f.v_color_matrix";
+    f.v_hdr_format,f.v_dv_profile,f.v_color_primaries,f.v_color_transfer,f.v_color_matrix,f.v_technical";
 
 // `base` is the index of `v_codec`; [`VIDEO_COLS`] follows it in order.
 fn row_to_video_at(r: &Row, base: usize) -> rusqlite::Result<VideoStream> {
@@ -58,6 +58,8 @@ fn row_to_video_at(r: &Row, base: usize) -> rusqlite::Result<VideoStream> {
         matrix: r.get(base + 9)?,
     };
     Ok(VideoStream {
+        technical: r.get::<_, Option<String>>(base + 10)?
+            .and_then(|json| serde_json::from_str(&json).ok()),
         codec: r.get::<_, String>(base)?,
         width: r.get(base + 1)?,
         height: r.get(base + 2)?,

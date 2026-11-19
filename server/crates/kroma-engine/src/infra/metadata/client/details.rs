@@ -49,6 +49,13 @@ fn metadata_from(d: Details, target: Target, id: u64, lang2: &str, country: &str
     let (raw_cast, raw_crew) = d.credits.map(|c| (c.cast, c.crew)).unwrap_or_default();
     let cast = build_cast(raw_cast, MAX_CAST, false);
     let crew = build_crew(raw_crew, d.created_by, MAX_CREW);
+    let mut studios = Vec::new();
+    for company in d.production_companies.into_iter().chain(d.networks) {
+        let name = company.name.trim();
+        if !name.is_empty() && !studios.iter().any(|stored| stored == name) {
+            studios.push(name.to_string());
+        }
+    }
 
     Metadata {
         provider: "tmdb",
@@ -63,6 +70,7 @@ fn metadata_from(d: Details, target: Target, id: u64, lang2: &str, country: &str
             .filter(|s| !s.is_empty()),
         tmdb_genre_ids: d.genres.iter().map(|g| g.id).collect(),
         genres: d.genres.into_iter().map(|g| g.name).collect(),
+        studios,
         keywords: d.keywords.map(collect_keywords).unwrap_or_default(),
         rating: d.vote_average.filter(|v| *v > 0.0),
         certification: d

@@ -54,6 +54,37 @@ impl ColorInfo {
     }
 }
 
+/// Version of successfully collected technical probe information. This is not a
+/// promise that every optional field exists in the source container.
+pub const MEDIA_PROBE_VERSION: u32 = 1;
+
+/// Container-global stream index, codec-specific ffprobe level, display aspect
+/// ratio (e.g. `16:9`), frames/second and bits/second. Never inferred from file size.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct VideoTechnical {
+    pub stream_index: Option<u32>,
+    pub profile: Option<String>,
+    pub level: Option<u32>,
+    pub aspect_ratio: Option<String>,
+    pub frame_rate: Option<f64>,
+    pub bit_rate: Option<u64>,
+    pub pixel_format: Option<String>,
+}
+
+/// The global index is distinct from `AudioStream::index` (audio-relative).
+/// Sample rate is Hz, bit rate is bits/second; layout is the codec's named layout,
+/// not a guess from the channel count.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AudioTechnical {
+    pub stream_index: Option<u32>,
+    pub profile: Option<String>,
+    pub sample_rate: Option<u32>,
+    pub bit_rate: Option<u64>,
+    pub channel_layout: Option<String>,
+}
+
 /// Video stream description (best-effort; fields may be null when unknown).
 /// `hdr` is what a client that predates `hdr_format` reads: true for any variant,
 /// and still true where the variant itself was never recorded, which is how a row
@@ -61,6 +92,8 @@ impl ColorInfo {
 /// `hdr_format` means "HDR, variant unknown", never SDR.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoStream {
+    #[serde(default)]
+    pub technical: Option<VideoTechnical>,
     pub codec: String,
     pub width: Option<u32>,
     pub height: Option<u32>,
@@ -85,6 +118,8 @@ pub struct VideoStream {
 /// used when remuxing a chosen track.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioStream {
+    #[serde(default)]
+    pub technical: Option<AudioTechnical>,
     #[serde(default)]
     pub index: u32,
     pub codec: String,

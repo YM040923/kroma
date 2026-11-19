@@ -37,6 +37,15 @@ pub(super) struct FfChapterTags {
 
 #[derive(Debug, Deserialize)]
 pub(super) struct FfStream {
+    pub(super) index: Option<u32>,
+    pub(super) profile: Option<String>,
+    pub(super) level: Option<i32>,
+    pub(super) display_aspect_ratio: Option<String>,
+    pub(super) avg_frame_rate: Option<String>,
+    pub(super) r_frame_rate: Option<String>,
+    pub(super) bit_rate: Option<String>,
+    pub(super) sample_rate: Option<String>,
+    pub(super) channel_layout: Option<String>,
     pub(super) codec_type: Option<String>,
     pub(super) codec_name: Option<String>,
     pub(super) width: Option<u32>,

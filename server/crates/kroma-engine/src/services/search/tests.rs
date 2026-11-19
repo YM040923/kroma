@@ -15,6 +15,7 @@ pub(crate) fn meta(title: &str, overview: &str, genres: &[&str], cast: &[&str]) 
         overview: Some(overview.into()),
         release_date: None,
         genres: genres.iter().map(ToString::to_string).collect(),
+        studios: Vec::new(),
         tmdb_genre_ids: Vec::new(),
         rating: None,
         certification: None,

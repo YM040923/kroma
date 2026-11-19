@@ -35,11 +35,12 @@ pub struct MetaCore {
     pub cast: Vec<CastMember>,
     pub crew: Vec<CrewMember>,
     pub tmdb_genre_ids: Vec<u32>,
+    pub studios: Vec<String>,
 }
 
 // Column list for core SELECTs keeps [`row_to_core`] index-stable.
 const CORE_COLS: &str = "tmdb_id,imdb_id,tvdb_id,release_date,rating,certification,poster_url,\
-     backdrop_url,logo_url,cast_json,crew_json,tmdb_genre_ids";
+     backdrop_url,logo_url,cast_json,crew_json,tmdb_genre_ids,studios";
 
 /// Upsert one subject's invariant core. Character names are stripped from `cast`
 /// before storing they are language-variant and belong in `translations`.
@@ -64,11 +65,12 @@ pub(crate) fn write_core(conn: &Connection, kind: &str, id: &str, core: &MetaCor
     let crew_json = serde_json::to_string(&core.crew).unwrap_or_else(|_| "[]".into());
     let genre_ids_json =
         serde_json::to_string(&core.tmdb_genre_ids).unwrap_or_else(|_| "[]".into());
+    let studios_json = serde_json::to_string(&core.studios).unwrap_or_else(|_| "[]".into());
     conn.execute(
         "INSERT INTO metadata_core \
             (subject_kind,subject_id,tmdb_id,imdb_id,tvdb_id,release_date,rating,certification,\
-             poster_url,backdrop_url,logo_url,cast_json,crew_json,tmdb_genre_ids,updated_at) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15) \
+             poster_url,backdrop_url,logo_url,cast_json,crew_json,tmdb_genre_ids,updated_at,studios) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16) \
          ON CONFLICT(subject_kind,subject_id) DO UPDATE SET \
              tmdb_id=excluded.tmdb_id, imdb_id=excluded.imdb_id, tvdb_id=excluded.tvdb_id, \
              release_date=excluded.release_date, rating=excluded.rating, \
@@ -76,7 +78,7 @@ pub(crate) fn write_core(conn: &Connection, kind: &str, id: &str, core: &MetaCor
              poster_url=excluded.poster_url, backdrop_url=excluded.backdrop_url, \
              logo_url=excluded.logo_url, cast_json=excluded.cast_json, \
              crew_json=excluded.crew_json, tmdb_genre_ids=excluded.tmdb_genre_ids, \
-             updated_at=excluded.updated_at",
+             updated_at=excluded.updated_at, studios=excluded.studios",
         params![
             kind,
             id,
@@ -93,6 +95,7 @@ pub(crate) fn write_core(conn: &Connection, kind: &str, id: &str, core: &MetaCor
             crew_json,
             genre_ids_json,
             kroma_primitives::now_ms(),
+            studios_json,
         ],
     )?;
     Ok(())
@@ -139,6 +142,7 @@ fn row_to_core_offset(r: &Row, base: usize) -> rusqlite::Result<MetaCore> {
     let cast_json: String = r.get(base + 9)?;
     let crew_json: String = r.get(base + 10)?;
     let genre_ids_json: String = r.get(base + 11)?;
+    let studios_json: Option<String> = r.get(base + 12)?;
     Ok(MetaCore {
         tmdb_id: r.get::<_, Option<i64>>(base)?.map(|v| v as u64),
         imdb_id: r.get(base + 1)?,
@@ -152,6 +156,7 @@ fn row_to_core_offset(r: &Row, base: usize) -> rusqlite::Result<MetaCore> {
         cast: serde_json::from_str(&cast_json).unwrap_or_default(),
         crew: serde_json::from_str(&crew_json).unwrap_or_default(),
         tmdb_genre_ids: serde_json::from_str(&genre_ids_json).unwrap_or_default(),
+        studios: studios_json.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default(),
     })
 }
 
@@ -199,6 +204,7 @@ mod tests {
                 profile_url: None,
             }],
             tmdb_genre_ids: vec![878, 28],
+            studios: Vec::new(),
         }
     }
 

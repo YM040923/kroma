@@ -31,6 +31,10 @@ pub(super) struct Details {
     #[serde(default)]
     pub(super) genres: Vec<Genre>,
     #[serde(default)]
+    pub(super) production_companies: Vec<KeywordEntry>,
+    #[serde(default)]
+    pub(super) networks: Vec<KeywordEntry>,
+    #[serde(default)]
     pub(super) imdb_id: Option<String>, // present on movie details
     #[serde(default)]
     pub(super) external_ids: Option<ExternalIds>, // appended (carries imdb_id for shows)

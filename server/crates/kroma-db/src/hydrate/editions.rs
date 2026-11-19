@@ -78,6 +78,7 @@ mod tests {
             container: "mkv".into(),
             duration_ms: Some(duration_ms),
             video: Some(VideoStream {
+                technical: None,
                 codec: "hevc".into(),
                 width: Some(width),
                 height: None,
@@ -93,6 +94,7 @@ mod tests {
             size: None,
             edition: edition.map(str::to_owned),
             probed: true,
+            probe_version: None,
             unreadable: None,
             edition_id: None,
             abs_path: None,

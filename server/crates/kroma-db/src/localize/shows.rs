@@ -1,6 +1,6 @@
 //! Overlaying a locale onto a show, its seasons and its episodes.
 
-use super::{apply, apply_show, overlay_season_cast};
+use super::{apply_show, items::apply_item, overlay_season_cast};
 use crate::{metadata_core, translations, Pool};
 use anyhow::Result;
 
@@ -59,10 +59,19 @@ pub fn overlay_show_detail(pool: &Pool, detail: &mut ShowDetail, locale: &str) -
     for season in &mut detail.seasons {
         for ep in &mut season.episodes {
             if let Some(t) = ep_tr.get(&ep.id) {
-                apply(ep.metadata.as_mut(), t);
-                if let Some(title) = &t.title {
-                    ep.title = title.clone();
-                }
+                apply_item(ep, t);
+            }
+        }
+        let season_id = format!("{}:{}", detail.show.id, season.number);
+        if let Some(t) = translations::resolve_many(&conn, "season", &[&season_id], locale)?.get(&season_id) {
+            if t.title.is_some() {
+                season.name = t.title.clone();
+            }
+            if t.overview.is_some() {
+                season.overview = t.overview.clone();
+            }
+            if t.poster_url.is_some() {
+                season.poster_url = t.poster_url.clone();
             }
         }
         overlay_season_cast(&conn, &detail.show.id, season, locale)?;
@@ -212,6 +221,10 @@ mod tests {
             show: show("s1"),
             seasons: vec![Season {
                 number: 1,
+                name: None,
+                overview: None,
+                poster_url: None,
+                air_date: Some("2008-01-20".into()),
                 episodes: vec![item("e1", Kind::Episode)],
                 cast: vec![CastMember {
                     name: "A".into(),

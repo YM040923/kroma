@@ -164,6 +164,8 @@ pub(super) fn scan_root(
             // A sidecar is a verdict from a reader that could open the URL, so
             // the entry is described and the probe pass must not retry it.
             probed: sidecar.is_some(),
+            probe_version: sidecar.as_ref().filter(|s| s.unreadable.is_none())
+                .and_then(|s| s.probe_version),
             unreadable: sidecar.as_ref().and_then(|s| s.unreadable.clone()),
             edition_id: None,
             abs_path: Some(match streamed {
@@ -309,6 +311,8 @@ fn read_strm_url(path: &Path) -> Option<String> {
 /// probe it already ran instead of inventing a format for this server.
 #[derive(Debug, Default, serde::Deserialize)]
 struct Sidecar {
+    #[serde(default)]
+    probe_version: Option<u32>,
     #[serde(default)]
     duration_ms: Option<u64>,
     #[serde(default)]

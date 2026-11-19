@@ -197,7 +197,7 @@ fn map_api(error: ApiError) -> Failure {
 
 impl Report {
     fn changed(&self) -> bool {
-        self.written > 0 || self.pruned > 0
+        self.written > 0 || self.pruned > 0 || self.probed > 0
     }
 }
 
@@ -463,13 +463,15 @@ async fn sync_library(
                     report.pending_probe += 1;
                     continue;
                 }
+                // Bound attempts, not just successes: unreadable files must not
+                // turn a small re-probe batch into requests for the entire library.
+                *probe_left -= 1;
                 match crate::probe::probe(&config.cookie, &entry.pick_code, entry.size).await {
                     Ok(Some(described)) => {
                         if let Err(error) = write_sidecar(&dir, &stem, entry.size, &described) {
                             report.errors.push(format!("{}: {error}", dir.display()));
                         } else {
                             report.probed += 1;
-                            *probe_left -= 1;
                         }
                     }
                     Ok(None) => {}
@@ -576,9 +578,9 @@ fn sidecar_path(dir: &Path, stem: &str) -> PathBuf {
     dir.join(format!("{stem}.info.json"))
 }
 
-/// Whether this entry still needs its container read: a sidecar with no
-/// duration is one the mirror wrote before it could describe the file (or an
-/// earlier probe that failed).
+/// A successful probe at the current schema version is complete even when the
+/// container omits optional fields. Legacy duration-only results need a bounded
+/// retry; failed attempts never advance this version.
 fn needs_probe(dir: &Path, stem: &str) -> bool {
     let Ok(bytes) = std::fs::read(sidecar_path(dir, stem)) else {
         return true;
@@ -586,11 +588,8 @@ fn needs_probe(dir: &Path, stem: &str) -> bool {
     let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
         return true;
     };
-    value
-        .get("duration_ms")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0)
-        == 0
+    value.get("probe_version").and_then(serde_json::Value::as_u64)
+        .unwrap_or(0) < u64::from(crate::probe::MEDIA_PROBE_VERSION)
 }
 
 /// Replace the size-only sidecar with one the scanner can describe the entry
@@ -601,7 +600,10 @@ fn write_sidecar(
     size: i64,
     described: &crate::probe::Probed,
 ) -> Result<(), String> {
-    let mut body = serde_json::json!({ "size": size.max(0) });
+    let mut body = serde_json::json!({
+        "size": size.max(0),
+        "probe_version": crate::probe::MEDIA_PROBE_VERSION,
+    });
     let map = body
         .as_object_mut()
         .ok_or_else(|| "sidecar is not an object".to_string())?;

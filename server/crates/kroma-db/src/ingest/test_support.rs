@@ -10,6 +10,7 @@ pub(super) fn pool() -> TempPool {
 
 pub(super) fn video() -> VideoStream {
     VideoStream {
+        technical: None,
         codec: "hevc".into(),
         width: Some(3840),
         height: Some(2160),
@@ -44,6 +45,7 @@ pub(super) fn file(id: &str, abs: &str, probed: bool) -> MediaFile {
         size: Some(1000),
         edition: None,
         probed,
+        probe_version: None,
         unreadable: None,
         edition_id: None,
         abs_path: Some(abs.into()),
@@ -99,6 +101,7 @@ pub(super) fn meta(tmdb: u64, title: &str) -> Metadata {
         overview: Some("an overview".into()),
         release_date: Some("2021-01-01".into()),
         genres: vec!["Science Fiction".into()],
+        studios: Vec::new(),
         tmdb_genre_ids: vec![878],
         rating: Some(8.0),
         certification: Some("PG-13".into()),

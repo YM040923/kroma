@@ -17,6 +17,7 @@ pub(super) fn demo_file(item: &MediaItem) -> MediaFile {
         size: None,
         edition: None,
         probed: true,
+        probe_version: Some(crate::model::MEDIA_PROBE_VERSION),
         unreadable: None,
         edition_id: None,
         // No real path on disk; a synthetic URI satisfies the DB's NOT NULL
@@ -135,6 +136,7 @@ pub(super) fn video(
     bit_depth: u32,
 ) -> Option<VideoStream> {
     Some(VideoStream {
+        technical: None,
         codec: codec.into(),
         width: Some(width),
         height: Some(height),
@@ -162,6 +164,7 @@ fn demo_color(hdr_format: Option<HdrFormat>) -> ColorInfo {
 
 pub(super) fn audio(codec: &str, channels: u32, language: Option<&str>) -> AudioStream {
     AudioStream {
+        technical: None,
         index: 0,
         codec: codec.into(),
         channels: Some(channels),

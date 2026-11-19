@@ -22,6 +22,7 @@ pub(super) fn blank_metadata() -> Metadata {
         overview: None,
         release_date: None,
         genres: Vec::new(),
+        studios: Vec::new(),
         tmdb_genre_ids: Vec::new(),
         rating: None,
         certification: None,
@@ -66,11 +67,21 @@ pub(super) fn enrich_episodes(
     let casts = db::season_casts(pool, show_id).unwrap_or_default();
     let gaps = db::season_gaps(pool, show_id).unwrap_or_default();
     for season in &detail.seasons {
+        // A still that exists is no proof the text beside it is right: an older
+        // pass stored the image and left name/overview empty, and a re-match
+        // changed the show under it.
         let missing: Vec<&MediaItem> = season
             .episodes
             .iter()
-            .filter(|e| still_gone(data_dir, e))
+            .filter(|e| {
+                still_gone(data_dir, e)
+                    || e.metadata
+                        .as_ref()
+                        .is_none_or(|meta| meta.title.is_none() || meta.overview.is_none())
+            })
             .collect();
+        let needs_season = season.name.is_none()
+            || season.poster_url.as_deref().is_some_and(|url| image::local_art_missing(data_dir, url));
         let needs_cast = match casts.get(&season.number) {
             None => true,
             Some(cast) => art_gone(data_dir, cast.iter().map(|m| m.profile_url.as_deref())),
@@ -89,7 +100,7 @@ pub(super) fn enrich_episodes(
         let stale_cast = !db::translations::stale_langs(pool, "season_cast", &cast_id, langs)
             .unwrap_or_default()
             .is_empty();
-        if missing.is_empty() && !needs_cast && !needs_guide && !stale_text && !stale_cast {
+        if missing.is_empty() && !needs_season && !needs_cast && !needs_guide && !stale_text && !stale_cast {
             continue;
         }
         let per_lang = season_by_locale(api_key, langs, tv_id, season.number);
@@ -102,6 +113,7 @@ pub(super) fn enrich_episodes(
         store_episode_stills(pool, data_dir, bus, &missing, data);
         store_episode_translations(pool, &per_lang, &season.episodes);
         store_episode_guide(pool, data_dir, show_id, season.number, &per_lang, data);
+        store_season_metadata(pool, data_dir, show_id, season.number, &per_lang, data);
         store_season_cast(
             pool,
             data_dir,
@@ -168,6 +180,55 @@ pub(super) fn store_episode_guide(
             }
             let id = format!("{show_id}:{season}:{}", a.episode);
             let _ = translations::put(pool, "episode_guide", &id, lang, translations::TMDB, &td);
+        }
+    }
+}
+
+pub(super) fn store_season_metadata(
+    pool: &Pool,
+    data_dir: &Path,
+    show_id: &str,
+    season: u32,
+    per_lang: &std::collections::HashMap<String, metadata::SeasonData>,
+    data: &metadata::SeasonData,
+) {
+    use db::translations::{self, TransData};
+    if data.name.is_none() && data.overview.is_none() && data.poster_url.is_none() {
+        return;
+    }
+    let meta = image::localize(
+        data_dir,
+        Metadata {
+            title: data.name.clone(),
+            overview: data.overview.clone(),
+            release_date: data.air_date.clone(),
+            poster_url: data.poster_url.clone(),
+            ..blank_metadata()
+        },
+    );
+    if let Err(e) = db::set_season_metadata(pool, show_id, season, &meta) {
+        warn!(show = %show_id, season, error = %e, "failed to store season metadata");
+    }
+    let id = format!("{show_id}:{season}");
+    for (lang, sdata) in per_lang {
+        let localized = image::localize(
+            data_dir,
+            Metadata {
+                title: sdata.name.clone(),
+                overview: sdata.overview.clone(),
+                poster_url: sdata.poster_url.clone(),
+                ..blank_metadata()
+            },
+        );
+        let td = TransData {
+            title: localized.title.clone(),
+            overview: localized.overview.clone(),
+            poster_url: localized.poster_url.clone(),
+            rev: translations::REV,
+            ..Default::default()
+        };
+        if !td.is_empty() {
+            let _ = translations::put(pool, "season", &id, lang, translations::TMDB, &td);
         }
     }
 }

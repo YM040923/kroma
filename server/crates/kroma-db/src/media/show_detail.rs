@@ -68,6 +68,10 @@ pub fn get_show(pool: &Pool, id: &str) -> Result<Option<ShowDetail>> {
             Some(s) => s.episodes.push(ep),
             None => seasons.push(Season {
                 number: n,
+                name: None,
+                overview: None,
+                poster_url: None,
+                air_date: None,
                 episodes: vec![ep],
                 cast: Vec::new(),
                 missing: Vec::new(),
@@ -76,9 +80,16 @@ pub fn get_show(pool: &Pool, id: &str) -> Result<Option<ShowDetail>> {
     }
     seasons.sort_by_key(|s| s.number);
 
+    let mut season_meta = crate::season_metadata(pool, id)?;
     let mut casts = season_casts(pool, id)?;
     let mut gaps = season_gaps(pool, id)?;
     for s in &mut seasons {
+        if let Some(meta) = season_meta.remove(&s.number) {
+            s.name = meta.title;
+            s.overview = meta.overview;
+            s.poster_url = meta.poster_url;
+            s.air_date = meta.release_date;
+        }
         if let Some(cast) = casts.remove(&s.number) {
             s.cast = cast;
         }

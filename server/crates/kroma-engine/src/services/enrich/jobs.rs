@@ -158,6 +158,7 @@ mod tests {
                 overview: None,
                 release_date: None,
                 genres: Vec::new(),
+                studios: Vec::new(),
                 tmdb_genre_ids: Vec::new(),
                 rating: None,
                 certification: None,

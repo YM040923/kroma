@@ -68,6 +68,7 @@ mod tests {
 
     fn track(index: u32, codec: &str) -> crate::model::AudioStream {
         crate::model::AudioStream {
+            technical: None,
             index,
             codec: codec.into(),
             channels: None,

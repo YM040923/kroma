@@ -40,14 +40,14 @@ pub(super) fn sync_files(
              v_height=NULL, v_hdr=NULL, v_bit_depth=NULL, a_codec=NULL, a_channels=NULL, \
              a_language=NULL, subtitles='[]', audio_tracks='[]', unreadable=NULL, \
              v_hdr_format=NULL, v_dv_profile=NULL, v_color_primaries=NULL, \
-             v_color_transfer=NULL, v_color_matrix=NULL",
+             v_color_transfer=NULL, v_color_matrix=NULL, v_technical=NULL, probe_version=NULL",
     )?;
     // Pre-probed files (demo/seed content) skip the phase-2 probe pass.
     let mut preprobed_stmt = tx.prepare(
         "INSERT INTO files (id,item_id,abs_path,rel_path,container,size,mtime,edition,probed,\
              duration_ms,v_codec,v_width,v_height,v_hdr,v_bit_depth,a_codec,a_channels,a_language,subtitles,audio_tracks,\
-             v_hdr_format,v_dv_profile,v_color_primaries,v_color_transfer,v_color_matrix) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,1,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24) \
+             v_hdr_format,v_dv_profile,v_color_primaries,v_color_transfer,v_color_matrix,v_technical,probe_version) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,1,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26) \
          ON CONFLICT(abs_path) DO UPDATE SET \
              id=excluded.id, item_id=excluded.item_id, rel_path=excluded.rel_path, \
              container=excluded.container, size=excluded.size, mtime=excluded.mtime, \
@@ -58,7 +58,8 @@ pub(super) fn sync_files(
              audio_tracks=excluded.audio_tracks, unreadable=NULL, \
              v_hdr_format=excluded.v_hdr_format, v_dv_profile=excluded.v_dv_profile, \
              v_color_primaries=excluded.v_color_primaries, v_color_transfer=excluded.v_color_transfer, \
-             v_color_matrix=excluded.v_color_matrix",
+             v_color_matrix=excluded.v_color_matrix, v_technical=excluded.v_technical, \
+             probe_version=excluded.probe_version",
     )?;
 
     for i in items {
@@ -145,7 +146,14 @@ fn upsert_scanned_file<'a>(
         let a = f.audio.as_ref();
         let color = v.and_then(|v| v.color.as_ref());
         let subs = serde_json::to_string(&f.subtitles).unwrap_or_else(|_| "[]".into());
-        let a_tracks = serde_json::to_string(&f.audio_tracks).unwrap_or_else(|_| "[]".into());
+        let tracks = if f.audio_tracks.is_empty() {
+            f.audio.as_ref().map(std::slice::from_ref).unwrap_or_default()
+        } else {
+            &f.audio_tracks
+        };
+        let a_tracks = serde_json::to_string(tracks)?;
+        let technical = v.and_then(|v| v.technical.as_ref())
+            .map(serde_json::to_string).transpose()?;
         preprobed_stmt.execute(params![
             f.id,
             i.id,
@@ -171,6 +179,8 @@ fn upsert_scanned_file<'a>(
             color.and_then(|c| c.primaries.clone()),
             color.and_then(|c| c.transfer.clone()),
             color.and_then(|c| c.matrix.clone()),
+            technical,
+            f.probe_version.filter(|_| f.unreadable.is_none()),
         ])?;
         return Ok(());
     }

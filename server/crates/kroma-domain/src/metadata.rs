@@ -22,6 +22,9 @@ pub struct Metadata {
     #[serde(rename = "releaseDate", skip_serializing_if = "Option::is_none")]
     pub release_date: Option<String>,
     pub genres: Vec<String>,
+    /// Production companies and broadcast networks supplied by the provider.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub studios: Vec<String>,
     // Parallel to `genres`: both come from one TMDB list and align by index.
     #[serde(
         rename = "tmdbGenreIds",

@@ -38,4 +38,5 @@ pub(super) const STEPS: &[Step] = &[
     sql_step!("0017_device_address"),
     sql_step!("0018_suggestion_languages"),
     sql_step!("0019_art_overrides"),
+    sql_step!("0020_probe_technical"),
 ];

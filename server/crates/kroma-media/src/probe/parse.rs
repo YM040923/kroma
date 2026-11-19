@@ -1,7 +1,9 @@
 //! Map ffprobe's output onto our best-effort [`ProbeResult`]: stream selection,
 //! codec normalization, bit-depth and HDR-variant heuristics.
 
-use kroma_module_wire::{AudioStream, ColorInfo, HdrFormat, SubtitleTrack, VideoStream};
+use kroma_module_wire::{
+    AudioStream, AudioTechnical, ColorInfo, HdrFormat, SubtitleTrack, VideoStream, VideoTechnical,
+};
 
 use super::ffprobe_output::{FfChapter, FfStream, FfprobeOutput};
 use super::{Chapter, ProbeResult};
@@ -80,10 +82,11 @@ fn build_video(stream: &FfStream) -> VideoStream {
         .bits_per_raw_sample
         .as_deref()
         .and_then(|s| s.parse::<u32>().ok())
+        .filter(|d| *d > 0)
         .or_else(|| pixel_format_bit_depth(stream.pix_fmt.as_deref()));
 
     let dovi = stream.dovi();
-    let hdr_format = hdr_format(stream, bit_depth, dovi.is_some());
+    let hdr_format = hdr_format(stream, dovi.is_some());
     let color = ColorInfo {
         primaries: stream.color_primaries.clone(),
         transfer: stream.color_transfer.clone(),
@@ -91,6 +94,17 @@ fn build_video(stream: &FfStream) -> VideoStream {
     };
 
     VideoStream {
+        technical: Some(VideoTechnical {
+            stream_index: stream.index,
+            profile: known_text(stream.profile.as_deref()),
+            level: stream.level.and_then(|n| u32::try_from(n).ok()),
+            aspect_ratio: stream.display_aspect_ratio.as_deref()
+                .filter(|s| positive_ratio(s, ':').is_some()).map(str::to_owned),
+            frame_rate: stream.avg_frame_rate.as_deref().and_then(|s| positive_ratio(s, '/'))
+                .or_else(|| stream.r_frame_rate.as_deref().and_then(|s| positive_ratio(s, '/'))),
+            bit_rate: positive_integer(stream.bit_rate.as_deref()),
+            pixel_format: known_text(stream.pix_fmt.as_deref()),
+        }),
         codec: normalize_codec(stream.codec_name.as_deref()),
         width: stream.width,
         height: stream.height,
@@ -105,6 +119,14 @@ fn build_video(stream: &FfStream) -> VideoStream {
 fn build_audio(stream: &FfStream, index: u32) -> AudioStream {
     let (language, title) = (stream.language(), stream.title());
     AudioStream {
+        technical: Some(AudioTechnical {
+            stream_index: stream.index,
+            profile: known_text(stream.profile.as_deref()),
+            sample_rate: positive_integer(stream.sample_rate.as_deref())
+                .and_then(|n| u32::try_from(n).ok()),
+            bit_rate: positive_integer(stream.bit_rate.as_deref()),
+            channel_layout: known_text(stream.channel_layout.as_deref()),
+        }),
         index,
         codec: normalize_codec(stream.codec_name.as_deref()),
         channels: stream.channels,
@@ -122,7 +144,7 @@ fn build_audio(stream: &FfStream, index: u32) -> AudioStream {
 // can signal any transfer or none at all. HDR10+ is absent on purpose: its
 // metadata is per-frame SEI that a header read cannot see, so a file carrying it
 // is recorded as the HDR10 it also is.
-fn hdr_format(stream: &FfStream, bit_depth: Option<u32>, dolby_vision: bool) -> Option<HdrFormat> {
+fn hdr_format(stream: &FfStream, dolby_vision: bool) -> Option<HdrFormat> {
     if dolby_vision {
         return Some(HdrFormat::DolbyVision);
     }
@@ -131,21 +153,42 @@ fn hdr_format(stream: &FfStream, bit_depth: Option<u32>, dolby_vision: bool) -> 
         "arib-std-b67" => return Some(HdrFormat::Hlg),
         _ => {}
     }
-    let wide_gamut = matches!(stream.color_primaries.as_deref().unwrap_or(""), "bt2020");
-    let deep = bit_depth.is_some_and(|b| b >= 10);
-    (deep && wide_gamut).then_some(HdrFormat::Hdr10)
+    // Neither a wide gamut nor ten-bit samples establish an HDR transfer.
+    None
+}
+
+fn known_text(value: Option<&str>) -> Option<String> {
+    value.map(str::trim).filter(|s| !s.is_empty() && !matches!(*s, "unknown" | "N/A" | "unspecified"))
+        .map(str::to_owned)
+}
+
+fn positive_integer(value: Option<&str>) -> Option<u64> {
+    value?.parse().ok().filter(|n| *n > 0)
+}
+
+fn positive_ratio(value: &str, separator: char) -> Option<f64> {
+    let (numerator, denominator) = value.split_once(separator).unwrap_or((value, "1"));
+    let n = numerator.parse::<f64>().ok()?;
+    let d = denominator.parse::<f64>().ok()?;
+    let ratio = n / d;
+    (n > 0.0 && d > 0.0 && ratio.is_finite()).then_some(ratio)
 }
 
 fn pixel_format_bit_depth(pix_fmt: Option<&str>) -> Option<u32> {
-    let pix_fmt = pix_fmt?;
-    if pix_fmt.contains("p10") || pix_fmt.contains("10le") || pix_fmt.contains("10be") {
-        Some(10)
-    } else if pix_fmt.contains("p12") || pix_fmt.contains("12le") || pix_fmt.contains("12be") {
-        Some(12)
-    } else if !pix_fmt.is_empty() {
-        Some(8)
-    } else {
-        None
+    let name = pix_fmt?;
+    for depth in [9, 10, 12, 14, 16] {
+        if name.ends_with(&format!("p{depth}le")) || name.ends_with(&format!("p{depth}be"))
+            || name == format!("gray{depth}le") || name == format!("gray{depth}be") {
+            return Some(depth);
+        }
+    }
+    match name {
+        "p010le" | "p010be" | "x2rgb10le" | "x2bgr10le" => Some(10),
+        "p016le" | "p016be" | "rgb48le" | "rgb48be" | "rgba64le" | "rgba64be" => Some(16),
+        "yuv420p" | "yuv422p" | "yuv444p" | "yuv440p" | "yuv411p" | "yuv410p"
+        | "yuvj420p" | "yuvj422p" | "yuvj444p" | "nv12" | "nv21" | "rgb24"
+        | "bgr24" | "rgba" | "bgra" | "gbrp" | "gray" | "yuyv422" | "uyvy422" => Some(8),
+        _ => None,
     }
 }
 

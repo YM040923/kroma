@@ -20,6 +20,7 @@ pub(super) fn meta(rating: Option<f32>, backdrop: bool, overview: bool) -> Metad
         overview: overview.then(|| "An epic.".to_string()),
         release_date: None,
         genres: Vec::new(),
+        studios: Vec::new(),
         tmdb_genre_ids: Vec::new(),
         rating,
         certification: None,

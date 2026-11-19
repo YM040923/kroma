@@ -26,9 +26,9 @@ pub fn routes() -> Router<SharedState> {
 
 /// `GET /api/items/:id/metadata` → TMDB details + IDs for one item.
 ///
-/// Movies resolve against TMDB movies; episodes resolve against the parent show
-/// (TV). Results are cached. Returns 503 if `KROMA_TMDB_API_KEY` is unset, 404 if
-/// the item is unknown or TMDB has no match.
+/// Episodes serve their stored, localized metadata without a TMDB key. An
+/// unenriched episode returns 404 rather than substituting the parent show.
+/// Movies resolve against TMDB movies and require `KROMA_TMDB_API_KEY`.
 pub async fn item_metadata(
     State(state): State<SharedState>,
     AuthUser(user): AuthUser,
@@ -36,22 +36,24 @@ pub async fn item_metadata(
     Path(id): Path<String>,
 ) -> Result<Response, Response> {
     visibility::gate_item(&state, &user, &id).await?;
+    let language =
+        crate::services::settings::metadata_language_for(&state.settings, &state.config, reader);
+    let item = query(&state.db, move |pool| {
+        let mut item = db::get_item(&pool, &id)?;
+        if let Some(ep) = item.as_mut().filter(|i| i.kind == Kind::Episode) {
+            db::localize::overlay_episode_metadata(&pool, ep, &language)?;
+        }
+        Ok(item)
+    })
+    .await?
+    .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "item not found"))?;
+
+    if item.kind == Kind::Episode {
+        return item.metadata.map(|meta| Json(meta).into_response())
+            .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "no episode metadata"));
+    }
     let api_key = require_tmdb_key(&state)?;
-
-    let item = query(&state.db, move |pool| db::get_item(&pool, &id))
-        .await?
-        .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "item not found"))?;
-
-    // Episodes inherit their show's identity for the lookup. `item` is owned and
-    // unused afterwards, so move its strings out rather than cloning.
-    let year = item.year;
-    let (target, title) = if item.kind == Kind::Episode {
-        (Target::Tv, item.show_title.unwrap_or(item.title))
-    } else {
-        (Target::Movie, item.title)
-    };
-
-    resolve_metadata(state, api_key, target, title, year, reader).await
+    resolve_metadata(state, api_key, Target::Movie, item.title, item.year, reader).await
 }
 
 /// `GET /api/shows/:id/metadata` → TMDB details + IDs for one show.

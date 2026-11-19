@@ -221,6 +221,7 @@ fn build_season<S: HostStorage>(
 
 fn video_of(file: &db::EpisodeOnDisk) -> Option<VideoStream> {
     file.codec.as_ref().map(|codec| VideoStream {
+        technical: None,
         codec: codec.clone(),
         width: file.width,
         height: file.height,

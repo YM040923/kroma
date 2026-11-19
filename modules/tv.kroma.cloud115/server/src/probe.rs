@@ -13,7 +13,9 @@
 
 use serde::Serialize;
 
+use kroma_module_sdk::domain::{AudioTechnical, VideoTechnical};
 use kroma_module_sdk::http::Fetch;
+pub use kroma_module_sdk::domain::MEDIA_PROBE_VERSION;
 
 use crate::client::{self, ApiError, MODULE_UA};
 
@@ -23,6 +25,7 @@ const MAX_READ: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Video {
+    pub technical: Option<VideoTechnical>,
     pub codec: String,
     pub width: Option<u32>,
     pub height: Option<u32>,
@@ -47,10 +50,13 @@ pub struct Color {
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Audio {
+    pub technical: Option<AudioTechnical>,
     pub index: u32,
     pub codec: String,
     pub channels: Option<u32>,
     pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     pub default: bool,
 }
 
@@ -136,7 +142,7 @@ fn read_range(url: &str, range: &str) -> Result<Vec<u8>, String> {
 // Matroska / EBML
 
 mod mkv {
-    use super::{Audio, Color, Probed, Subtitle, Video};
+    use super::{Audio, AudioTechnical, Color, Probed, Subtitle, Video, VideoTechnical};
 
     const SEGMENT: u64 = 0x1853_8067;
     const INFO: u64 = 0x1549_a966;
@@ -152,13 +158,20 @@ mod mkv {
         kind: u64,
         codec: String,
         language: Option<String>,
+        title: Option<String>,
         width: Option<u32>,
         height: Option<u32>,
+        display_width: Option<u32>,
+        display_height: Option<u32>,
         channels: Option<u32>,
+        sample_rate: Option<u32>,
+        default_duration_ns: Option<u64>,
+        frame_rate: Option<f64>,
         bit_depth: Option<u32>,
         primaries: Option<u64>,
         transfer: Option<u64>,
         matrix: Option<u64>,
+        default: bool,
         forced: bool,
     }
 
@@ -215,11 +228,17 @@ mod mkv {
                 1 => probed.video = Some(video_of(&track)),
                 2 => {
                     probed.audio_tracks.push(Audio {
+                        technical: Some(AudioTechnical {
+                            stream_index: Some(track.number.saturating_sub(1) as u32),
+                            sample_rate: track.sample_rate,
+                            ..AudioTechnical::default()
+                        }),
                         index: audio_index,
                         codec: codec_name(&track.codec),
                         channels: track.channels.map(|c| c as u32),
                         language: track.language.clone(),
-                        default: false,
+                        title: track.title.clone(),
+                        default: track.default,
                     });
                     audio_index += 1;
                 }
@@ -246,7 +265,21 @@ mod mkv {
             transfer,
             matrix: matrix_name(track.matrix),
         };
+        let frame_rate = track.default_duration_ns
+            .filter(|ns| *ns > 0)
+            .map(|ns| 1_000_000_000.0 / ns as f64)
+            .filter(|fps| fps.is_finite() && *fps > 0.0);
+        let aspect_ratio = match (track.display_width.or(track.width), track.display_height.or(track.height)) {
+            (Some(w), Some(h)) if w > 0 && h > 0 => Some(reduced_ratio(w, h)),
+            _ => None,
+        };
         Video {
+            technical: Some(VideoTechnical {
+                stream_index: Some(track.number.saturating_sub(1) as u32),
+                aspect_ratio,
+                frame_rate: frame_rate.or(track.frame_rate),
+                ..VideoTechnical::default()
+            }),
             codec: codec_name(&track.codec),
             width: track.width,
             height: track.height,
@@ -315,9 +348,15 @@ mod mkv {
                     track.language = Some(value);
                 }
             }
+            0x536e => track.title = Some(String::from_utf8_lossy(bytes).trim_end_matches('\0').to_string()).filter(|s| !s.is_empty()),
+            0x88 => track.default = uint(bytes) == 1,
             0xb0 => track.width = Some(uint(bytes) as u32),
             0xba => track.height = Some(uint(bytes) as u32),
+            0x54b0 => track.display_width = Some(uint(bytes) as u32),
+            0x54ba => track.display_height = Some(uint(bytes) as u32),
+            0x23e383 => track.default_duration_ns = Some(uint(bytes)),
             0x9f => track.channels = Some(uint(bytes) as u32),
+            0xb5 => track.sample_rate = Some(float(bytes).map(|f| f as u32).unwrap_or(uint(bytes) as u32)),
             0x6264 => track.bit_depth = Some(uint(bytes) as u32),
             0x55b1 => track.primaries = Some(uint(bytes)),
             0x55ba => track.transfer = Some(uint(bytes)),
@@ -325,6 +364,14 @@ mod mkv {
             0x55ab => track.forced = uint(bytes) == 1,
             _ => {}
         }
+    }
+
+    pub(super) fn reduced_ratio(width: u32, height: u32) -> String {
+        fn gcd(a: u32, b: u32) -> u32 {
+            if b == 0 { a } else { gcd(b, a % b) }
+        }
+        let divisor = gcd(width, height).max(1);
+        format!("{}:{}", width / divisor, height / divisor)
     }
 
     fn codec_name(id: &str) -> String {
@@ -537,7 +584,7 @@ mod mp4 {
         Some(Track {
             kind,
             codec: codec.clone(),
-            language,
+            language: language.clone(),
             video: Video {
                 codec: codec.clone(),
                 width,
@@ -548,8 +595,8 @@ mod mp4 {
                 index: 0,
                 codec,
                 channels,
-                language: None,
-                default: false,
+                language: language.clone(),
+                ..Audio::default()
             },
         })
     }

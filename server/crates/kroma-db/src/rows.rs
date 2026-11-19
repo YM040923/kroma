@@ -67,6 +67,8 @@ pub(crate) fn row_to_file(r: &Row) -> rusqlite::Result<MediaFile> {
         matrix: r.get(23).ok().flatten(),
     };
     let video = v_codec.map(|codec| VideoStream {
+        technical: r.get::<_, Option<String>>(24).ok().flatten()
+            .and_then(|json| serde_json::from_str(&json).ok()),
         codec,
         width: r.get(8).ok().flatten(),
         height: r.get(9).ok().flatten(),
@@ -100,6 +102,7 @@ pub(crate) fn row_to_file(r: &Row) -> rusqlite::Result<MediaFile> {
             .ok()
             .flatten()
             .map(|codec| AudioStream {
+                technical: None,
                 index: 0,
                 codec,
                 channels: r.get(13).ok().flatten(),
@@ -117,6 +120,7 @@ pub(crate) fn row_to_file(r: &Row) -> rusqlite::Result<MediaFile> {
         size: r.get::<_, Option<i64>>(3)?.map(|s| s as u64),
         edition: r.get(4)?,
         probed: probed != 0,
+        probe_version: r.get(25)?,
         duration_ms: r.get::<_, Option<i64>>(6)?.map(|d| d as u64),
         video,
         audio,

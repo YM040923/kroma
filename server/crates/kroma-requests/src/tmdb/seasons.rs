@@ -34,6 +34,10 @@ impl From<EpisodeArt> for DiscoverEpisode {
 
 #[derive(Debug, Clone, Default)]
 pub struct SeasonData {
+    pub name: Option<String>,
+    pub overview: Option<String>,
+    pub poster_url: Option<String>,
+    pub air_date: Option<String>,
     pub episodes: Vec<EpisodeArt>,
     pub cast: Vec<CastMember>,
 }
@@ -73,7 +77,14 @@ pub fn season_episodes(api_key: &str, language: &str, tv_id: u64, season: u32) -
         MAX_CAST,
         false,
     );
-    SeasonData { episodes, cast }
+    SeasonData {
+        name: resp.name.filter(|s| !s.trim().is_empty()),
+        overview: resp.overview.filter(|s| !s.trim().is_empty()),
+        poster_url: resp.poster_path.filter(|s| !s.is_empty()).map(|p| format!("{IMG}/w500{p}")),
+        air_date: resp.air_date.filter(|s| !s.is_empty()),
+        episodes,
+        cast,
+    }
 }
 
 /// Fetches one season in several languages, keyed by language code. Languages
@@ -95,6 +106,14 @@ pub fn season_episodes_multi(
 
 #[derive(Debug, Deserialize)]
 struct SeasonResp {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    overview: Option<String>,
+    #[serde(default)]
+    poster_path: Option<String>,
+    #[serde(default)]
+    air_date: Option<String>,
     #[serde(default)]
     episodes: Vec<RawEpisode>,
     #[serde(default)]

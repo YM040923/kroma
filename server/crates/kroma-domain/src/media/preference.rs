@@ -59,6 +59,7 @@ mod tests {
             container: "mkv".into(),
             duration_ms: Some(7_200_000),
             video: Some(VideoStream {
+                technical: None,
                 codec: "hevc".into(),
                 width: Some(1920),
                 height: Some(1080),

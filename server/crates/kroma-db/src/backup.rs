@@ -56,6 +56,7 @@ const TABLES: &[&str] = &[
     "notification_type_prefs",
     "reports",
     "tmdb_pin",
+    "art_overrides",
     "acq_file_tmdb",
     "downloaded_subtitles",
 ];

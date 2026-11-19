@@ -15,7 +15,10 @@ mod trailer;
 
 pub use card::*;
 pub use edition::*;
-pub use kroma_module_wire::{AudioStream, ColorInfo, HdrFormat, SubtitleTrack, VideoStream};
+pub use kroma_module_wire::{
+    AudioStream, AudioTechnical, ColorInfo, HdrFormat, SubtitleTrack, VideoStream,
+    VideoTechnical, MEDIA_PROBE_VERSION,
+};
 pub use loudness::*;
 pub use preference::*;
 pub use trailer::*;
@@ -55,6 +58,9 @@ pub struct MediaFile {
     // `false` until ffprobe has run (phase 2); the stream fields above are
     // null until then.
     pub probed: bool,
+    /// Successful probe schema version; absent on legacy/size-only sidecars.
+    #[serde(rename = "probeVersion", default)]
+    pub probe_version: Option<u32>,
     // ffprobe's own reason the container would not open.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unreadable: Option<String>,
@@ -197,6 +203,14 @@ pub struct ListedEpisode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Season {
     pub number: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overview: Option<String>,
+    #[serde(rename = "posterUrl", default, skip_serializing_if = "Option::is_none")]
+    pub poster_url: Option<String>,
+    #[serde(rename = "airDate", default, skip_serializing_if = "Option::is_none")]
+    pub air_date: Option<String>,
     pub episodes: Vec<MediaItem>,
     // Empty until enriched, or when the provider returned none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

@@ -71,6 +71,7 @@ mod tests {
 
     fn track(index: u32, default: bool) -> AudioStream {
         AudioStream {
+            technical: None,
             index,
             codec: "eac3".into(),
             channels: Some(6),
