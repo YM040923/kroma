@@ -919,6 +919,23 @@ async fn items(
     let wanted = defs
         .iter()
         .find(|def| def.id == parent || def.name == parent);
+    // A ParentId may also name a series ("<id>") or one of its seasons
+    // ("<id>:s1"): clients browse Series → Seasons → Episodes through
+    // /Items as well as through the /Shows routes.
+    if wanted.is_none() && !parent.is_empty() {
+        if let Some((show_id, number)) = parent.split_once(":s") {
+            if let Ok(number) = number.parse::<u32>() {
+                return episodes_payload(&state, show_id.to_string(), Some(number)).await;
+            }
+        }
+        let wanted_show = parent.clone();
+        if query(&state.db, move |pool| db::get_show(&pool, &wanted_show))
+            .await?
+            .is_some()
+        {
+            return seasons_payload(&state, parent.clone()).await;
+        }
+    }
     let library_names: Vec<String> = match wanted {
         Some(def) => vec![def.name.clone(), def.id.clone()],
         None => defs.iter().map(|d| d.name.clone()).collect(),
@@ -1063,6 +1080,10 @@ async fn seasons(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
+    seasons_payload(&state, id).await
+}
+
+async fn seasons_payload(state: &SharedState, id: String) -> Result<Json<Value>, Response> {
     let detail = query(&state.db, move |pool| db::get_show(&pool, &id))
         .await?
         .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "show not found"))?;
@@ -1073,7 +1094,7 @@ async fn seasons(
             json!({
                 "Name": format!("Season {}", season.number),
                 "Id": format!("{}:s{}", detail.show.id, season.number),
-                "ServerId": server_id(&state),
+                "ServerId": server_id(state),
                 "Type": "Season",
                 "IsFolder": true,
                 "SeriesId": detail.show.id,
@@ -1097,6 +1118,14 @@ async fn episodes(
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
     let wanted_season = params.get("season").and_then(|v| v.parse::<u32>().ok());
+    episodes_payload(&state, id, wanted_season).await
+}
+
+async fn episodes_payload(
+    state: &SharedState,
+    id: String,
+    wanted_season: Option<u32>,
+) -> Result<Json<Value>, Response> {
     let detail = query(&state.db, move |pool| db::get_show(&pool, &id))
         .await?
         .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "show not found"))?;
@@ -1105,20 +1134,29 @@ async fn episodes(
         .metadata
         .as_ref()
         .and_then(|m| m.poster_url.clone());
+    let overview = detail
+        .show
+        .metadata
+        .as_ref()
+        .and_then(|m| m.overview.clone());
     let mut out = Vec::new();
     for season in &detail.seasons {
         if wanted_season.is_some_and(|wanted| wanted != season.number) {
             continue;
         }
         for episode in &season.episodes {
-            let name = episode
-                .episode_title
-                .clone()
-                .unwrap_or_else(|| format!("Episode {}", episode.episode.unwrap_or(0)));
+            let name = episode.episode_title.clone().unwrap_or_else(|| {
+                format!(
+                    "{} S{:02}E{:02}",
+                    detail.show.title,
+                    season.number,
+                    episode.episode.unwrap_or(0)
+                )
+            });
             out.push(json!({
                 "Name": name,
                 "Id": episode.id,
-                "ServerId": server_id(&state),
+                "ServerId": server_id(state),
                 "Type": "Episode",
                 "MediaType": "Video",
                 "IsFolder": false,
@@ -1128,6 +1166,7 @@ async fn episodes(
                 "ParentIndexNumber": season.number,
                 "IndexNumber": episode.episode,
                 "ProductionYear": detail.show.year,
+                "Overview": overview,
                 "RunTimeTicks": ticks(episode.duration_ms),
                 "Container": if episode.container == "strm" { "mkv" } else { episode.container.as_str() },
                 "ImageTags": image_tag(poster.as_ref()),
