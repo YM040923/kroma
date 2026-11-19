@@ -338,6 +338,37 @@ async fn item_detail(
             "BackdropImageTags": if backdrop.is_some() { json!(["1"]) } else { json!([]) },
         })));
     }
+    // A season id ("<show>:s1") is a real address in this tree: the season
+    // page asks for it directly.
+    if let Some((show_id, number)) = id.split_once(":s") {
+        if let Ok(number) = number.parse::<u32>() {
+            let wanted_show = show_id.to_string();
+            if let Some(detail) = query(&state.db, move |pool| db::get_show(&pool, &wanted_show))
+                .await?
+            {
+                let child_count = detail
+                    .seasons
+                    .iter()
+                    .find(|season| season.number == number)
+                    .map(|season| season.episodes.len())
+                    .unwrap_or(0);
+                return Ok(Json(json!({
+                    "Name": format!("Season {number}"),
+                    "Id": id,
+                    "ServerId": server_id(&state),
+                    "Type": "Season",
+                    "IsFolder": true,
+                    "SeriesId": detail.show.id,
+                    "SeriesName": detail.show.title,
+                    "IndexNumber": number,
+                    "ChildCount": child_count,
+                    "ProductionYear": detail.show.year,
+                    "ImageTags": image_tag(detail.show.metadata.as_ref().and_then(|m| m.poster_url.as_ref())),
+                    "UserData": { "Played": false, "PlaybackPositionTicks": 0 },
+                })));
+            }
+        }
+    }
     let wanted = id.clone();
     if let Some(detail) = query(&state.db, move |pool| db::get_show(&pool, &wanted)).await? {
         crate::api::visibility::gate_show(&state, &user, &detail.show.id).await?;
@@ -1320,6 +1351,30 @@ async fn image_art(
     } else if let Some(detail) = {
         let wanted = id.clone();
         query(&state.db, move |pool| db::get_show(&pool, &wanted)).await?
+    } {
+        let overrides = query(&state.db, {
+            let id = detail.show.id.clone();
+            move |pool| db::art_overrides::get(&pool, db::art_overrides::SHOW_KIND, &id)
+        })
+        .await?;
+        overrides.get(art_key).cloned().or_else(|| {
+            detail.show.metadata.as_ref().and_then(|meta| {
+                if backdrop {
+                    meta.backdrop_url.clone()
+                } else {
+                    meta.poster_url.clone()
+                }
+            })
+        })
+    } else if let Some(detail) = {
+        // A season id ("<show>:s1") shows its series' art.
+        let base = id.split_once(":s").map(|(show, _)| show.to_string());
+        match base {
+            Some(show_id) => {
+                query(&state.db, move |pool| db::get_show(&pool, &show_id)).await?
+            }
+            None => None,
+        }
     } {
         let overrides = query(&state.db, {
             let id = detail.show.id.clone();
