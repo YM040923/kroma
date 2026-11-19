@@ -956,7 +956,7 @@ async fn items(
     if wanted.is_none() && !parent.is_empty() {
         if let Some((show_id, number)) = parent.split_once(":s") {
             if let Ok(number) = number.parse::<u32>() {
-                return episodes_payload(&state, show_id.to_string(), Some(number)).await;
+                return episodes_payload(&state, &user, show_id.to_string(), Some(number)).await;
             }
         }
         let wanted_show = parent.clone();
@@ -967,6 +967,39 @@ async fn items(
             return seasons_payload(&state, parent.clone()).await;
         }
     }
+    // Filters a grid sends down; without them a genre chip or a sort order
+    // changes nothing.
+    let ids: Option<std::collections::HashSet<String>> = params.get("Ids").map(|value| {
+        value
+            .split(',')
+            .filter(|part| !part.is_empty())
+            .map(str::to_string)
+            .collect()
+    });
+    let genre_filter: Vec<String> = params
+        .get("GenreIds")
+        .into_iter()
+        .chain(params.get("Genres"))
+        .flat_map(|value| value.split(','))
+        .filter(|part| !part.is_empty())
+        .map(|part| part.to_lowercase())
+        .collect();
+    let sort_by = params
+        .get("SortBy")
+        .and_then(|value| value.split(',').next())
+        .unwrap_or("SortName")
+        .to_string();
+    let descending = params
+        .get("SortOrder")
+        .is_some_and(|value| value.eq_ignore_ascii_case("Descending"));
+    let matches_genres = |meta: Option<&crate::model::Metadata>| {
+        genre_filter.is_empty()
+            || meta.is_some_and(|meta| {
+                meta.genres
+                    .iter()
+                    .any(|genre| genre_filter.contains(&genre.to_lowercase()))
+            })
+    };
     let library_names: Vec<String> = match wanted {
         Some(def) => vec![def.name.clone(), def.id.clone()],
         None => defs.iter().map(|d| d.name.clone()).collect(),
@@ -997,6 +1030,12 @@ async fn items(
             if filter_library && !library_names.contains(&item.library) {
                 continue;
             }
+            if ids.as_ref().is_some_and(|ids| !ids.contains(&item.id)) {
+                continue;
+            }
+            if !matches_genres(item.metadata.as_ref()) {
+                continue;
+            }
             if !search.is_empty() && !item.title.to_lowercase().contains(&search) {
                 continue;
             }
@@ -1007,6 +1046,12 @@ async fn items(
         let shows = query(&state.db, |pool| db::list_shows(&pool, None)).await?;
         for show in shows {
             if filter_library && !library_names.contains(&show.library) {
+                continue;
+            }
+            if ids.as_ref().is_some_and(|ids| !ids.contains(&show.id)) {
+                continue;
+            }
+            if !matches_genres(show.metadata.as_ref()) {
                 continue;
             }
             if !search.is_empty() && !show.title.to_lowercase().contains(&search) {
@@ -1025,6 +1070,9 @@ async fn items(
             if filter_library && !library_names.contains(&item.library) {
                 continue;
             }
+            if ids.as_ref().is_some_and(|ids| !ids.contains(&item.id)) {
+                continue;
+            }
             if !search.is_empty() && !item.title.to_lowercase().contains(&search) {
                 continue;
             }
@@ -1032,7 +1080,48 @@ async fn items(
                 .show_id
                 .as_ref()
                 .and_then(|id| shows.iter().find(|s| &s.id == id));
+            if !matches_genres(show.and_then(|show| show.metadata.as_ref())) {
+                continue;
+            }
             out.push(episode_detail_dto(&state, &headers, &item, show, &access));
+        }
+    }
+    if !sort_by.eq_ignore_ascii_case("Random") {
+        out.sort_by(|a, b| {
+            let key_of = |value: &Value| -> String {
+                match sort_by.to_ascii_lowercase().as_str() {
+                    "datecreated" => value
+                        .get("DateCreated")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                    "productionyear" => format!(
+                        "{:010}",
+                        value.get("ProductionYear").and_then(Value::as_i64).unwrap_or(0)
+                    ),
+                    "communityrating" => format!(
+                        "{:012.4}",
+                        value
+                            .get("CommunityRating")
+                            .and_then(Value::as_f64)
+                            .unwrap_or(0.0)
+                    ),
+                    "runtime" => format!(
+                        "{:014}",
+                        value.get("RunTimeTicks").and_then(Value::as_i64).unwrap_or(0)
+                    ),
+                    _ => value
+                        .get("SortName")
+                        .or_else(|| value.get("Name"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_lowercase(),
+                }
+            };
+            key_of(a).cmp(&key_of(b))
+        });
+        if descending {
+            out.reverse();
         }
     }
     let total = out.len();
@@ -1079,6 +1168,11 @@ async fn latest(
     } else {
         Vec::new()
     };
+    let take = params
+        .get("Limit")
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|limit| *limit > 0)
+        .unwrap_or(20);
     let mut out: Vec<Value> = all
         .iter()
         .filter(|item| match (tv, &item.kind) {
@@ -1088,7 +1182,7 @@ async fn latest(
             (false, Kind::Movie) | (false, Kind::Video) => item.show_id.is_none(),
             (false, _) => false,
         })
-        .take(20)
+        .take(take)
         .map(|item| match &item.kind {
             Kind::Episode => {
                 let show = item
@@ -1147,13 +1241,14 @@ async fn episodes(
     Query(params): Query<HashMap<String, String>>,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Response> {
-    user_of(&state, &headers, &params).await?;
+    let (user, _) = user_of(&state, &headers, &params).await?;
     let wanted_season = params.get("season").and_then(|v| v.parse::<u32>().ok());
-    episodes_payload(&state, id, wanted_season).await
+    episodes_payload(&state, &user, id, wanted_season).await
 }
 
 async fn episodes_payload(
     state: &SharedState,
+    user: &crate::model::User,
     id: String,
     wanted_season: Option<u32>,
 ) -> Result<Json<Value>, Response> {
@@ -1205,6 +1300,7 @@ async fn episodes_payload(
             }));
         }
     }
+    apply_user_data(state, user, &mut out).await?;
     Ok(Json(json!({ "Items": out, "TotalRecordCount": out.len() })))
 }
 
