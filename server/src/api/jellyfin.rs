@@ -860,8 +860,15 @@ fn episode_detail_dto(
     let poster = show
         .and_then(|show| show.metadata.as_ref())
         .and_then(|meta| meta.poster_url.clone());
+    let fallback_name = match (&item.show_title, item.season, item.episode) {
+        (Some(show), Some(season), Some(episode)) => {
+            format!("{show} S{season:02}E{episode:02}")
+        }
+        (_, Some(season), Some(episode)) => format!("S{season:02}E{episode:02}"),
+        _ => format!("Episode {}", item.episode.unwrap_or(0)),
+    };
     json!({
-        "Name": item.episode_title.clone().unwrap_or_else(|| format!("Episode {}", item.episode.unwrap_or(0))),
+        "Name": item.episode_title.clone().unwrap_or(fallback_name),
         "Id": item.id,
         "ServerId": server_id(state),
         "Type": "Episode",
@@ -1141,14 +1148,13 @@ async fn playback_info(
     let item = query(&state.db, move |pool| db::get_item(&pool, &id))
         .await?
         .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "item not found"))?;
-    match item.kind {
-        Kind::Movie | Kind::Video => {}
-        _ => {
-            return Err(json_error(
-                StatusCode::BAD_REQUEST,
-                "not a playable movie item",
-            ));
-        }
+    // Episodes are playable too: a client asks for PlaybackInfo before every
+    // play, and an episode card that cannot answer it never starts.
+    if !matches!(item.kind, Kind::Movie | Kind::Video | Kind::Episode) {
+        return Err(json_error(
+            StatusCode::BAD_REQUEST,
+            "not a playable movie item",
+        ));
     }
     crate::api::visibility::gate_item(&state, &user, &item.id).await?;
     let ticket = crate::services::media_ticket::for_access_token(&state.media_ticket_key, &access);
@@ -1232,7 +1238,7 @@ async fn image_art(
             move |pool| db::art_overrides::get(&pool, db::art_overrides::ITEM_KIND, &id)
         })
         .await?;
-        overrides.get(art_key).cloned().or_else(|| {
+        let own = overrides.get(art_key).cloned().or_else(|| {
             item.metadata.as_ref().and_then(|meta| {
                 if backdrop {
                     meta.backdrop_url.clone()
@@ -1240,7 +1246,38 @@ async fn image_art(
                     meta.poster_url.clone()
                 }
             })
-        })
+        });
+        match own {
+            Some(url) => Some(url),
+            // An episode carries no art of its own; its series' art stands in.
+            None => match item.show_id.clone() {
+                Some(show_id) => {
+                    let detail = query(&state.db, move |pool| db::get_show(&pool, &show_id)).await?;
+                    match detail {
+                        Some(detail) => {
+                            let show_overrides = query(&state.db, {
+                                let id = detail.show.id.clone();
+                                move |pool| {
+                                    db::art_overrides::get(&pool, db::art_overrides::SHOW_KIND, &id)
+                                }
+                            })
+                            .await?;
+                            show_overrides.get(art_key).cloned().or_else(|| {
+                                detail.show.metadata.as_ref().and_then(|meta| {
+                                    if backdrop {
+                                        meta.backdrop_url.clone()
+                                    } else {
+                                        meta.poster_url.clone()
+                                    }
+                                })
+                            })
+                        }
+                        None => None,
+                    }
+                }
+                None => None,
+            },
+        }
     } else if let Some(detail) = {
         let wanted = id.clone();
         query(&state.db, move |pool| db::get_show(&pool, &wanted)).await?
