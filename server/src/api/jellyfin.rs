@@ -43,6 +43,10 @@ pub fn routes() -> Router<SharedState> {
         .route("/Users/{user_id}/Items/Root", get(items_root))
         .route("/Users/{user_id}/PlayedItems/{id}", post(mark_played).delete(unmark_played))
         .route("/Users/{user_id}/FavoriteItems/{id}", post(mark_favorite).delete(unmark_favorite))
+        // Legacy spellings older Emby-shaped clients still call.
+        .route("/UserPlayedItems/{id}", post(mark_played).delete(unmark_played))
+        .route("/UserFavoriteItems/{id}", post(mark_favorite).delete(unmark_favorite))
+        .route("/UserItems/{id}/UserData", get(user_item_data))
         .route("/Users/{user_id}/Items/{id}", get(item_detail))
         .route("/Users/{user_id}/Items/{id}/Similar", get(similar))
         .route("/UserViews", get(user_views))
@@ -60,6 +64,8 @@ pub fn routes() -> Router<SharedState> {
         .route("/Items/{id}/SpecialFeatures", get(empty_items))
         .route("/Items/{id}/LocalTrailers", get(empty_items))
         .route("/Items/{id}/Intros", get(empty_items))
+        .route("/Items/{id}/Ancestors", get(ancestors))
+        .route("/Videos/{id}/AdditionalParts", get(empty_items))
         .route("/Items/{id}/ThemeMedia", get(theme_media))
         .route("/Genres", get(genres))
         .route("/Studios", get(empty_studios))
@@ -1643,6 +1649,29 @@ async fn display_preferences(Path(id): Path<String>) -> Json<Value> {
         "ShowSidebar": true,
         "Client": "kroma",
     }))
+}
+
+async fn user_item_data(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, Response> {
+    let (user, _) = user_of(&state, &headers, &params).await?;
+    let value = with_user_data(&state, &user, json!({ "Id": id })).await?;
+    Ok(Json(
+        value.get("UserData").cloned().unwrap_or_else(|| json!({})),
+    ))
+}
+
+async fn ancestors(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(_path): Path<HashMap<String, String>>,
+) -> Result<Json<Value>, Response> {
+    user_of(&state, &headers, &params).await?;
+    Ok(Json(json!([])))
 }
 
 async fn empty_items(
