@@ -151,19 +151,19 @@ function ProgressRow({
           />
         ) : null}
         <RowBody row={row} overline={face.overline} title={face.title}>
-          <Row gap={10} align="center" mt={6}>
-            <Box grow={1} maxW={360}>
-              <Progress value={percent / 100} label={t('history.progressLabel', { percent })} />
-            </Box>
-            <Text variant="meta" color="textDim">
-              {t('history.progressLabel', { percent })}
-            </Text>
-            {duration > 0 ? (
+          <Box mt={6} gap={4} w="100%">
+            <Progress value={percent / 100} label={t('history.progressLabel', { percent })} />
+            <Row between gap={8}>
               <Text variant="meta" color="textDim">
-                {clock(row.positionMs)} / {clock(duration)}
+                {t('history.progressLabel', { percent })}
               </Text>
-            ) : null}
-          </Row>
+              {duration > 0 ? (
+                <Text variant="meta" color="textDim">
+                  {clock(row.positionMs)} / {clock(duration)}
+                </Text>
+              ) : null}
+            </Row>
+          </Box>
         </RowBody>
         <Row gap={8} align="center" shrink={0}>
           <Button size="sm" label={t('history.resume')} asChild>

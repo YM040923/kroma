@@ -193,8 +193,8 @@ function Root({
                 right={0}
                 top={0}
                 z={20}
-                opacity={chromeShown ? 1 : 0}
-                style={chromeShown ? s.chromeLive : s.inert}
+                opacity={chromeShown && !nav.overlay ? 1 : 0}
+                style={chromeShown && !nav.overlay ? s.chromeLive : s.inert}
               >
                 <TopBar
                   title={slots.title}
