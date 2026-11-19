@@ -874,8 +874,40 @@ fn library_image_tag_value(url: &str) -> String {
     crate::services::scan::short_hash(url)
 }
 
+/// Every backdrop a title advertises: the primary hero image first, then the
+/// extra gallery stored with the metadata, without repeating one image.
+fn backdrop_urls(meta: Option<&crate::model::Metadata>) -> Vec<String> {
+    let Some(meta) = meta else {
+        return Vec::new();
+    };
+    let mut urls: Vec<String> = meta.backdrop_url.iter().cloned().collect();
+    for url in &meta.backdrops {
+        if !urls.iter().any(|seen| seen == url) {
+            urls.push(url.clone());
+        }
+    }
+    urls
+}
+
+/// Jellyfin expects one tag per backdrop, index-aligned to the images it serves.
+fn backdrop_tags(urls: &[String]) -> Value {
+    Value::Array(urls.iter().map(|url| json!(library_image_tag_value(url))).collect())
+}
+
+/// The backdrop at `index` of an item's gallery: 0 is the primary art the DTO
+/// leads with, later indices walk `metadata.backdrops`. Out of range reads as
+/// the primary image, so an old client asking for a slide that was re-scraped
+/// away still gets art instead of a 404.
+fn backdrop_at(meta: &crate::model::Metadata, index: usize) -> Option<String> {
+    match index {
+        0 => meta.backdrop_url.clone(),
+        n => meta.backdrops.get(n - 1).cloned().or_else(|| meta.backdrop_url.clone()),
+    }
+}
+
 fn movie_dto(state: &SharedState, item: &MediaItem) -> Value {
     let poster = item.metadata.as_ref().and_then(|m| m.poster_url.clone());
+    let backdrops = backdrop_urls(item.metadata.as_ref());
     json!({
         "Name": item.title,
         "Id": item.id,
@@ -889,16 +921,17 @@ fn movie_dto(state: &SharedState, item: &MediaItem) -> Value {
         "Overview": item.metadata.as_ref().and_then(|m| m.overview.clone()),
         "CommunityRating": item.metadata.as_ref().and_then(|m| m.rating),
         "OfficialRating": item.metadata.as_ref().and_then(|m| m.certification.clone()),
-        "Genres": item.metadata.as_ref().map(|m| m.genres.clone()).unwrap_or_default(),
+        "Genres": item.metadata.as_ref().map(|m| localized_genres(&m.genres)).unwrap_or_default(),
         "DateCreated": item.added_at,
         "ImageTags": image_tag(poster.as_ref()),
-        "BackdropImageTags": if item.metadata.as_ref().and_then(|m| m.backdrop_url.as_ref()).is_some() { json!(["1"]) } else { json!([]) },
+        "BackdropImageTags": backdrop_tags(&backdrops),
         "UserData": { "Played": false, "PlaybackPositionTicks": 0, "PlayCount": 0, "IsFavorite": false },
     })
 }
 
 fn series_dto(state: &SharedState, show: &Show) -> Value {
     let poster = show.metadata.as_ref().and_then(|m| m.poster_url.clone());
+    let backdrops = backdrop_urls(show.metadata.as_ref());
     json!({
         "Name": show.title,
         "Id": show.id,
@@ -910,10 +943,10 @@ fn series_dto(state: &SharedState, show: &Show) -> Value {
         "Overview": show.metadata.as_ref().and_then(|m| m.overview.clone()),
         "CommunityRating": show.metadata.as_ref().and_then(|m| m.rating),
         "OfficialRating": show.metadata.as_ref().and_then(|m| m.certification.clone()),
-        "Genres": show.metadata.as_ref().map(|m| m.genres.clone()).unwrap_or_default(),
+        "Genres": show.metadata.as_ref().map(|m| localized_genres(&m.genres)).unwrap_or_default(),
         "DateCreated": show.added_at,
         "ImageTags": image_tag(poster.as_ref()),
-        "BackdropImageTags": if show.metadata.as_ref().and_then(|m| m.backdrop_url.as_ref()).is_some() { json!(["1"]) } else { json!([]) },
+        "BackdropImageTags": backdrop_tags(&backdrops),
         "ChildCount": show.episode_count,
         "RecursiveItemCount": show.episode_count,
         "UserData": { "Played": false, "PlaybackPositionTicks": 0, "PlayCount": 0, "IsFavorite": false },
@@ -936,6 +969,22 @@ fn provider_ids(meta: Option<&crate::model::Metadata>) -> Value {
     Value::Object(ids)
 }
 
+
+/// TMDB's zh-Hans catalog leaves a few combined genres in English; the card
+/// row should read as one language.
+fn localized_genres(genres: &[String]) -> Vec<String> {
+    genres.iter().map(|genre| match genre.as_str() {
+        "Sci-Fi & Fantasy" => "科幻奇幻",
+        "Action & Adventure" => "动作冒险",
+        "War & Politics" => "战争与政治",
+        "Animation" => "动画",
+        "Comedy" => "喜剧",
+        "Drama" => "剧情",
+        "Mystery" => "悬疑",
+        "Romance" => "爱情",
+        other => other,
+    }).map(str::to_string).collect()
+}
 
 fn reduced_ratio(width: u32, height: u32) -> Option<String> {
     fn gcd(a: u32, b: u32) -> u32 {
@@ -1054,7 +1103,7 @@ fn movie_detail_dto(
 ) -> Value {
     let mut dto = movie_dto(state, item);
     if let Some(meta) = item.metadata.as_ref() {
-        dto["Genres"] = json!(meta.genres.clone());
+        dto["Genres"] = json!(localized_genres(&meta.genres));
         if let Some(tagline) = meta.tagline.as_ref() {
             dto["Taglines"] = json!([tagline]);
         }
@@ -1079,7 +1128,7 @@ fn movie_detail_dto(
 fn series_detail_dto(state: &SharedState, show: &Show) -> Value {
     let mut dto = series_dto(state, show);
     if let Some(meta) = show.metadata.as_ref() {
-        dto["Genres"] = json!(meta.genres.clone());
+        dto["Genres"] = json!(localized_genres(&meta.genres));
         if let Some(tagline) = meta.tagline.as_ref() {
             dto["Taglines"] = json!([tagline]);
         }
@@ -1139,7 +1188,7 @@ fn episode_detail_dto(
         "Container": if item.container == "strm" { "mkv" } else { item.container.as_str() },
         "Overview": metadata.and_then(|meta| meta.overview.clone())
             .or_else(|| show_metadata.and_then(|meta| meta.overview.clone())),
-        "Genres": show_metadata.map(|meta| meta.genres.clone()).unwrap_or_default(),
+        "Genres": show_metadata.map(|meta| localized_genres(&meta.genres)).unwrap_or_default(),
         "CommunityRating": metadata.and_then(|meta| meta.rating).or_else(|| show_metadata.and_then(|meta| meta.rating)),
         "OfficialRating": metadata.and_then(|meta| meta.certification.clone())
             .or_else(|| show_metadata.and_then(|meta| meta.certification.clone())),
@@ -1635,16 +1684,19 @@ async fn image(
     Query(params): Query<HashMap<String, String>>,
     Path((id, kind)): Path<(String, String)>,
 ) -> Result<Response, Response> {
-    image_art(&state, &headers, &params, id, kind).await
+    image_art(&state, &headers, &params, id, kind, 0).await
 }
 
 async fn image_index(
     State(state): State<SharedState>,
     headers: HeaderMap,
     Query(params): Query<HashMap<String, String>>,
-    Path((id, kind, _index)): Path<(String, String, String)>,
+    Path((id, kind, index)): Path<(String, String, String)>,
 ) -> Result<Response, Response> {
-    image_art(&state, &headers, &params, id, kind).await
+    // The index addresses one slide of the gallery; anything unparsable is the
+    // first one, which every item that has art at all can serve.
+    let index = index.trim().parse::<usize>().unwrap_or(0);
+    image_art(&state, &headers, &params, id, kind, index).await
 }
 
 /// The images an item advertises, matching the tags its DTO carries.
@@ -1661,11 +1713,11 @@ async fn image_list(
         move |pool| db::get_item(&pool, &id)
     })
     .await?;
-    let (has_primary, has_backdrop) = if let Some(item) = &item {
+    let (primary, backdrops) = if let Some(item) = &item {
         let meta = item.metadata.as_ref();
         (
-            meta.and_then(|m| m.poster_url.as_ref().or(m.backdrop_url.as_ref())).is_some(),
-            meta.and_then(|m| m.backdrop_url.as_ref()).is_some(),
+            meta.and_then(|m| m.poster_url.clone().or_else(|| m.backdrop_url.clone())),
+            backdrop_urls(meta),
         )
     } else {
         let show = query(&state.db, {
@@ -1675,18 +1727,28 @@ async fn image_list(
         .await?;
         match show {
             Some(detail) => {
-                let tag = image_tag(detail.show.metadata.as_ref().and_then(|m| m.poster_url.as_ref()));
-                let present = tag.get("Primary").is_some();
-                (present, present)
+                let meta = detail.show.metadata.as_ref();
+                (
+                    meta.and_then(|m| m.poster_url.clone().or_else(|| m.backdrop_url.clone())),
+                    backdrop_urls(meta),
+                )
             }
-            None => (false, false),
+            None => (None, Vec::new()),
         }
     };
-    if has_primary {
-        images.push(json!({ "ImageType": "Primary", "ImageIndex": 0, "ImageTag": "1" }));
+    if let Some(url) = primary {
+        images.push(json!({
+            "ImageType": "Primary",
+            "ImageIndex": 0,
+            "ImageTag": library_image_tag_value(&url),
+        }));
     }
-    if has_backdrop {
-        images.push(json!({ "ImageType": "Backdrop", "ImageIndex": 0, "ImageTag": "1" }));
+    for (index, url) in backdrops.iter().enumerate() {
+        images.push(json!({
+            "ImageType": "Backdrop",
+            "ImageIndex": index,
+            "ImageTag": library_image_tag_value(url),
+        }));
     }
     Ok(Json(json!(images)))
 }
@@ -1697,6 +1759,7 @@ async fn image_art(
     params: &HashMap<String, String>,
     id: String,
     kind: String,
+    index: usize,
 ) -> Result<Response, Response> {
     let (user, _) = user_of(state, headers, params).await?;
     if id.starts_with("person:") {
@@ -1719,19 +1782,25 @@ async fn image_art(
             move |pool| db::art_overrides::get(&pool, db::art_overrides::ITEM_KIND, &id)
         })
         .await?;
-        let own = overrides.get(art_key).cloned().or_else(|| {
-            item.metadata.as_ref().and_then(|meta| {
-                // An episode's own still travels in `backdropUrl`; Primary must
-                // use it too, or every card in a season shows the series art.
-                if item.show_id.is_some() {
-                    meta.backdrop_url.clone().or_else(|| meta.poster_url.clone())
-                } else if backdrop {
-                    meta.backdrop_url.clone()
-                } else {
-                    meta.poster_url.clone()
-                }
+        // Extra slides are provider art: an operator override only ever
+        // replaces the first backdrop, so later indices bypass it.
+        let own = if backdrop && index > 0 {
+            item.metadata.as_ref().and_then(|meta| backdrop_at(meta, index))
+        } else {
+            overrides.get(art_key).cloned().or_else(|| {
+                item.metadata.as_ref().and_then(|meta| {
+                    // An episode's own still travels in `backdropUrl`; Primary must
+                    // use it too, or every card in a season shows the series art.
+                    if item.show_id.is_some() {
+                        meta.backdrop_url.clone().or_else(|| meta.poster_url.clone())
+                    } else if backdrop {
+                        meta.backdrop_url.clone()
+                    } else {
+                        meta.poster_url.clone()
+                    }
+                })
             })
-        });
+        };
         match own {
             Some(url) => Some(url),
             // An episode carries no art of its own; its series' art stands in.
@@ -1772,10 +1841,17 @@ async fn image_art(
             move |pool| db::art_overrides::get(&pool, db::art_overrides::SHOW_KIND, &id)
         })
         .await?;
-        overrides.get(art_key).cloned().or_else(|| {
+        // Only the first backdrop is replaceable by an operator pick; the rest
+        // of the gallery is whatever the provider ordered by vote.
+        let picked = if backdrop && index > 0 {
+            None
+        } else {
+            overrides.get(art_key).cloned()
+        };
+        picked.or_else(|| {
             detail.show.metadata.as_ref().and_then(|meta| {
                 if backdrop {
-                    meta.backdrop_url.clone()
+                    backdrop_at(meta, index)
                 } else {
                     meta.poster_url.clone()
                 }
@@ -2233,4 +2309,72 @@ async fn search_hints(
         "SearchHints": hints,
         "TotalRecordCount": hints.len(),
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn meta(primary: Option<&str>, extras: &[&str]) -> crate::model::Metadata {
+        serde_json::from_value(json!({
+            "tmdbId": 1,
+            "tmdbUrl": "https://www.themoviedb.org/movie/1",
+            "genres": [],
+            "backdropUrl": primary,
+            "backdrops": extras,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn the_gallery_leads_with_the_primary_backdrop_without_repeating_it() {
+        let art = meta(Some("/api/images/hero.webp"), &["/api/images/two.webp"]);
+
+        assert_eq!(
+            backdrop_urls(Some(&art)),
+            vec!["/api/images/hero.webp".to_string(), "/api/images/two.webp".to_string()]
+        );
+
+        // A stored gallery that still repeats the hero only advertises it once.
+        let repeated = meta(Some("/api/images/hero.webp"), &["/api/images/hero.webp"]);
+        assert_eq!(backdrop_urls(Some(&repeated)).len(), 1);
+    }
+
+    #[test]
+    fn a_title_without_backdrop_art_advertises_an_empty_tag_list() {
+        assert_eq!(backdrop_urls(None), Vec::<String>::new());
+        assert_eq!(backdrop_tags(&[]), json!([]));
+    }
+
+    #[test]
+    fn each_backdrop_tag_follows_its_own_url() {
+        let art = meta(
+            Some("/api/images/hero.webp"),
+            &["/api/images/two.webp", "/api/images/three.webp"],
+        );
+        let tags = backdrop_tags(&backdrop_urls(Some(&art)));
+
+        assert_eq!(tags.as_array().unwrap().len(), 3);
+        assert_eq!(tags[0], json!(library_image_tag_value("/api/images/hero.webp")));
+        assert_eq!(tags[2], json!(library_image_tag_value("/api/images/three.webp")));
+    }
+
+    #[test]
+    fn a_backdrop_index_walks_the_gallery_and_falls_back_to_the_hero() {
+        let art = meta(
+            Some("/api/images/hero.webp"),
+            &["/api/images/two.webp", "/api/images/three.webp"],
+        );
+
+        assert_eq!(
+            backdrop_at(&art, 0).as_deref(),
+            Some("/api/images/hero.webp")
+        );
+        assert_eq!(backdrop_at(&art, 2).as_deref(), Some("/api/images/three.webp"));
+        // Past the last slide a stale client still gets the primary image.
+        assert_eq!(
+            backdrop_at(&art, 9).as_deref(),
+            Some("/api/images/hero.webp")
+        );
+    }
 }

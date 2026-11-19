@@ -10,6 +10,10 @@ fn param<'a>(params: &'a HashMap<String, String>, key: &str) -> Option<&'a str> 
         .map(|(_, value)| value.trim()).filter(|value| !value.is_empty())
 }
 
+fn localized_role(role: &str) -> String {
+    role.replace("(voice)", "（配音）").replace("(Voice)", "（配音）")
+}
+
 fn parts(value: &str) -> impl Iterator<Item = &str> {
     value.split([',', '|']).map(str::trim).filter(|s| !s.is_empty())
 }
@@ -139,7 +143,7 @@ fn credit_value(c: &Credit, embedded: bool) -> Value {
     let tag = c.profile.as_deref().filter(|s| !s.is_empty()).map(|_| "1");
     json!({
         "Id": c.id, "Name": c.name, "Type": if embedded { c.kind } else { "Person" },
-        "Role": c.role, "IsFolder": false, "PrimaryImageTag": tag,
+        "Role": c.role.as_deref().map(localized_role), "IsFolder": false, "PrimaryImageTag": tag,
         "ImageTags": if tag.is_some() { json!({"Primary": tag}) } else { json!({}) },
         "ProviderIds": c.tmdb_id.map(|id| json!({"Tmdb": id.to_string()})).unwrap_or_else(|| json!({})),
     })

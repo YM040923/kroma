@@ -70,6 +70,7 @@ mod tests {
                 color: None,
             }),
             audio: Some(AudioStream {
+                technical: None,
                 index: 0,
                 codec: "eac3".into(),
                 channels: Some(2),
@@ -83,6 +84,7 @@ mod tests {
             size: Some(1_000_000_000),
             edition: None,
             probed: true,
+            probe_version: None,
             unreadable: None,
             edition_id: None,
             abs_path: None,

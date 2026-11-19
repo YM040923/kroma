@@ -102,6 +102,7 @@ pub(super) fn meta(tmdb: u64, title: &str) -> Metadata {
         release_date: Some("2021-01-01".into()),
         genres: vec!["Science Fiction".into()],
         studios: Vec::new(),
+        backdrops: Vec::new(),
         tmdb_genre_ids: vec![878],
         rating: Some(8.0),
         certification: Some("PG-13".into()),

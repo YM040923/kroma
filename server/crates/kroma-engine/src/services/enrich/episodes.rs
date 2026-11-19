@@ -23,6 +23,7 @@ pub(super) fn blank_metadata() -> Metadata {
         release_date: None,
         genres: Vec::new(),
         studios: Vec::new(),
+        backdrops: Vec::new(),
         tmdb_genre_ids: Vec::new(),
         rating: None,
         certification: None,

@@ -28,6 +28,7 @@ pub(super) fn meta(rating: f32, genres: &[&str], directors: &[&str]) -> crate::m
         release_date: None,
         genres: genres.iter().map(ToString::to_string).collect(),
         studios: Vec::new(),
+        backdrops: Vec::new(),
         tmdb_genre_ids: Vec::new(),
         rating: Some(rating),
         certification: None,

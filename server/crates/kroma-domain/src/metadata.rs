@@ -25,6 +25,10 @@ pub struct Metadata {
     /// Production companies and broadcast networks supplied by the provider.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub studios: Vec<String>,
+    /// Additional TMDB artwork beyond the primary backdrop, ordered by the
+    /// provider's own vote average. Never contains `backdrop_url` itself.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub backdrops: Vec<String>,
     // Parallel to `genres`: both come from one TMDB list and align by index.
     #[serde(
         rename = "tmdbGenreIds",
@@ -252,6 +256,8 @@ mod tests {
             overview: None,
             release_date: None,
             genres: Vec::new(),
+            studios: Vec::new(),
+            backdrops: Vec::new(),
             tmdb_genre_ids: Vec::new(),
             rating: None,
             certification: None,
@@ -297,6 +303,35 @@ mod tests {
 
         assert_eq!(meta.genres, vec!["Science Fiction".to_string()]);
         assert!(meta.tmdb_genre_ids.is_empty());
+    }
+
+    #[test]
+    fn the_gallery_serializes_under_its_own_name_and_vanishes_when_empty() {
+        let meta = Metadata {
+            backdrops: vec!["https://image.tmdb.org/t/p/w1280/other.jpg".into()],
+            ..metadata()
+        };
+
+        let json = serde_json::to_value(&meta).unwrap();
+
+        assert_eq!(
+            json["backdrops"],
+            serde_json::json!(["https://image.tmdb.org/t/p/w1280/other.jpg"])
+        );
+        assert!(serde_json::to_value(metadata())
+            .unwrap()
+            .get("backdrops")
+            .is_none());
+    }
+
+    #[test]
+    fn a_blob_stored_before_the_gallery_reads_as_having_none() {
+        let stored = r#"{"tmdbId":603,"title":"Dune","overview":null,"genres":[],
+            "tmdbUrl":"https://themoviedb.org/movie/603"}"#;
+
+        let meta: Metadata = serde_json::from_str(stored).unwrap();
+
+        assert!(meta.backdrops.is_empty());
     }
 
     #[test]

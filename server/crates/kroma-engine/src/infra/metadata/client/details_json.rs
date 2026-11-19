@@ -86,6 +86,8 @@ pub(super) struct Genre {
 pub(super) struct Images {
     #[serde(default)]
     pub(super) logos: Vec<ImageEntry>,
+    #[serde(default)]
+    pub(super) backdrops: Vec<ImageEntry>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,6 +123,31 @@ pub(super) fn pick_logo(logos: &[ImageEntry], lang2: &str) -> Option<String> {
             )
         })
         .and_then(|l| l.file_path.clone())
+}
+
+/// How many extra gallery images one title keeps, past its primary backdrop.
+pub(super) const MAX_BACKDROPS: usize = 8;
+
+// Gallery artwork `file_path`s: every entry with a path, best-voted first.
+// The primary backdrop is not removed here — the caller knows which URL that
+// is and drops it, so the gallery never repeats the hero image.
+pub(super) fn pick_backdrops(backdrops: &[ImageEntry]) -> Vec<String> {
+    let mut ranked: Vec<(f32, &str)> = Vec::new();
+    for entry in backdrops {
+        let Some(path) = entry.file_path.as_deref().filter(|p| !p.is_empty()) else {
+            continue;
+        };
+        if ranked.iter().any(|(_, seen)| *seen == path) {
+            continue;
+        }
+        ranked.push((entry.vote_average.unwrap_or(0.0), path));
+    }
+    ranked.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    ranked
+        .into_iter()
+        .take(MAX_BACKDROPS)
+        .map(|(_, path)| path.to_string())
+        .collect()
 }
 
 #[derive(Debug, Deserialize)]
@@ -199,6 +226,41 @@ mod tests {
         assert_eq!(cast[0].character.as_deref(), Some("A"));
         // Empty character strings are dropped during the Metadata mapping.
         assert_eq!(cast[2].character.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn gallery_paths_rank_by_vote_and_skip_entries_without_a_path() {
+        let raw = r#"[
+            {"file_path": "/low.jpg", "vote_average": 1.0},
+            {"file_path": null, "vote_average": 9.9},
+            {"file_path": "/best.jpg", "vote_average": 8.5},
+            {"file_path": "/best.jpg", "vote_average": 8.5},
+            {"file_path": "/mid.jpg", "vote_average": 4.0}
+        ]"#;
+        let entries: Vec<ImageEntry> = serde_json::from_str(raw).unwrap();
+
+        assert_eq!(
+            pick_backdrops(&entries),
+            vec!["/best.jpg", "/mid.jpg", "/low.jpg"]
+        );
+    }
+
+    #[test]
+    fn the_gallery_stops_at_eight_slides() {
+        let entries: Vec<ImageEntry> = (0..12)
+            .map(|n| {
+                serde_json::from_value(serde_json::json!({
+                    "file_path": format!("/b{n}.jpg"),
+                    "vote_average": n,
+                }))
+                .unwrap()
+            })
+            .collect();
+
+        let picked = pick_backdrops(&entries);
+
+        assert_eq!(picked.len(), MAX_BACKDROPS);
+        assert_eq!(picked[0], "/b11.jpg");
     }
 
     #[test]

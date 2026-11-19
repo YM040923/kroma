@@ -18,6 +18,7 @@ pub(super) fn meta(title: &str) -> Metadata {
         release_date: None,
         genres: vec!["Original".into()],
         studios: Vec::new(),
+        backdrops: Vec::new(),
         tmdb_genre_ids: vec![878],
         rating: None,
         certification: None,

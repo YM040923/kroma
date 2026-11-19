@@ -139,6 +139,106 @@ fn read_range(url: &str, range: &str) -> Result<Vec<u8>, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Codec configuration records: hvcC / avcC / AudioSpecificConfig
+
+/// What a codec's private configuration says about its stream. Every field is
+/// best-effort: a record too short, or one this does not understand, answers
+/// nothing rather than a guess.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct CodecConfig {
+    profile: Option<String>,
+    level: Option<u32>,
+    bit_depth: Option<u32>,
+    pixel_format: Option<String>,
+}
+
+/// HEVC decoder configuration record, the payload of an `hvcC` box and of a
+/// Matroska `CodecPrivate` alike.
+fn hevc_config(config: &[u8]) -> CodecConfig {
+    let profile = config
+        .get(1)
+        .and_then(|byte| match byte & 0x1f {
+            1 => Some("Main"),
+            2 => Some("Main 10"),
+            3 => Some("Main Still Picture"),
+            4 => Some("Range Extensions"),
+            _ => None,
+        })
+        .map(str::to_string);
+    let level = config
+        .get(12)
+        .map(|value| *value as u32)
+        .filter(|value| *value > 0);
+    let chroma = config.get(16).map(|value| value & 0x03);
+    let bit_depth = config
+        .get(17)
+        .map(|value| 8 + u32::from(value & 0x07))
+        .filter(|bits| *bits >= 8);
+    let pixel_format = match (chroma, bit_depth) {
+        (Some(1), Some(8)) => Some("yuv420p".to_string()),
+        (Some(1), Some(10)) => Some("yuv420p10le".to_string()),
+        (Some(2), Some(8)) => Some("yuv422p".to_string()),
+        (Some(2), Some(10)) => Some("yuv422p10le".to_string()),
+        (Some(3), Some(8)) => Some("yuv444p".to_string()),
+        (Some(3), Some(10)) => Some("yuv444p10le".to_string()),
+        _ => None,
+    };
+    CodecConfig {
+        profile,
+        level,
+        bit_depth,
+        pixel_format,
+    }
+}
+
+/// AVC decoder configuration record, the payload of an `avcC` box and of a
+/// Matroska `CodecPrivate` alike.
+fn avc_config(config: &[u8]) -> CodecConfig {
+    let Some(profile_idc) = config.get(1).copied() else {
+        return CodecConfig::default();
+    };
+    let profile = match profile_idc {
+        66 => Some("Baseline".to_string()),
+        77 => Some("Main".to_string()),
+        88 => Some("Extended".to_string()),
+        100 => Some("High".to_string()),
+        110 => Some("High 10".to_string()),
+        122 => Some("High 4:2:2".to_string()),
+        244 => Some("High 4:4:4".to_string()),
+        _ => None,
+    };
+    let level = config
+        .get(3)
+        .map(|value| *value as u32)
+        .filter(|value| *value > 0);
+    // avcC never states the bit depth. Only the profiles that cannot carry more
+    // than 8 bits let us say so; for the others it stays unknown rather than
+    // guessed.
+    let (bit_depth, pixel_format) = match profile_idc {
+        66 | 77 | 88 | 100 => (Some(8), Some("yuv420p".to_string())),
+        _ => (None, None),
+    };
+    CodecConfig {
+        profile,
+        level,
+        bit_depth,
+        pixel_format,
+    }
+}
+
+/// AAC AudioSpecificConfig: the first five bits after the three-bit audio object
+/// type flag carry the object type.
+fn aac_profile(config: &[u8]) -> Option<String> {
+    match (*config.first()? >> 3) & 0x1f {
+        2 => Some("LC"),
+        5 => Some("HE-AAC"),
+        29 => Some("HE-AAC v2"),
+        _ => None,
+    }
+    .map(str::to_string)
+}
+
+// ---------------------------------------------------------------------------
 // Matroska / EBML
 
 mod mkv {
@@ -168,6 +268,7 @@ mod mkv {
         default_duration_ns: Option<u64>,
         frame_rate: Option<f64>,
         bit_depth: Option<u32>,
+        codec_private: Option<Vec<u8>>,
         primaries: Option<u64>,
         transfer: Option<u64>,
         matrix: Option<u64>,
@@ -227,9 +328,15 @@ mod mkv {
             match track.kind {
                 1 => probed.video = Some(video_of(&track)),
                 2 => {
+                    let profile = if track.codec.starts_with("A_AAC") {
+                        track.codec_private.as_deref().and_then(super::aac_profile)
+                    } else {
+                        None
+                    };
                     probed.audio_tracks.push(Audio {
                         technical: Some(AudioTechnical {
                             stream_index: Some(track.number.saturating_sub(1) as u32),
+                            profile,
                             sample_rate: track.sample_rate,
                             ..AudioTechnical::default()
                         }),
@@ -254,6 +361,7 @@ mod mkv {
     }
 
     fn video_of(track: &Track) -> Video {
+        let config = codec_config(track);
         let transfer = transfer_name(track.transfer);
         let hdr_format = match transfer.as_deref() {
             Some("smpte2084") => Some("hdr10".to_string()),
@@ -276,18 +384,32 @@ mod mkv {
         Video {
             technical: Some(VideoTechnical {
                 stream_index: Some(track.number.saturating_sub(1) as u32),
+                profile: config.profile,
+                level: config.level,
                 aspect_ratio,
                 frame_rate: frame_rate.or(track.frame_rate),
+                pixel_format: config.pixel_format,
                 ..VideoTechnical::default()
             }),
             codec: codec_name(&track.codec),
             width: track.width,
             height: track.height,
             hdr: hdr_format.is_some(),
-            bit_depth: track.bit_depth.map(|d| d as u32),
+            bit_depth: config.bit_depth.or(track.bit_depth),
             hdr_format,
             color: (!color.primaries.is_none() || !color.transfer.is_none() || !color.matrix.is_none())
                 .then_some(color),
+        }
+    }
+
+    fn codec_config(track: &Track) -> super::CodecConfig {
+        let Some(private) = track.codec_private.as_deref() else {
+            return super::CodecConfig::default();
+        };
+        match track.codec.as_str() {
+            "V_MPEGH/ISO/HEVC" => super::hevc_config(private),
+            "V_MPEG4/ISO/AVC" => super::avc_config(private),
+            _ => super::CodecConfig::default(),
         }
     }
 
@@ -358,9 +480,10 @@ mod mkv {
             0x9f => track.channels = Some(uint(bytes) as u32),
             0xb5 => track.sample_rate = Some(float(bytes).map(|f| f as u32).unwrap_or(uint(bytes) as u32)),
             0x6264 => track.bit_depth = Some(uint(bytes) as u32),
-            0x55b1 => track.primaries = Some(uint(bytes)),
+            0x63a2 => track.codec_private = Some(bytes.to_vec()),
+            0x55b1 => track.matrix = Some(uint(bytes)),
             0x55ba => track.transfer = Some(uint(bytes)),
-            0x55bb => track.matrix = Some(uint(bytes)),
+            0x55bb => track.primaries = Some(uint(bytes)),
             0x55ab => track.forced = uint(bytes) == 1,
             _ => {}
         }
@@ -598,14 +721,14 @@ mod mp4 {
                 ..VideoTechnical::default()
             };
             let mut depth = None;
-            if let Some(config) = find(&boxes(body, 78, body.len()), if kind == b"hvc1" || kind == b"hev1" { b"hvcC" } else { b"avcC" }) {
-                let (profile, level) = codec_config(kind, config);
-                technical.profile = profile;
-                technical.level = level;
-                if kind == b"hvc1" || kind == b"hev1" {
-                    let (bits, pixels) = hevc_pixels(config);
-                    depth = bits;
-                    technical.pixel_format = pixels;
+            let hevc = kind == b"hvc1" || kind == b"hev1";
+            if let Some(config) = find(&boxes(body, 78, body.len()), if hevc { b"hvcC" } else { b"avcC" }) {
+                let parsed = if hevc { super::hevc_config(config) } else { super::avc_config(config) };
+                technical.profile = parsed.profile;
+                technical.level = parsed.level;
+                if hevc {
+                    depth = parsed.bit_depth;
+                    technical.pixel_format = parsed.pixel_format;
                 }
             }
             (technical, depth)
@@ -700,52 +823,6 @@ mod mp4 {
 
     fn audio_sample_rate(entry: &[u8]) -> Option<u32> {
         (entry.len() >= 28).then(|| be32(&entry[24..28]) >> 16).filter(|rate| *rate > 0)
-    }
-
-    fn hevc_pixels(config: &[u8]) -> (Option<u32>, Option<String>) {
-        let chroma = config.get(16).map(|value| value & 0x03);
-        let depth = config.get(17)
-            .map(|value| 8 + u32::from(value & 0x07))
-            .filter(|bits| *bits >= 8);
-        let pixels = match (chroma, depth) {
-            (Some(1), Some(8)) => Some("yuv420p".to_string()),
-            (Some(1), Some(10)) => Some("yuv420p10le".to_string()),
-            (Some(2), Some(8)) => Some("yuv422p".to_string()),
-            (Some(2), Some(10)) => Some("yuv422p10le".to_string()),
-            (Some(3), Some(8)) => Some("yuv444p".to_string()),
-            (Some(3), Some(10)) => Some("yuv444p10le".to_string()),
-            _ => None,
-        };
-        (depth, pixels)
-    }
-
-    fn codec_config(kind: &[u8; 4], config: &[u8]) -> (Option<String>, Option<u32>) {
-        if kind == b"hvc1" || kind == b"hev1" {
-            let Some(byte) = config.get(1).copied() else { return (None, None) };
-            let profile = match byte & 0x1f {
-                1 => Some("Main".to_string()),
-                2 => Some("Main 10".to_string()),
-                3 => Some("Main Still Picture".to_string()),
-                4 => Some("Range Extensions".to_string()),
-                _ => None,
-            };
-            let level = config.get(12).map(|value| *value as u32).filter(|value| *value > 0);
-            (profile, level)
-        } else {
-            let Some(profile_idc) = config.get(1).copied() else { return (None, None) };
-            let profile = match profile_idc {
-                66 => Some("Baseline".to_string()),
-                77 => Some("Main".to_string()),
-                88 => Some("Extended".to_string()),
-                100 => Some("High".to_string()),
-                110 => Some("High 10".to_string()),
-                122 => Some("High 4:2:2".to_string()),
-                244 => Some("High 4:4:4".to_string()),
-                _ => None,
-            };
-            let level = config.get(3).map(|value| *value as u32).filter(|value| *value > 0);
-            (profile, level)
-        }
     }
 
     fn tkhd_size(tkhd: &[u8]) -> (Option<u32>, Option<u32>) {
@@ -889,6 +966,99 @@ mod tests {
         assert_eq!(probed.audio_tracks[0].codec, "ac3");
         assert_eq!(probed.audio_tracks[0].language.as_deref(), Some("jpn"));
         assert_eq!(probed.audio_tracks[0].channels, Some(6));
+    }
+
+    fn hevc_record() -> Vec<u8> {
+        vec![
+            1, 0x02, // configurationVersion, profile_space/tier/idc: Main 10
+            0, 0, 0, 0, // general_profile_compatibility_flags
+            0, 0, 0, 0, 0, 0, // general_constraint_indicator_flags
+            153, // general_level_idc: 5.1
+            0xf0, 0x00, // min_spatial_segmentation_idc
+            0xfc, // parallelismType
+            0xfd, // chromaFormat: 4:2:0
+            0xfa, // bitDepthLumaMinus8: 10-bit
+            0xf8, 0x00, 0x00, 0x0f, 0x03,
+        ]
+    }
+
+    fn mkv_file(entries: Vec<Vec<u8>>) -> Vec<u8> {
+        let tracks = mkv_element(&[0x16, 0x54, 0xae, 0x6b], &entries.concat());
+        let segment = mkv_element(&[0x18, 0x53, 0x80, 0x67], &tracks);
+        [mkv_element(&[0x1a, 0x45, 0xdf, 0xa3], &[]), segment].concat()
+    }
+
+    #[test]
+    fn a_matroska_hevc_track_reads_profile_depth_colour_and_hdr() {
+        let colour = mkv_element(&[0x55, 0xb0], &[
+            mkv_uint(&[0x55, 0xbb], 9),  // primaries: bt2020
+            mkv_uint(&[0x55, 0xba], 16), // transfer: smpte2084
+            mkv_uint(&[0x55, 0xb1], 9),  // matrix: bt2020nc
+        ].concat());
+        let video = mkv_element(&[0xe0], &[
+            mkv_uint(&[0xb0], 3840),
+            mkv_uint(&[0xba], 2160),
+            colour,
+        ].concat());
+        let entry = mkv_element(&[0xae], &[
+            mkv_uint(&[0xd7], 1),
+            mkv_uint(&[0x83], 1),
+            mkv_string(&[0x86], "V_MPEGH/ISO/HEVC"),
+            mkv_element(&[0x63, 0xa2], &hevc_record()),
+            video,
+        ].concat());
+
+        let probed = mkv::parse(&mkv_file(vec![entry])).expect("parsed");
+        let video = probed.video.expect("video");
+        let technical = video.technical.expect("technical");
+        assert_eq!(technical.profile.as_deref(), Some("Main 10"));
+        assert_eq!(technical.level, Some(153));
+        assert_eq!(technical.pixel_format.as_deref(), Some("yuv420p10le"));
+        assert_eq!(video.bit_depth, Some(10));
+        assert!(video.hdr);
+        assert_eq!(video.hdr_format.as_deref(), Some("hdr10"));
+        let color = video.color.expect("colour");
+        assert_eq!(color.primaries.as_deref(), Some("bt2020"));
+        assert_eq!(color.transfer.as_deref(), Some("smpte2084"));
+        assert_eq!(color.matrix.as_deref(), Some("bt2020nc"));
+    }
+
+    #[test]
+    fn a_matroska_avc_track_reads_profile_level_and_eight_bit_default() {
+        let entry = mkv_element(&[0xae], &[
+            mkv_uint(&[0xd7], 1),
+            mkv_uint(&[0x83], 1),
+            mkv_string(&[0x86], "V_MPEG4/ISO/AVC"),
+            mkv_element(&[0x63, 0xa2], &[1, 100, 0, 40]), // High @ 4.0
+        ].concat());
+
+        let probed = mkv::parse(&mkv_file(vec![entry])).expect("parsed");
+        let video = probed.video.expect("video");
+        let technical = video.technical.expect("technical");
+        assert_eq!(technical.profile.as_deref(), Some("High"));
+        assert_eq!(technical.level, Some(40));
+        assert_eq!(technical.pixel_format.as_deref(), Some("yuv420p"));
+        assert_eq!(video.bit_depth, Some(8));
+    }
+
+    #[test]
+    fn a_matroska_aac_track_reads_its_audio_object_type() {
+        let entry = mkv_element(&[0xae], &[
+            mkv_uint(&[0xd7], 1),
+            mkv_uint(&[0x83], 2),
+            mkv_string(&[0x86], "A_AAC"),
+            mkv_element(&[0x63, 0xa2], &[0x12, 0x10]), // AAC LC, 44.1 kHz, stereo
+            mkv_uint(&[0x9f], 2),
+        ].concat());
+
+        let probed = mkv::parse(&mkv_file(vec![entry])).expect("parsed");
+        let audio = probed.audio_tracks.first().expect("audio");
+        assert_eq!(audio.codec, "aac");
+        assert_eq!(audio.channels, Some(2));
+        assert_eq!(
+            audio.technical.as_ref().and_then(|technical| technical.profile.as_deref()),
+            Some("LC")
+        );
     }
 
     fn mp4_box(kind: &[u8; 4], body: &[u8]) -> Vec<u8> {

@@ -2,7 +2,7 @@ use crate::domain::metadata::Metadata;
 
 use super::super::common::{build_cast, build_crew};
 use super::certification::country_of;
-use super::details_json::{collect_keywords, pick_logo, Details};
+use super::details_json::{collect_keywords, pick_backdrops, pick_logo, Details};
 use super::{api, tmdb_json, Target, IMG, MAX_CAST, MAX_CREW};
 
 pub(super) fn fetch_details(
@@ -57,6 +57,24 @@ fn metadata_from(d: Details, target: Target, id: u64, lang2: &str, country: &str
         }
     }
 
+    // Gallery artwork rides beside the primary backdrop: best-voted first, and
+    // never the hero image itself, so a client can show the whole set without
+    // repeating its first slide.
+    let backdrop_url = d.backdrop_path.map(|p| format!("{IMG}/w1280{p}"));
+    let mut backdrops: Vec<String> = d
+        .images
+        .as_ref()
+        .map(|i| {
+            pick_backdrops(&i.backdrops)
+                .into_iter()
+                .map(|p| format!("{IMG}/w1280{p}"))
+                .collect()
+        })
+        .unwrap_or_default();
+    if let Some(primary) = backdrop_url.as_deref() {
+        backdrops.retain(|url| url != primary);
+    }
+
     Metadata {
         provider: "tmdb",
         tmdb_id: d.id,
@@ -71,6 +89,7 @@ fn metadata_from(d: Details, target: Target, id: u64, lang2: &str, country: &str
         tmdb_genre_ids: d.genres.iter().map(|g| g.id).collect(),
         genres: d.genres.into_iter().map(|g| g.name).collect(),
         studios,
+        backdrops,
         keywords: d.keywords.map(collect_keywords).unwrap_or_default(),
         rating: d.vote_average.filter(|v| *v > 0.0),
         certification: d
@@ -78,7 +97,7 @@ fn metadata_from(d: Details, target: Target, id: u64, lang2: &str, country: &str
             .or(d.content_ratings)
             .and_then(|c| c.preferring(country)),
         poster_url: d.poster_path.map(|p| format!("{IMG}/w500{p}")),
-        backdrop_url: d.backdrop_path.map(|p| format!("{IMG}/w1280{p}")),
+        backdrop_url,
         logo_url: d
             .images
             .as_ref()
@@ -177,5 +196,44 @@ mod tests {
 
         assert!(meta.tmdb_genre_ids.is_empty());
         assert!(meta.genres.is_empty());
+    }
+
+    #[test]
+    fn the_gallery_is_best_voted_first_and_never_repeats_the_primary_backdrop() {
+        let raw = r#"{
+            "id": 603,
+            "title": "The Matrix",
+            "backdrop_path": "/hero.jpg",
+            "images": {"backdrops": [
+                {"file_path": "/hero.jpg", "vote_average": 9.0},
+                {"file_path": "/second.jpg", "vote_average": 5.0},
+                {"file_path": "/third.jpg", "vote_average": 7.5}
+            ]}
+        }"#;
+        let d: Details = serde_json::from_str(raw).unwrap();
+
+        let meta = metadata_from(d, Target::Movie, 603, "en", "US");
+
+        assert_eq!(
+            meta.backdrop_url.as_deref(),
+            Some("https://image.tmdb.org/t/p/w1280/hero.jpg")
+        );
+        assert_eq!(
+            meta.backdrops,
+            vec![
+                "https://image.tmdb.org/t/p/w1280/third.jpg".to_string(),
+                "https://image.tmdb.org/t/p/w1280/second.jpg".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_title_without_gallery_images_carries_no_backdrops() {
+        let d = serde_json::from_str(r#"{"id": 1, "title": "X", "backdrop_path": "/a.jpg"}"#)
+            .unwrap();
+
+        let meta = metadata_from(d, Target::Movie, 1, "en", "US");
+
+        assert!(meta.backdrops.is_empty());
     }
 }

@@ -21,6 +21,7 @@ pub(super) fn meta(rating: Option<f32>, backdrop: bool, overview: bool) -> Metad
         release_date: None,
         genres: Vec::new(),
         studios: Vec::new(),
+        backdrops: Vec::new(),
         tmdb_genre_ids: Vec::new(),
         rating,
         certification: None,

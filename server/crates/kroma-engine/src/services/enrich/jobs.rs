@@ -159,6 +159,7 @@ mod tests {
                 release_date: None,
                 genres: Vec::new(),
                 studios: Vec::new(),
+                backdrops: Vec::new(),
                 tmdb_genre_ids: Vec::new(),
                 rating: None,
                 certification: None,
