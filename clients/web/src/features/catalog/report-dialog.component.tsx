@@ -42,7 +42,7 @@ const categoryRow = sv({
     radius: 'xl',
     px: 14,
     py: 12,
-    border: 'white/8',
+    border: 'border',
     bg: 'surface1',
     _hover: { bg: 'surface2' },
   },
@@ -127,7 +127,7 @@ export const ReportDialog = createCallable<
       <Dialog.Header>
         <Row between align="flex-start" gap={16}>
           <Box minW={0}>
-            <Text variant="overline" color="white/40">
+            <Text variant="overline" color="textDim">
               {t('report.title')}
             </Text>
             <Text variant="title" mt={4} lines={1}>
@@ -148,14 +148,14 @@ export const ReportDialog = createCallable<
                 color={color('success', activeTheme(scope.theme))}
               />
             </Box>
-            <Text variant="label" color="white/85" textAlign="center">
+            <Text variant="label" color="text" textAlign="center">
               {t('report.sent')}
             </Text>
           </Box>
         ) : (
           <>
             <Box>
-              <Text variant="overline" color="white/40" mb={10}>
+              <Text variant="overline" color="textDim" mb={10}>
                 {t('report.category')}
               </Text>
               <Box gap={8}>
@@ -175,14 +175,14 @@ export const ReportDialog = createCallable<
                         <c.Icon
                           size={19}
                           stroke={1.9}
-                          color={color(on ? 'accent' : 'white/45', activeTheme(scope.theme))}
+                          color={color(on ? 'accentText' : 'textMuted', activeTheme(scope.theme))}
                         />
                       </Box>
                       <Box minW={0}>
-                        <Text variant="label" color="white">
+                        <Text variant="label" color="text">
                           {t(c.labelKey)}
                         </Text>
-                        <Text variant="meta" color="white/45" mt={2}>
+                        <Text variant="meta" color="textMuted" mt={2}>
                           {t(c.descKey)}
                         </Text>
                       </Box>
@@ -193,7 +193,7 @@ export const ReportDialog = createCallable<
             </Box>
 
             <Box>
-              <Text variant="overline" color="white/40" mb={8}>
+              <Text variant="overline" color="textDim" mb={8}>
                 {t('report.message')}
               </Text>
               <Field.Root label={t('report.message')} hideLabel>

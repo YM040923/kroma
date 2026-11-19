@@ -31,6 +31,10 @@ fn process(ctx: &JobContext, file_id: &str) -> Result<()> {
     if abs_path.starts_with("demo://") {
         return Ok(()); // seed rows have no real bytes to decode
     }
+    // Remote STRM has no local file to decode; this stage is not applicable.
+    if abs_path.starts_with("http://") || abs_path.starts_with("https://") {
+        return Ok(());
+    }
     let tracks: Vec<kroma_domain::AudioStream> =
         serde_json::from_str(&tracks_json).unwrap_or_default();
     let Some(track) = track_to_measure(&tracks) else {

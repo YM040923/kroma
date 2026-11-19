@@ -1,42 +1,31 @@
-// Search results: "Dans votre bibliotheque" (local catalog hits) + "A
-// decouvrir" (TMDB, gated), each a counted grid. Skeletons while loading, a
-// friendly empty state when nothing matches.
+// Result grids for the discovery page. The library tab draws local catalogue
+// hits with the poster the rest of the site uses; the TMDB tab draws discovery
+// cards (play / request actions included). The page owns counts, paging and
+// empty states, so these stay pure grids.
 
+import type { DiscoverEntry } from '@kromatv/client/discovery';
 import type { PersonHit, SearchHit } from '@kromatv/client/media';
 import { episodeTag, personSegment, posterColors, sizedImageUrl } from '@kromatv/core';
 import { useT } from '@kromatv/ui';
 import {
   Avatar,
   Box,
-  classes,
-  EmptyState,
   Focusable,
   Row,
   styles,
   Text,
   useStyles,
 } from '@kromatv/ui/kit';
-
-import type { ReactNode } from 'react';
 import { DiscoverCard } from '#web/features/requests/discover-card.component';
-import type { DiscoverSearchState } from '#web/features/requests/use-discover-search.hook';
 import { imageUrl } from '#web/shared/lib/api';
 import { useAuth } from '#web/shared/lib/auth';
-import { SkeletonRow } from '#web/shared/ui';
-import { Poster } from '#web/shared/ui/poster.component';
 import { EPISODES_ANCHOR } from '#web/shared/lib/show-search';
+import { Poster } from '#web/shared/ui/poster.component';
 import { RouteLink } from '#web/shared/ui/route-link.component';
+import { SkeletonRow } from '#web/shared/ui';
 import { TileGrid } from '#web/shared/ui/tile-grid.component';
 
 const sDefinition = styles({
-  count: { fontVariant: ['tabular-nums'] },
-  band: {
-    mb: 36,
-    animationKeyframes: 'fade-in',
-    animationDuration: '250ms',
-    animationTimingFunction: 'var(--ease-out)',
-  },
-  heading: { m: 0 },
   person: {
     row: true,
     align: 'center',
@@ -51,29 +40,6 @@ const sDefinition = styles({
     maxW: 280,
   },
 });
-
-function Section({
-  title,
-  count,
-  children,
-}: Readonly<{ title: string; count: number; children: (width: number) => ReactNode }>) {
-  const s = useStyles(sDefinition);
-
-  return (
-    <section className={classes(s.band)}>
-      {/* Still an <h2>: <Text accessibilityRole="header"> can only render an h1. */}
-      <h2 className={classes(s.heading)}>
-        <Row align="baseline" gap={10} mb={16}>
-          <Text variant="title">{title}</Text>
-          <Text variant="meta" color="textDim" style={s.count}>
-            {count}
-          </Text>
-        </Row>
-      </h2>
-      <TileGrid>{children}</TileGrid>
-    </section>
-  );
-}
 
 function LocalHit({ hit, width }: Readonly<{ hit: SearchHit; width: number }>) {
   const { client } = useAuth();
@@ -143,71 +109,73 @@ function PersonChip({ person }: Readonly<{ person: PersonHit }>) {
 }
 
 function People({ people }: Readonly<{ people: readonly PersonHit[] }>) {
-  const s = useStyles(sDefinition);
   const t = useT();
   return (
-    <section className={classes(s.band)} aria-label={t('search.people')}>
-      <h2 className={classes(s.heading)}>
-        <Text variant="title" mb={16}>
-          {t('search.people')}
-        </Text>
-      </h2>
+    <Box mb={24}>
+      <Text variant="meta" color="textDim" mb={10}>
+        {t('search.people')}
+      </Text>
       <Row wrap gap={12}>
         {people.map((person) => (
           <PersonChip key={person.tmdbId ?? person.name} person={person} />
         ))}
       </Row>
-    </section>
+    </Box>
   );
 }
 
-function foundNothing({ local, discover, people }: Readonly<DiscoverSearchState>): boolean {
-  return local.length === 0 && discover.length === 0 && people.length === 0;
-}
-
-export function SearchResults({ state }: Readonly<{ state: DiscoverSearchState }>) {
-  const t = useT();
-
-  if (state.loading) {
+/** The local tab's grid. Skeletons while the first page loads; an empty grid
+ * means the page draws its own empty state (the filters may be too narrow). */
+export function LocalResults({
+  results,
+  loading,
+}: Readonly<{ results: readonly SearchHit[]; loading: boolean }>) {
+  if (loading) {
     return (
-      <Box mt={32}>
+      <Box mt={24}>
         <SkeletonRow count={10} />
       </Box>
     );
   }
+  return (
+    <TileGrid>
+      {(width) =>
+        results.map((hit) => {
+          const id = hit.type === 'show' ? hit.show.id : hit.item.id;
+          return <LocalHit key={`${hit.type}-${id}`} hit={hit} width={width} />;
+        })
+      }
+    </TileGrid>
+  );
+}
 
-  if (foundNothing(state)) {
+/** The TMDB tab's grid, with the local people hits the query also matched. */
+export function TmdbResults({
+  entries,
+  people = [],
+  loading,
+}: Readonly<{
+  entries: readonly DiscoverEntry[];
+  people?: readonly PersonHit[];
+  loading: boolean;
+}>) {
+  if (loading) {
     return (
-      <EmptyState.Root icon="mood-empty">
-        <EmptyState.Title>{t('discover.noResults')}</EmptyState.Title>
-        <EmptyState.Hint>{t('discover.noResultsHint')}</EmptyState.Hint>
-      </EmptyState.Root>
+      <Box mt={24}>
+        <SkeletonRow count={10} />
+      </Box>
     );
   }
-
   return (
-    <Box mt={28}>
-      {state.people.length > 0 ? <People people={state.people} /> : null}
-      {state.local.length > 0 ? (
-        <Section title={t('discover.sectionLibrary')} count={state.local.length}>
-          {(width) =>
-            state.local.map((hit) => {
-              // Stable, unique key from the hit's own id (show vs item/episode).
-              const id = hit.type === 'show' ? hit.show.id : hit.item.id;
-              return <LocalHit key={`${hit.type}-${id}`} hit={hit} width={width} />;
-            })
-          }
-        </Section>
-      ) : null}
-      {state.canDiscover && state.discover.length > 0 ? (
-        <Section title={t('discover.sectionDiscover')} count={state.discover.length}>
-          {(width) =>
-            state.discover.map((entry) => (
-              <DiscoverCard key={`${entry.kind}-${entry.tmdbId}`} entry={entry} width={width} />
-            ))
-          }
-        </Section>
-      ) : null}
-    </Box>
+    <>
+      {people.length > 0 ? <People people={people} /> : null}
+      <TileGrid>
+        {(width) =>
+          entries.map((entry) => (
+            <DiscoverCard key={`${entry.kind}-${entry.tmdbId}`} entry={entry} width={width} />
+          ))
+        }
+      </TileGrid>
+    </>
   );
 }

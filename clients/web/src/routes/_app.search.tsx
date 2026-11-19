@@ -1,19 +1,17 @@
 import { createFileRoute } from '@tanstack/react-router';
+import type { DiscoverSearch } from '#web/features/requests/discover-search';
 import { validateDiscoverSearch } from '#web/features/requests/discover-search';
 import { SearchPage } from '#web/features/requests/search.component';
 
 export const Route = createFileRoute('/_app/search')({
   validateSearch: validateDiscoverSearch,
   component: () => {
-    const { q, type } = Route.useSearch();
+    const search = Route.useSearch();
     const navigate = Route.useNavigate();
-    return (
-      <SearchPage
-        query={q}
-        type={type}
-        setQuery={(q) => navigate({ search: (p) => ({ ...p, q }), replace: true })}
-        setType={(type) => navigate({ search: (p) => ({ ...p, type }), replace: true })}
-      />
-    );
+    // Every filter lives in the URL, so navigation is the single source of
+    // truth and back/forward restores a filtered view.
+    const onChange = (patch: Partial<DiscoverSearch>) =>
+      navigate({ search: (p) => ({ ...p, ...patch }), replace: true });
+    return <SearchPage search={search} onChange={onChange} />;
   },
 });

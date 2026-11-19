@@ -100,7 +100,8 @@ fn apply_art_preference(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("auto"));
-    if poster.is_none() && backdrop.is_none() {
+    let backdrop_count = options.backdrop_count.map(usize::from);
+    if poster.is_none() && backdrop.is_none() && backdrop_count.is_none() {
         return;
     }
     let (mut meta, tmdb_id, is_show) = if job.is_show {
@@ -125,20 +126,25 @@ fn apply_art_preference(
     if tmdb_id == 0 {
         return;
     }
-    let Ok((posters, backdrops)) =
-        metadata::images(&eng.api_key, &eng.language, job.target, tmdb_id)
-    else {
-        return;
-    };
-    if let Some(pref) = poster {
-        if let Some(url) = pick_image(&posters, pref) {
-            meta.poster_url = Some(url);
+    if poster.is_some() || backdrop.is_some() {
+        let Ok((posters, backdrops)) =
+            metadata::images(&eng.api_key, &eng.language, job.target, tmdb_id)
+        else {
+            return;
+        };
+        if let Some(pref) = poster {
+            if let Some(url) = pick_image(&posters, pref) {
+                meta.poster_url = Some(url);
+            }
+        }
+        if let Some(pref) = backdrop {
+            if let Some(url) = pick_image(&backdrops, pref) {
+                meta.backdrop_url = Some(url);
+            }
         }
     }
-    if let Some(pref) = backdrop {
-        if let Some(url) = pick_image(&backdrops, pref) {
-            meta.backdrop_url = Some(url);
-        }
+    if let Some(limit) = backdrop_count {
+        meta.backdrops.truncate(limit);
     }
     let meta = image::localize(&eng.data_dir, meta);
     let _ = if is_show {

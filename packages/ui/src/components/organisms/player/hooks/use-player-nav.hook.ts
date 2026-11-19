@@ -20,8 +20,15 @@ export interface PlayerNavActions {
    *  rewind/forward transport buttons. */
   seekNudge: (dir: -1 | 1, press: SeekPress) => void;
   onNext: () => void;
+  /** The episode before this one, when the show has one. The control stays
+   *  drawn at the start of the run but is disabled by the host. */
+  onPrevious?: () => void;
   hasNext: boolean;
   sheetHasItems: boolean;
+  /** A pointer reached the "next episode" key: expand the up-next sheet (an
+   *  explicit gesture) instead of jumping straight to the next episode. Remote
+   *  and media-key routes still call `onNext` directly. */
+  nextOpensSheet?: boolean;
   /** Volume ±5 % (§4b) when the volume control is focused. */
   volumeNudge: (dir: -1 | 1) => void;
   toggleMute: () => void;
@@ -149,8 +156,15 @@ export function usePlayerNav(
         return a.togglePlay();
       case 'forward':
         return a.seekNudge(1, 'tap');
+      case 'previous':
+        return a.onPrevious?.();
       case 'next':
+        if (a.nextOpensSheet && actions.sheetHasItems) {
+          return openOverlay('sheet');
+        }
         return a.onNext();
+      case 'episodes':
+        return openOverlay('episodes');
       case 'volume':
         return a.toggleMute();
       case 'subtitles':

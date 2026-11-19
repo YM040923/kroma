@@ -34,6 +34,12 @@ fn enumerate(state: &SharedState) -> Result<Vec<(String, String)>> {
         .into_iter()
         .filter_map(|i| {
             let abs = i.abs_path.as_deref()?;
+            // A cloud .strm points at an HTTP stream the local ffmpeg cannot
+            // read (file-only whitelist) and often has no file duration. It is
+            // not a preview candidate until a probe writes a local file.
+            if abs.starts_with("http://") || abs.starts_with("https://") {
+                return None;
+            }
             if i.duration_ms.unwrap_or(0) == 0 {
                 return None;
             }

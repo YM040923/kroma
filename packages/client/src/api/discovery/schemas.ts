@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CastMember, CrewMember } from '../media';
+import { CastMember, CrewMember, SearchHit } from '../media';
 import { RequestId, RequestKind, RequestStatus } from '../requests';
 
 /** TMDB namespace filter for a discovery search. */
@@ -85,3 +85,30 @@ export const DiscoverResponse = z.object({
   totalPages: z.number(),
 });
 export type DiscoverResponse = z.infer<typeof DiscoverResponse>;
+
+/** How a filtered discovery listing is ordered (`sort`). */
+export const DiscoverFilterSort = z.enum(['popularity', 'release', 'rating']);
+export type DiscoverFilterSort = z.infer<typeof DiscoverFilterSort>;
+
+/** Whether a filtered listing keeps titles this library holds, or only the
+ * ones it does not (`state`). `any` is the absence of the filter. */
+export const DiscoverAvailability = z.enum(['any', 'in', 'out']);
+export type DiscoverAvailability = z.infer<typeof DiscoverAvailability>;
+
+/** `GET /api/discover/filter`: TMDB's browse endpoint, one page at a time,
+ * flagged against the local catalogue. */
+export const DiscoverFilterResponse = DiscoverResponse.extend({
+  totalResults: z.number().default(0),
+});
+export type DiscoverFilterResponse = z.infer<typeof DiscoverFilterResponse>;
+
+/** `GET /api/discover/local`: this server's own catalogue filtered server-side
+ * (library, year/decade, genre, rating, watched state) with an optional text
+ * query. `totalResults` counts every match, not just this page. */
+export const LocalDiscoverResponse = z.object({
+  results: z.array(SearchHit),
+  page: z.number(),
+  totalPages: z.number(),
+  totalResults: z.number(),
+});
+export type LocalDiscoverResponse = z.infer<typeof LocalDiscoverResponse>;

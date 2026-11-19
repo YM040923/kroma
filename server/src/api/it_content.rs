@@ -2,7 +2,8 @@ use axum::http::StatusCode;
 use serde_json::json;
 
 use crate::api::test_support::{
-    demo_item_id, demo_show_id, get, raw, seed_session, send, test_app, test_app_with_tmdb,
+    demo_item_id, demo_library_ids, demo_show_id, get, raw, seed_session, send, test_app,
+    test_app_with_tmdb,
 };
 use crate::model::Permission;
 
@@ -322,4 +323,127 @@ async fn discover_trending_and_detail_follow_the_same_gates() {
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     let (status, _) = get(&t.app, "/api/discover/movie/603", Some(&member)).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn discover_filter_is_gated_like_the_other_tmdb_windows() {
+    let t = test_app();
+    let (status, _) = get(
+        &t.app,
+        "/api/discover/filter?type=movie&sort=rating",
+        Some(&t.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+
+    let (_, member) = seed_session(
+        &t.state,
+        "filter-viewer@test.dev",
+        "filter-viewer",
+        &[Permission::Playback],
+    );
+    let (status, _) = get(
+        &t.app,
+        "/api/discover/filter?type=movie&sort=rating",
+        Some(&member),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn local_discovery_filters_the_catalogue_server_side() {
+    let t = test_app();
+    let (_movies, shows) = demo_library_ids();
+
+    let (status, body) = get(
+        &t.app,
+        "/api/discover/local?type=movie&year=1999",
+        Some(&t.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["totalResults"], json!(1));
+    assert_eq!(body["results"][0]["item"]["title"], json!("The Matrix"));
+
+    let (status, body) = get(
+        &t.app,
+        &format!("/api/discover/local?type=all&library={shows}&perPage=1"),
+        Some(&t.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["results"].as_array().map(Vec::len), Some(1));
+    assert_eq!(body["totalPages"], json!(2));
+    assert_eq!(body["results"][0]["type"], json!("show"));
+
+    let (status, body) = get(
+        &t.app,
+        "/api/discover/local?type=all&library=ghost&watched=unwatched",
+        Some(&t.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["totalResults"], json!(0));
+    assert_eq!(body["page"], json!(1));
+    assert_eq!(body["totalPages"], json!(1));
+
+    let (status, _) = get(
+        &t.app,
+        "/api/discover/local?type=movie&year=1200",
+        Some(&t.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn local_discovery_leaves_watched_titles_out_when_asked() {
+    let t = test_app();
+    let matrix = demo_item_id("The Matrix");
+    crate::db::mark_watched(&t.state.db, &t.user_id, &matrix).expect("mark watched");
+
+    let (status, body) = get(
+        &t.app,
+        "/api/discover/local?type=movie&watched=unwatched&perPage=60",
+        Some(&t.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let titles: Vec<&str> = body["results"]
+        .as_array()
+        .expect("results")
+        .iter()
+        .filter_map(|hit| hit["item"]["title"].as_str())
+        .collect();
+    assert!(!titles.contains(&"The Matrix"));
+    assert!(titles.contains(&"Dune Part Two"));
+
+    let (_, body) = get(
+        &t.app,
+        "/api/discover/local?type=movie&watched=watched",
+        Some(&t.token),
+    )
+    .await;
+    assert_eq!(body["results"][0]["item"]["title"], json!("The Matrix"));
+}
+
+#[tokio::test]
+async fn history_returns_watched_and_resumable_titles() {
+    let t = test_app();
+    let matrix = demo_item_id("The Matrix");
+    let dune = demo_item_id("Dune Part Two");
+    crate::db::mark_watched(&t.state.db, &t.user_id, &matrix).expect("mark watched");
+    crate::db::save_progress(&t.state.db, &t.user_id, &dune, 60_000, Some(7_200_000), 90)
+        .expect("save progress");
+
+    let (status, body) = get(&t.app, "/api/history", Some(&t.token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["watched"].as_array().map(Vec::len), Some(1));
+    assert_eq!(body["watched"][0]["item"]["title"], json!("The Matrix"));
+    assert_eq!(body["inProgress"].as_array().map(Vec::len), Some(1));
+    assert_eq!(body["inProgress"][0]["item"]["title"], json!("Dune Part Two"));
+
+    let (status, _) = get(&t.app, "/api/history", None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }

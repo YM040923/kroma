@@ -1,5 +1,5 @@
 import { useHeldSeek } from '@kromatv/core/react';
-import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, type LayoutChangeEvent } from 'react-native';
 
 import { usePlayerKeys } from '#ui/lib/player/use-player-keys.hook';
@@ -8,6 +8,7 @@ import { chromeMetrics, panelGeometry, scaler, TRANSPORT_HEIGHT } from '../lib/m
 import { type ControlId, controlOrder, type PanelHandle } from '../lib/nav';
 import { usePanelSlide } from '../lib/panel-slide.hook';
 import { DEFAULT_SUB_APPEARANCE } from '../lib/subtitle-appearance';
+import { type EpisodeItem, episodeAt, hasEpisodes } from '../parts/episodes-panel';
 import { PEEK_HEIGHT, type UpNextData, type UpNextItem } from '../parts/up-next-sheet';
 import type { SubtitleGenBundle } from '../parts/settings-panel/settings/gen';
 import type { StageFlash } from '../parts/stage-flash';
@@ -21,6 +22,7 @@ import type {
   PlayerCloseDetails,
 } from '../types';
 import { useIdleCursor } from './use-idle-cursor.hook';
+import { usePeekGesture } from './use-peek-gesture.hook';
 import { usePlayerEnding } from './use-player-ending.hook';
 import { usePlayerNav } from './use-player-nav.hook';
 import { useResumeNotice } from './use-resume-notice.hook';
@@ -66,6 +68,26 @@ function usePlayerRoot({
   const markers = slots.credits?.markers;
   const nextTitle = slots.credits?.next ?? null;
   const onPlayNext = slots.credits?.onPlay;
+  // The episode slot is what makes this a series for the chrome: it adds the
+  // previous / next pair (drawn together, disabled at the ends) and the
+  // season / episode drawer. A film writes no slot and gets neither.
+  const episodesData = slots.episodes?.data ?? null;
+  const playEpisode = slots.episodes?.onPlay;
+  const series = hasEpisodes(episodesData);
+  const previousEpisode = hasEpisodes(episodesData) ? episodeAt(episodesData, -1) : null;
+  const nextEpisode = hasEpisodes(episodesData) ? episodeAt(episodesData, 1) : null;
+  const playPrevious = useCallback(() => {
+    if (previousEpisode) {
+      playEpisode?.(previousEpisode);
+    }
+  }, [previousEpisode, playEpisode]);
+  const playNextEpisode = useCallback(() => {
+    if (nextEpisode) {
+      playEpisode?.(nextEpisode);
+    }
+  }, [nextEpisode, playEpisode]);
+  const nextAction = onPlayNext ?? (nextEpisode ? playNextEpisode : undefined);
+  const hasNextControl = series || Boolean(onPlayNext);
   const postPlay = slots.postPlay?.item ?? null;
   const onGoHome = slots.postPlay?.onHome;
   const introActive = slots.skipIntro?.active;
@@ -117,8 +139,21 @@ function usePlayerRoot({
 
   // Measured BEFORE the nav machine, which is then given the row that is drawn:
   // a shed control must not keep a focus stop.
-  const row = useMemo(() => controlOrder(flags, Boolean(onPlayNext)), [flags, onPlayNext]);
+  const row = useMemo(
+    () => controlOrder(flags, hasNextControl, { previous: series, episodes: series }),
+    [flags, hasNextControl, series],
+  );
   const metrics = useMemo(() => chromeMetrics(row, stageSize.width), [row, stageSize.width]);
+  const disabledControls = useMemo(() => {
+    const out: ControlId[] = [];
+    if (series && !previousEpisode) {
+      out.push('previous');
+    }
+    if (hasNextControl && !nextAction) {
+      out.push('next');
+    }
+    return out;
+  }, [series, previousEpisode, hasNextControl, nextAction]);
   const px = scaler(metrics.scale);
 
   const seek = useSeekNudge(c);
@@ -134,9 +169,14 @@ function usePlayerRoot({
     {
       togglePlay: c.togglePlay,
       seekNudge: seek.nudge,
-      onNext: () => onPlayNext?.(),
-      hasNext: Boolean(onPlayNext),
+      onNext: () => nextAction?.(),
+      onPrevious: series ? playPrevious : undefined,
+      hasNext: hasNextControl,
       sheetHasItems: hasUpNext(upNext),
+      // A click / OK on the episode key expands the "up next" sheet - an
+      // explicit request. The remote's Next media key still calls onNext
+      // directly (see lib/nav-keys), so a television keeps its one-press skip.
+      nextOpensSheet: flags.pointer,
       volumeNudge: (d) => setVolume(volumeStep(c.volume, d, volumeMax)),
       toggleMute: c.toggleMute,
       togglePip: c.togglePip,
@@ -161,6 +201,17 @@ function usePlayerRoot({
   });
   const credits = ending.credits;
 
+  // The parked "up next" peek is a REQUEST, not a reaction: it opens on a wheel
+  // / swipe down or on the episode key, and Back / Escape or a wheel up puts it
+  // away before it puts the chrome away. Hovering nothing.
+  const [peekArmed, setPeekArmed] = useState(false);
+  const dismissPeek = useCallback(() => setPeekArmed(false), []);
+  useEffect(() => {
+    if (c.playing || ending.over) {
+      setPeekArmed(false);
+    }
+  }, [c.playing, ending.over]);
+
   usePlayerKeys({
     active,
     nav,
@@ -173,20 +224,46 @@ function usePlayerRoot({
     resume: { active: notice.shown, onBack: notice.dismiss },
     credits: { active: credits.show, onBack: credits.cancel },
     postPlay: { active: ending.over, onBack: ending.goHome },
+    peek: { active: peekArmed && !nav.overlay, onDismiss: dismissPeek },
   });
 
   const panel = useMemo(() => panelGeometry(stageSize.width), [stageSize.width]);
-  const [nearBottom, setNearBottom] = useState(false);
 
-  const { settingsOpen, sheetOpen, settingsShrink, peekVisible, chromeShown } = deriveChrome(
+  const {
+    settingsOpen,
+    sheetOpen,
+    episodesOpen,
+    settingsShrink,
+    peekVisible,
+    chromeShown,
+  } = deriveChrome(
     nav,
     upNext,
     panel.covers,
     ending.over,
-    nearBottom || !flags.pointer,
+    peekArmed || !flags.pointer,
     c.playing,
   );
+  usePeekGesture({
+    open:
+      !c.playing &&
+      !ending.over &&
+      !nav.overlay &&
+      nav.revealed &&
+      hasUpNext(upNext),
+    close: peekArmed && !nav.overlay,
+    onOpen: () => setPeekArmed(true),
+    onClose: dismissPeek,
+  });
+  // The drawer must not keep the phone's playback keys away: the moment the
+  // film rolls again, it gets out of the way.
+  useEffect(() => {
+    if (c.playing && episodesOpen) {
+      nav.closeOverlay();
+    }
+  }, [c.playing, episodesOpen, nav.closeOverlay]);
   const settings = usePanelSlide(settingsOpen);
+  const episodes = usePanelSlide(episodesOpen);
   const initialView = initialSettingsView(nav.overlay);
   // Measured rather than assumed, and it falls back to the design height:
   // `onLayout` is a ResizeObserver under react-native-web, and the legacy TV tier
@@ -197,35 +274,21 @@ function usePlayerRoot({
     setTransportHeight((prev) => (prev === height || height <= 0 ? prev : height));
   }, []);
   const transport = transportHeight || px(TRANSPORT_HEIGHT);
-  // Reserve the peek's height only when the peek is actually about to show:
-  // deriveChrome gates it on the pointer being near the bottom edge while
-  // paused, so the transport stays docked (28px) in every other state and
-  // only lifts to make room for the peek exactly when the pointer gets there.
+  // Reserve the peek's height only when the peek is actually shown: the
+  // transport stays docked (28px) in every other state and only lifts to make
+  // room for the peek once the viewer explicitly asks for it.
   const bottomInset = peekVisible ? PEEK_HEIGHT : px(28);
   const clearance = bottomInset + transport + px(SKIP_GAP);
   const introLift = chromeShown ? clearance : px(SKIP_REST);
   const cueClearance = chromeShown ? clearance : 0;
-  const baseInput = playerInputHandlers(nav, c, flags, locked);
-  const input = {
-    ...baseInput,
-    onPointerMove: (e: { nativeEvent?: { pointerType?: string; clientY?: number } }) => {
-      baseInput.onPointerMove(e);
-      const pointer = e?.nativeEvent?.pointerType;
-      if (pointer && pointer !== 'mouse') {
-        setNearBottom(true);
-        return;
-      }
-      const y = e?.nativeEvent?.clientY;
-      const height =
-        typeof window !== 'undefined' ? window.innerHeight : Dimensions.get('window').height;
-      if (typeof y === 'number' && height > 0) {
-        setNearBottom(y >= height - 96);
-      }
-    },
-  };
+  const input = playerInputHandlers(nav, c, flags, locked);
 
-  const { openOverlay } = nav;
+  const { openOverlay, closeOverlay } = nav;
   const openSheet = useCallback(() => openOverlay('sheet'), [openOverlay]);
+  const closeSheet = useCallback(() => {
+    closeOverlay();
+    setPeekArmed(false);
+  }, [closeOverlay]);
   // Close first: pip, cast and the next episode all change what is on screen, and
   // leaving the panel over it would hide the thing just asked for.
   const runOverflow = (id: ControlId) => {
@@ -233,6 +296,16 @@ function usePlayerRoot({
     nav.activate(id);
   };
   const playUpNextItem = useCallback((item: UpNextItem) => onPlayItem?.(item), [onPlayItem]);
+  const playEpisodeItem = useCallback(
+    (item: EpisodeItem) => {
+      // Close first: the chosen episode replaces what is on screen, and leaving
+      // the drawer over it would hide the thing just asked for.
+      closeOverlay();
+      playEpisode?.(item);
+    },
+    [closeOverlay, playEpisode],
+  );
+  const closeEpisodes = useCallback(() => closeOverlay(), [closeOverlay]);
   const seekNudge = (dir: -1 | 1) => seek.nudge(dir, 'hold');
   const volumeNudge = (dir: -1 | 1) => setVolume(volumeStep(c.volume, dir, volumeMax));
 
@@ -260,6 +333,7 @@ function usePlayerRoot({
     startOver,
     intro,
     metrics,
+    disabledControls,
     flash,
     nav,
     credits,
@@ -270,6 +344,7 @@ function usePlayerRoot({
     initialView,
     panel,
     onTransportLayout,
+    transport,
     bottomInset,
     introLift,
     cueClearance,
@@ -277,8 +352,15 @@ function usePlayerRoot({
     peekVisible,
     chromeShown,
     openSheet,
+    closeSheet,
     runOverflow,
     playUpNextItem,
+    series,
+    episodesData,
+    episodes,
+    episodesOpen,
+    playEpisodeItem,
+    closeEpisodes,
     seekNudge,
     volumeNudge,
   };

@@ -7,6 +7,8 @@ export const ScrapeOptions = z.object({
   nfo: z.boolean(),
   posterLanguage: z.string().nullable(),
   backdropLanguage: z.string().nullable(),
+  /** Gallery backdrops kept per title; null keeps the provider's full set. */
+  backdropCount: z.number().nullable().optional(),
 });
 export type ScrapeOptions = z.infer<typeof ScrapeOptions>;
 

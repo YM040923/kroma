@@ -19,11 +19,13 @@ import {
   IconAudioTrack,
   IconSkipBack,
   IconCast,
+  IconEpisodes,
   IconSkipForward,
   IconGear,
   IconMute,
   IconNext,
   IconPip,
+  IconPrev,
   IconQuality,
   IconReport,
   IconSpeed,
@@ -64,7 +66,9 @@ export interface Entry {
 // Everything else the transport row can shed is here - `chromeMetrics` may drop
 // a button precisely because this exists to catch it.
 const MOVEABLE: Partial<Record<ControlId, { icon: ReactNode; label: MessageKey }>> = {
+  previous: { icon: <IconPrev />, label: 'player.previousEpisode' },
   next: { icon: <IconNext />, label: 'player.nextEpisode' },
+  episodes: { icon: <IconEpisodes />, label: 'player.episodesPicker' },
   cast: { icon: <IconCast />, label: 'cast.moveToTv' },
   pip: { icon: <IconPip />, label: 'player.pip' },
   volume: { icon: <IconMute />, label: 'player.mute' },

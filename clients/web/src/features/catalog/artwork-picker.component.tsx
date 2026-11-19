@@ -107,12 +107,12 @@ async function composeCover(
 
 const GRID: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-  // Auto rows otherwise resolve to a sliver and the panel's stretch squeezes
-  // every card to it, cropping the image to a strip.
+  // Dense thumbnails let several candidates be compared at once; the old
+  // 160px floor showed only three posters and hid the rest below the fold.
+  gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))',
   gridAutoRows: 'max-content',
-  gap: 14,
-  maxHeight: '52vh',
+  gap: 10,
+  maxHeight: '64vh',
   overflow: 'auto',
   paddingRight: 4,
 };
@@ -294,7 +294,7 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
   return (
     <>
       <Button variant="glass" icon="photo" label={t('artwork.open')} size="sm" onPress={openDialog} />
-      <Dialog.Root open={open} onClose={() => !busy && setOpen(false)} title={`${t('artwork.title')} · ${title}`} width="lg">
+      <Dialog.Root open={open} onClose={() => !busy && setOpen(false)} title={`${t('artwork.title')} · ${title}`} width="xl">
         <Dialog.Header>
           <Row gap={8} mt={6}>
             <Button

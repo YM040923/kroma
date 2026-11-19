@@ -17,6 +17,41 @@ describe('the discovery endpoints', () => {
       path: '/discover/search?q=dune',
     },
     {
+      name: 'search narrows to titles outside the library',
+      call: (c) => c.discovery.search('dune', { state: 'out' }),
+      method: 'GET',
+      path: '/discover/search?q=dune&state=out',
+    },
+    {
+      name: 'filter',
+      call: (c) =>
+        c.discovery.filter({
+          type: 'tv',
+          sort: 'release',
+          language: 'ja',
+          year: 2020,
+          genre: 16,
+          page: 2,
+          state: 'in',
+        }),
+      method: 'GET',
+      path: '/discover/filter?type=tv&sort=release&language=ja&year=2020&genre=16&page=2&state=in',
+    },
+    {
+      name: 'local discovery',
+      call: (c) =>
+        c.discovery.local({
+          q: 'dune',
+          type: 'movie',
+          library: 'lib1',
+          rating: 7.5,
+          watched: 'unwatched',
+          perPage: 24,
+        }),
+      method: 'GET',
+      path: '/discover/local?q=dune&type=movie&library=lib1&rating=7.5&watched=unwatched&perPage=24',
+    },
+    {
       name: 'trending',
       call: (c) => c.discovery.trending(),
       method: 'GET',

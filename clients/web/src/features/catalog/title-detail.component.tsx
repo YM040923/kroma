@@ -135,6 +135,9 @@ function TitleBody({
           key={season}
           seasons={view.seasons}
           openOn={season}
+          poster={view.poster || null}
+          overview={view.overview}
+          year={view.year}
           discoverTmdbId={owned ? null : view.tmdbId}
           fallbackCast={view.cast}
           isWatched={isWatched}

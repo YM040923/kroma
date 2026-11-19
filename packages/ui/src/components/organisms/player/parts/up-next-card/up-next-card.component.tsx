@@ -84,7 +84,7 @@ function Face({ item }: Readonly<{ item: UpNextItem }>) {
           {item.title}
         </Text>
         {item.subtitle ? (
-          <Text lines={1} style={s.subtitle} color="white/72">
+          <Text lines={1} style={s.subtitle} color="textMuted">
             {item.subtitle}
           </Text>
         ) : null}
@@ -156,7 +156,7 @@ const sDefinition = styles({
     fontSize: textRoles.cardTitle.size,
     lineHeight: 21,
     fontWeight: '700',
-    color: 'white',
+    color: 'text',
   },
   subtitle: { font: 'ui', fontSize: textRoles.meta.size, fontWeight: '500' },
 });

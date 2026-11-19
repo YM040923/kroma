@@ -6,6 +6,7 @@
 //! [`up_next`] which episode comes next.
 
 use super::{now_or_blank, params, Pool, Result, Row};
+use crate::IN_CHUNK;
 use kroma_domain::ProgressEntry;
 use rusqlite::OptionalExtension;
 
@@ -127,6 +128,48 @@ pub fn delete_progress(pool: &Pool, user_id: &str, item_id: &str) -> Result<()> 
         params![user_id, item_id],
     )?;
     Ok(())
+}
+
+/// Remove the saved positions of several items at once, returning how many rows
+/// went. Batched so a hundred selected rows is a handful of statements rather
+/// than a hundred.
+pub fn delete_progress_many(pool: &Pool, user_id: &str, item_ids: &[String]) -> Result<usize> {
+    if item_ids.is_empty() {
+        return Ok(0);
+    }
+    let conn = pool.get()?;
+    let mut removed = 0;
+    for chunk in item_ids.chunks(IN_CHUNK) {
+        let placeholders = vec!["?"; chunk.len() + 1].join(",");
+        let sql = format!(
+            "DELETE FROM progress WHERE user_id = ?1 AND item_id IN ({placeholders})"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        removed += stmt.execute(rusqlite::params_from_iter(
+            std::iter::once(user_id).chain(chunk.iter().map(String::as_str)),
+        ))?;
+    }
+    Ok(removed)
+}
+
+/// Forget every saved position a user holds ("clear Continue watching").
+pub fn delete_progress_all(pool: &Pool, user_id: &str) -> Result<usize> {
+    let conn = pool.get()?;
+    Ok(conn.execute(
+        "DELETE FROM progress WHERE user_id = ?1",
+        params![user_id],
+    )?)
+}
+
+/// Forget a show's resume positions: every episode the catalog still links to
+/// that show. Watched flags and the play log are cleared by the caller.
+pub fn delete_progress_for_show(pool: &Pool, user_id: &str, show_id: &str) -> Result<usize> {
+    let conn = pool.get()?;
+    Ok(conn.execute(
+        "DELETE FROM progress WHERE user_id = ?1 \
+         AND item_id IN (SELECT id FROM items WHERE show_id = ?2)",
+        params![user_id, show_id],
+    )?)
 }
 
 // Map a row of `item_id,position_ms,duration_ms,updated_at` to a [`ProgressEntry`].

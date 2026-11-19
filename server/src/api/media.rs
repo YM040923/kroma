@@ -145,7 +145,7 @@ fn same_show(a: &Show, b: &Show) -> bool {
     }
 }
 
-fn merge_show_rows(shows: Vec<Show>) -> Vec<Show> {
+pub(crate) fn merge_show_rows(shows: Vec<Show>) -> Vec<Show> {
     let mut out: Vec<Show> = Vec::new();
     for show in shows {
         if let Some(existing) = out.iter_mut().find(|existing| same_show(existing, &show)) {

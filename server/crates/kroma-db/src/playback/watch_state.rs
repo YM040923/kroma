@@ -53,6 +53,64 @@ pub fn list_watched(pool: &Pool, user_id: &str) -> Result<Vec<String>> {
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+/// The user's watched flags with when they were set, newest first, for the
+/// history screen.
+pub fn list_watched_entries(pool: &Pool, user_id: &str) -> Result<Vec<(String, String)>> {
+    let conn = pool.get()?;
+    let mut stmt = conn.prepare(
+        "SELECT item_id, watched_at FROM watched WHERE user_id = ?1 \
+         ORDER BY watched_at DESC",
+    )?;
+    let rows = stmt.query_map(params![user_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Forget every watched flag and resume position for a show's episodes.
+pub fn clear_show_history(
+    pool: &Pool,
+    user_id: &str,
+    show_id: &str,
+) -> Result<(usize, usize)> {
+    let conn = pool.get()?;
+    let watched = conn.execute(
+        "DELETE FROM watched WHERE user_id = ?1 \
+         AND item_id IN (SELECT id FROM items WHERE show_id = ?2)",
+        params![user_id, show_id],
+    )?;
+    let progress = conn.execute(
+        "DELETE FROM progress WHERE user_id = ?1 \
+         AND item_id IN (SELECT id FROM items WHERE show_id = ?2)",
+        params![user_id, show_id],
+    )?;
+    Ok((watched, progress))
+}
+
+/// Clear every watched flag a user holds.
+pub fn delete_watched_all(pool: &Pool, user_id: &str) -> Result<usize> {
+    let conn = pool.get()?;
+    Ok(conn.execute("DELETE FROM watched WHERE user_id = ?1", params![user_id])?)
+}
+
+/// Clear the watched flag of several items at once.
+pub fn delete_watched_many(pool: &Pool, user_id: &str, item_ids: &[String]) -> Result<usize> {
+    if item_ids.is_empty() {
+        return Ok(0);
+    }
+    let conn = pool.get()?;
+    let mut removed = 0;
+    for chunk in item_ids.chunks(crate::IN_CHUNK) {
+        let placeholders = vec!["?"; chunk.len() + 1].join(",");
+        let sql = format!(
+            "DELETE FROM watched WHERE user_id = ?1 AND item_id IN ({placeholders})"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        removed += stmt.execute(rusqlite::params_from_iter(
+            std::iter::once(user_id).chain(chunk.iter().map(String::as_str)),
+        ))?;
+    }
+    Ok(removed)
+}
+
 /// Add a title to the user's list. Idempotent (re-adding refreshes `added_at`).
 pub fn add_to_list(pool: &Pool, user_id: &str, item_id: &str) -> Result<()> {
     let conn = pool.get()?;

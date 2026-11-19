@@ -40,6 +40,12 @@ export type {
   PlayerVideoTrack,
 } from './media-types';
 export type { CreditsCardItem } from './parts/credits-card';
+export {
+  EPISODE_ART_W,
+  type EpisodeItem,
+  type EpisodesData,
+  type SeasonItem,
+} from './parts/episodes-panel';
 export { SKIP_BACK_ICON, SKIP_FORWARD_ICON } from './parts/icons.component';
 // The width the end-of-film hero is drawn at, so a host asks for art that size.
 export { POST_PLAY_ART_W, type PostPlayItem } from './parts/post-play';
@@ -58,7 +64,12 @@ export { UP_NEXT_ART_W } from './parts/up-next-card';
 export type { UpNextData, UpNextItem } from './parts/up-next-sheet';
 export type { PlayerRootProps } from './player-root.component';
 export { Player } from './player.component';
-export type { PlayerActionsProps, PlayerMediaProps, PlayerPanelProps } from './player-parts';
+export type {
+  PlayerActionsProps,
+  PlayerEpisodesProps,
+  PlayerMediaProps,
+  PlayerPanelProps,
+} from './player-parts';
 export type {
   AudioFilterMode,
   Chapter,

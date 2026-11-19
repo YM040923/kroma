@@ -1,6 +1,7 @@
+import { LibraryId } from '@kromatv/client/media';
 import { useT } from '@kromatv/ui';
 import { Box } from '@kromatv/ui/kit';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { BrowseTitle } from '#web/features/catalog/browse-hero.component';
 import { BrowseScreen } from '#web/features/catalog/browse-screen.component';
@@ -17,7 +18,10 @@ export const Route = createFileRoute('/_app/shows/')({
     if (!isAuthed()) {
       return;
     }
-    await queryClient.ensureQueryData(webRuntime.queries.catalogQueries.showsView());
+    await Promise.all([
+      queryClient.ensureQueryData(webRuntime.queries.catalogQueries.showsView()),
+      queryClient.ensureQueryData(webRuntime.queries.catalogQueries.libraries()),
+    ]);
   },
   pendingComponent: ShowsPending,
   component: ShowsPage,
@@ -39,9 +43,18 @@ function ShowsPage() {
   const webRuntime = useWebRuntime();
 
   const t = useT();
-  const { sort = 'added', genre } = Route.useSearch();
+  const { sort = 'added', genre, library } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const { data: shows } = useSuspenseQuery(webRuntime.queries.catalogQueries.showsView());
+  const lib = library ? LibraryId.parse(library) : undefined;
+  const { data: libraries = [] } = useQuery(webRuntime.queries.catalogQueries.libraries());
+  const { data: shows } = useQuery({
+    ...webRuntime.queries.catalogQueries.showsView(lib),
+    placeholderData: keepPreviousData,
+  });
+
+  if (!shows) {
+    return <ShowsPending />;
+  }
 
   return (
     <BrowseScreen
@@ -52,10 +65,13 @@ function ShowsPage() {
       emptyTitle={t('content.seriesEmpty')}
       sort={sort}
       genre={genre}
+      libraries={libraries}
+      library={library}
       onSort={(mode, opts) =>
         navigate({ search: (p) => ({ ...p, sort: mode }), resetScroll: opts?.resetScroll })
       }
       onGenre={(g) => navigate({ search: (p) => ({ ...p, genre: g }) })}
+      onLibrary={(id) => navigate({ search: (p) => ({ ...p, library: id }) })}
       renderGrid={(view) => <ShowGrid shows={view} />}
     />
   );

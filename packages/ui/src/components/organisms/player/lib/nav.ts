@@ -15,7 +15,7 @@ export type { RemoteKey } from '#ui/lib/remote-keys';
 export type Spot = 'back' | 'progress' | 'skip' | ControlId;
 
 /** An open panel that captures navigation until dismissed. */
-export type Overlay = 'settings' | 'audio' | 'subtitles' | 'sheet' | null;
+export type Overlay = 'settings' | 'audio' | 'subtitles' | 'sheet' | 'episodes' | null;
 
 /**
  * Every focusable control in the middle row, in visual order. The cluster stops
@@ -26,7 +26,9 @@ export type ControlId =
   | 'rewind'
   | 'play'
   | 'forward'
+  | 'previous'
   | 'next'
+  | 'episodes'
   | 'volume'
   | 'subtitles'
   | 'audio'
@@ -35,12 +37,31 @@ export type ControlId =
   | 'pip'
   | 'fullscreen';
 
+/** The episode controls a series adds around the transport. `previous` and
+ *  `next` are drawn together and STAY drawn at the ends of the run (disabled,
+ *  with no focus stop) so the pair keeps its shape; `episodes` opens the
+ *  season/episode drawer. A film passes none of them. */
+export interface SeriesControls {
+  previous?: boolean;
+  episodes?: boolean;
+}
+
 /** Build the present control row from the flags + whether there's a next episode.
  * Absent controls leave no gap and no trapped D-pad stop. */
-export function controlOrder(flags: PlayerFlags, hasNext: boolean): ControlId[] {
+export function controlOrder(
+  flags: PlayerFlags,
+  hasNext: boolean,
+  series: SeriesControls = {},
+): ControlId[] {
   const row: ControlId[] = ['rewind', 'play', 'forward'];
+  if (series.previous) {
+    row.push('previous');
+  }
   if (hasNext) {
     row.push('next');
+  }
+  if (series.episodes) {
+    row.push('episodes');
   }
   if (flags.volume) {
     row.push('volume');
@@ -66,6 +87,7 @@ export function controlOrder(flags: PlayerFlags, hasNext: boolean): ControlId[] 
 const EVERY_CONTROL = controlOrder(
   { volume: true, pip: true, fullscreen: true, cast: true, pointer: true, arrowSeek: true },
   true,
+  { previous: true, episodes: true },
 );
 
 /** A control's slot in the row whichever others are present, so one that

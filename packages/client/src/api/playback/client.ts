@@ -10,7 +10,7 @@ import {
   UpNext,
 } from '../media';
 import type { PlaybackSessionId } from './ids';
-import { type PlaybackPing, ProgressReceipt } from './schemas';
+import { type PlaybackPing, HistoryView, ProgressReceipt } from './schemas';
 
 const TitleIds = z.array(z.union([ItemId, ShowId]));
 
@@ -68,6 +68,19 @@ export default function playbackApi(ctx: RequestContext) {
 
     /** Clear an item's watched flag. */
     unmarkWatched: (itemId: ItemId) => ctx.delete('/watched/:itemId', { params: { itemId } }),
+
+    /** Watched titles and unfinished resumes, hydrated for the history screen. */
+    history: () => ctx.get('/history', HistoryView),
+
+    /** Forget every watched flag and resume position the account holds. */
+    clearHistory: () => ctx.delete('/history'),
+
+    /** Clear one show's episodes from the account's history. */
+    clearShowHistory: (showId: ShowId) => ctx.delete('/history/shows/:showId', { params: { showId } }),
+
+    /** Forget a multi-selected batch of titles (watched flags and resumes). */
+    clearHistoryItems: (itemIds: ItemId[]) =>
+      ctx.delete('/history/items', { body: { itemIds } }),
 
     /** Item AND show ids in the user's "Ma liste", newest first. */
     myList: () => ctx.get('/my-list', TitleIds),

@@ -11,6 +11,7 @@ import { PLAYER_ROOT_ID } from './hooks/use-idle-cursor.hook';
 import { usePlayerRoot } from './hooks/use-player-root.hook';
 import { surfaceShrink } from './lib/surface-shrink';
 import { CreditsCard } from './parts/credits-card';
+import { EpisodesPanel } from './parts/episodes-panel';
 import { PostPlay } from './parts/post-play';
 import { ResumePrompt } from './parts/resume-prompt';
 import { SettingsPanel } from './parts/settings-panel';
@@ -90,6 +91,7 @@ function Root({
     startOver,
     intro,
     metrics,
+    disabledControls,
     flash,
     nav,
     credits,
@@ -100,6 +102,7 @@ function Root({
     initialView,
     panel,
     onTransportLayout,
+    transport,
     bottomInset,
     introLift,
     cueClearance,
@@ -107,8 +110,15 @@ function Root({
     peekVisible,
     chromeShown,
     openSheet,
+    closeSheet,
     runOverflow,
     playUpNextItem,
+    series,
+    episodesData,
+    episodes: episodesSlide,
+    episodesOpen,
+    playEpisodeItem,
+    closeEpisodes,
     seekNudge,
     volumeNudge,
   } = usePlayerRoot({ controller, flags, active, onCast, onClose, children });
@@ -216,6 +226,7 @@ function Root({
                 tileAt={tileAt}
                 metrics={metrics}
                 nav={nav}
+                disabledControls={disabledControls}
                 onSeekNudge={seekNudge}
                 onVolumeNudge={volumeNudge}
                 chromeShown={chromeShown}
@@ -232,9 +243,27 @@ function Root({
             open={sheetOpen}
             revealed={peekVisible || sheetOpen}
             onOpen={openSheet}
-            onClose={nav.closeOverlay}
+            onClose={closeSheet}
             onPlay={playUpNextItem}
           />
+
+          {/* season / episode drawer (series only) */}
+          {series && episodesData && episodesSlide.mounted ? (
+            <EpisodesPanel
+              key={episodesSlide.run}
+              ref={episodesOpen ? panelRef : null}
+              data={episodesData}
+              shown={episodesSlide.shown}
+              width={
+                panel.covers ? Math.round(stageSize.width * 0.92) : panel.width
+              }
+              scale={metrics.scale}
+              bottomInset={bottomInset + transport}
+              currentProgress={c.dur > 0 ? (c.cur / c.dur) * 100 : null}
+              onPlay={playEpisodeItem}
+              onClose={closeEpisodes}
+            />
+          ) : null}
 
           {/* settings / audio / subtitles panel (§5) */}
           {settings.mounted ? (

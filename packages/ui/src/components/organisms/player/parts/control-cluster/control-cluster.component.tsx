@@ -37,6 +37,10 @@ export interface ControlClusterProps {
    *  volume rail survived. The list is not a separate prop because the row and
    *  the nav machine must agree on it exactly - they read the same one. */
   metrics: ChromeMetrics;
+  /** Controls drawn but out of reach at the ends of a series run: the previous
+   *  and next keys stay in the row, greyed and skipped by the D-pad, instead of
+   *  vanishing and changing the row's shape between episodes. */
+  disabled?: readonly ControlId[];
   /** Run a control (mouse click shares this with D-pad OK). */
   onActivate: (id: ControlId) => void;
   /** The navigator's focus landed on a control. */
@@ -67,6 +71,7 @@ export const ControlCluster = memo(function ControlCluster({
   pipActive,
   fullscreen,
   metrics,
+  disabled,
   onActivate,
   onFocus,
   onBlur,
@@ -80,6 +85,7 @@ export const ControlCluster = memo(function ControlCluster({
   const px = scaler(scale);
   const transport = controls.filter(isTransport);
   const cluster = controls.filter((c) => !isTransport(c));
+  const off = disabled?.length ? new Set(disabled) : null;
 
   const control = (id: ControlId) => {
     // The two controls that are not a plain circle: play carries the accent fill
@@ -144,6 +150,7 @@ export const ControlCluster = memo(function ControlCluster({
         scale={scale}
         pipActive={pipActive}
         fullscreen={fullscreen}
+        disabled={off?.has(id)}
         onActivate={onActivate}
         onFocus={onFocus}
         onBlur={onBlur}

@@ -1,5 +1,6 @@
 {
   "browse.allGenres": "All",
+  "browse.allLibraries": "All libraries",
   "browse.count.movies": "{count} movies",
   "browse.count.movies_one": "{count} movie",
   "browse.count.series": "{count} series",

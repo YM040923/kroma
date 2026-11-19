@@ -148,6 +148,32 @@ function ArtPreferenceSelect({
   );
 }
 
+const BACKDROP_COUNTS = ['6', '4', '2', '0'] as const;
+
+function BackdropCountSelect({
+  value,
+  onChange,
+}: Readonly<{ value: string; onChange: (v: string) => void }>) {
+  const t = useT();
+  return (
+    <Select.Root label={t('admin.backdropCount')} value={value} onValueChange={onChange}>
+      <Select.Trigger />
+      <Select.Item value="" label={t('admin.backdropCountAll')} />
+      {BACKDROP_COUNTS.map((count) => (
+        <Select.Item
+          key={count}
+          value={count}
+          label={
+            count === '0'
+              ? t('admin.backdropCountNone')
+              : t('admin.backdropCountN', { count: Number(count) })
+          }
+        />
+      ))}
+    </Select.Root>
+  );
+}
+
 export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>(
   ({ call, lib }) => {
     const confirm = useConfirm();
@@ -161,6 +187,9 @@ export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>
     const [nfo, setNfo] = useState(lib.scrape.nfo);
     const [posterLanguage, setPosterLanguage] = useState(lib.scrape.posterLanguage ?? '');
     const [backdropLanguage, setBackdropLanguage] = useState(lib.scrape.backdropLanguage ?? '');
+    const [backdropCount, setBackdropCount] = useState(
+      lib.scrape.backdropCount == null ? '' : String(lib.scrape.backdropCount),
+    );
     const { busy, run } = useAsyncAction();
 
     const save = () =>
@@ -175,6 +204,7 @@ export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>
             nfo,
             posterLanguage: posterLanguage || null,
             backdropLanguage: backdropLanguage || null,
+            backdropCount: backdropCount === '' ? null : Number(backdropCount),
           },
         });
         call.end(true);
@@ -261,6 +291,7 @@ export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>
           value={backdropLanguage}
           onChange={setBackdropLanguage}
         />
+        <BackdropCountSelect value={backdropCount} onChange={setBackdropCount} />
         <Dialog.Footer>
           <Dialog.Actions
             onCancel={() => call.end(false)}

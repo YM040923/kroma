@@ -168,6 +168,9 @@ pub struct ScrapeOptions {
     pub nfo: bool,
     pub poster_language: Option<String>,
     pub backdrop_language: Option<String>,
+    /// How many gallery backdrops to keep per title. `None` keeps the
+    /// provider's full set (capped by the metadata client).
+    pub backdrop_count: Option<u8>,
 }
 
 pub fn library_scrape(settings: &Settings, library_id: &str) -> ScrapeOptions {
@@ -674,6 +677,7 @@ mod tests {
             nfo: true,
             poster_language: Some("textless".to_string()),
             backdrop_language: None,
+            backdrop_count: Some(4),
         };
         set_library_scrape(&s, &pool, "lib1", &wanted);
 

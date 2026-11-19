@@ -184,3 +184,62 @@ fn a_director_and_a_creator_carry_their_portrait() {
     );
     assert_eq!(url("No Photo"), None);
 }
+
+fn filter_of<'a>(kind: RequestKind, sort: FilterSort) -> FilterQuery<'a> {
+    FilterQuery {
+        api_key: "key",
+        language: "fr-FR",
+        kind,
+        sort,
+        original_language: None,
+        year: None,
+        decade: None,
+        genre: None,
+        page: 1,
+    }
+}
+
+fn param<'a>(params: &'a [(&'static str, String)], key: &str) -> Option<&'a str> {
+    params
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, v)| v.as_str())
+}
+
+#[test]
+fn movie_discovery_speaks_the_movie_date_vocabulary() {
+    let mut q = filter_of(RequestKind::Movie, FilterSort::Release);
+    q.year = Some(1999);
+    q.genre = Some(878);
+    q.original_language = Some("ja");
+    let params = filter_params(&q);
+
+    assert_eq!(param(&params, "sort_by"), Some("primary_release_date.desc"));
+    assert_eq!(param(&params, "primary_release_year"), Some("1999"));
+    assert_eq!(param(&params, "with_genres"), Some("878"));
+    assert_eq!(param(&params, "with_original_language"), Some("ja"));
+    assert_eq!(param(&params, "page"), Some("1"));
+}
+
+#[test]
+fn show_discovery_speaks_the_air_date_vocabulary() {
+    let mut q = filter_of(RequestKind::Show, FilterSort::Release);
+    q.decade = Some(1990);
+    let params = filter_params(&q);
+
+    assert_eq!(param(&params, "sort_by"), Some("first_air_date.desc"));
+    assert_eq!(param(&params, "first_air_date.gte"), Some("1990-01-01"));
+    assert_eq!(param(&params, "first_air_date.lte"), Some("1999-12-31"));
+    assert_eq!(param(&params, "primary_release_year"), None);
+}
+
+#[test]
+fn rating_order_asks_for_a_meaningful_vote_count() {
+    let mut q = filter_of(RequestKind::Movie, FilterSort::Rating);
+    q.page = 0;
+    let params = filter_params(&q);
+
+    assert_eq!(param(&params, "sort_by"), Some("vote_average.desc"));
+    assert_eq!(param(&params, "vote_count.gte"), Some("100"));
+    assert_eq!(param(&params, "page"), Some("1"));
+}

@@ -30,11 +30,18 @@ import { useModuleNavAll } from '#web/modules/module-host-provider.component';
 import { resolveModuleIcon } from '#web/modules/module-icons';
 import { useAuth } from '#web/shared/lib/auth';
 import { safeAreaTop } from '#web/shared/lib/safe-area';
+import { useSidebarMode } from '#web/shared/lib/sidebar-collapsed.hook';
 import { useNavActions } from '#web/shared/ui/nav-actions';
 import { NavMenuButton } from '#web/shared/ui/nav-menu-button.component';
 import { RouteLink } from '#web/shared/ui/route-link.component';
-import { SideNav } from '#web/shared/ui/side-nav.component';
+import { SideNav, SideNavCompactProvider } from '#web/shared/ui/side-nav.component';
 import { SIDE_NAV_FRAME, SIDE_NAV_GUTTER } from '#web/shared/ui/side-nav-style';
+import {
+  HiddenSidebarLauncher,
+  SidebarModeControls,
+} from '#web/shared/ui/sidebar-chrome.component';
+
+const ADMIN_RAIL_COLLAPSED = 76;
 
 const sDefinition = styles({
   navFill: { bg: 'bg' },
@@ -105,7 +112,7 @@ function ModuleNavLink({ item }: Readonly<{ item: ModuleNav }>) {
   );
 }
 
-function AdminNav() {
+function AdminNav({ compact = false }: Readonly<{ compact?: boolean }>) {
   const t = useT();
   const { user, client } = useAuth();
   const { data: updates } = usePoll(['admin', 'updates'], () => client.admin.updates(), 60_000);
@@ -139,9 +146,7 @@ function AdminNav() {
           ))}
         </SideNav.Group>
       )}
-      <SideNav.Footer>
-        <ServerStatusCard />
-      </SideNav.Footer>
+      <SideNav.Footer>{compact ? null : <ServerStatusCard />}</SideNav.Footer>
     </SideNav.Root>
   );
 }
@@ -168,19 +173,63 @@ function ServerStatusCard() {
   );
 }
 
-/** The permanent left navigation, rendered only from `lg` up. */
+/** The console's home mark, the only part of the server card a 76px rail can
+ *  hold. */
+function AdminHomeMark() {
+  const t = useT();
+  return (
+    <Box center shrink={0} pb={8}>
+      <Focusable label={t('nav.home')} asChild>
+        <RouteLink to="/">
+          <Box center w={40} h={40} radius="md" bg="surface2" border="border">
+            <Logo markOnly size={17} />
+          </Box>
+        </RouteLink>
+      </Focusable>
+    </Box>
+  );
+}
+
+/** The permanent left navigation, rendered only from `lg` up, in whatever mode
+ *  the shared sidebar state holds. */
 export function AdminSidebar() {
   const s = useStyles(sDefinition);
+  const [mode, setMode] = useSidebarMode();
 
-  return (
-    <Box role="complementary" w={ADMIN_RAIL_WIDTH} shrink={0} h="100%" bg="bg" style={s.railEdge}>
-      <SideNav.Header>
-        <AdminBrand />
-      </SideNav.Header>
-      <AdminServerLink />
-      <ScrollView style={SIDE_NAV_FRAME}>
+  if (mode === 'hidden') {
+    return (
+      <HiddenSidebarLauncher
+        brand={<AdminBrand />}
+        panelStyle={s.navFill}
+        onExpand={() => setMode('expanded')}
+      >
+        <AdminServerLink />
         <AdminNav />
-      </ScrollView>
+      </HiddenSidebarLauncher>
+    );
+  }
+  const compact = mode === 'rail';
+  return (
+    <Box
+      role="complementary"
+      w={compact ? ADMIN_RAIL_COLLAPSED : ADMIN_RAIL_WIDTH}
+      shrink={0}
+      h="100%"
+      bg="bg"
+      style={s.railEdge}
+    >
+      <SideNavCompactProvider compact={compact}>
+        <SideNav.Header
+          compact={compact}
+          toggle={<SidebarModeControls compact={compact} onChange={setMode} />}
+        >
+          {compact ? <Logo markOnly size={26} /> : <AdminBrand />}
+        </SideNav.Header>
+        {compact ? <AdminHomeMark /> : <AdminServerLink />}
+        <ScrollView style={SIDE_NAV_FRAME}>
+          <AdminNav compact={compact} />
+        </ScrollView>
+      </SideNavCompactProvider>
     </Box>
   );
 }

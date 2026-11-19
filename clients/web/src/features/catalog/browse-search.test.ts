@@ -44,6 +44,26 @@ describe('validateBrowseSearch', () => {
     });
   });
 
+  it('keeps a library id', () => {
+    expect(validateBrowseSearch({ library: 'lib-anime' })).toEqual({ library: 'lib-anime' });
+  });
+
+  it('drops an EMPTY library rather than scoping to nothing', () => {
+    expect(validateBrowseSearch({ library: '' })).toEqual({});
+  });
+
+  it('drops a library that is not a string', () => {
+    for (const library of [7, false, null, {}, ['lib']]) {
+      expect(validateBrowseSearch({ library })).toEqual({});
+    }
+  });
+
+  it('keeps library, genre and sort together', () => {
+    expect(
+      validateBrowseSearch({ sort: 'rating', genre: 'Drama', library: 'lib-anime' }),
+    ).toEqual({ sort: 'rating', genre: 'Drama', library: 'lib-anime' });
+  });
+
   it('keeps the good half of a half-valid url', () => {
     expect(validateBrowseSearch({ sort: 'nope', genre: 'Drama' })).toEqual({ genre: 'Drama' });
   });

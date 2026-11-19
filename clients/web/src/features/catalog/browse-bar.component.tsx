@@ -181,6 +181,10 @@ export interface BrowseBarProps {
   genres: GenreCount[];
   genre?: string;
   onGenre: (genre: string | undefined) => void;
+  /** Every library the account may see, so the page can be scoped to one. */
+  libraries?: readonly { id: string; name: string }[];
+  library?: string;
+  onLibrary?: (id: string | undefined) => void;
   /** The bar's root element, for callers that need its docked height (the
    *  letter-jump scroll offset). A wrapper div would break `position: sticky`. */
   innerRef?: RefObject<HTMLDivElement | null>;
@@ -200,6 +204,9 @@ export function BrowseBar({
   genres,
   genre,
   onGenre,
+  libraries = [],
+  library,
+  onLibrary,
   innerRef,
 }: Readonly<BrowseBarProps>) {
   const scope = useStyleScope();
@@ -254,6 +261,28 @@ export function BrowseBar({
         barGeometry(gutter, wide ? 0 : DOCK_TOP, scope),
       )}
     >
+      {libraries.length > 0 && onLibrary ? (
+        <Row wrap gap={8} mb={10} aria-label={t('browse.library')}>
+          <Chip
+            active={!library}
+            variant="subtle"
+            icon="library"
+            label={t('browse.allLibraries')}
+            style={s.chip}
+            onPress={() => onLibrary(undefined)}
+          />
+          {libraries.map((lib) => (
+            <Chip
+              key={lib.id}
+              active={lib.id === library}
+              variant="subtle"
+              label={lib.name}
+              style={s.chip}
+              onPress={() => onLibrary(lib.id === library ? undefined : lib.id)}
+            />
+          ))}
+        </Row>
+      ) : null}
       <Row gap={12}>
         {genres.length > 0 ? (
           <div

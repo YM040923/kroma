@@ -10,7 +10,9 @@ import { Children, isValidElement } from 'react';
 import { Actions, Media, Panel, Subtitle, Title, Warning } from './player-faces.component';
 import {
   Credits,
+  Episodes,
   type PlayerCreditsProps,
+  type PlayerEpisodesProps,
   type PlayerPostPlayProps,
   type PlayerReportProps,
   type PlayerResumeProps,
@@ -36,6 +38,7 @@ export interface PlayerSlots {
   warning: ReactNode;
   transport?: PlayerTransportProps;
   upNext?: PlayerUpNextProps;
+  episodes?: PlayerEpisodesProps;
   credits?: PlayerCreditsProps;
   postPlay?: PlayerPostPlayProps;
   skipIntro?: PlayerSkipIntroProps;
@@ -57,6 +60,7 @@ const FACES = new Map<unknown, keyof PlayerSlots>([
 const SETTINGS = new Map<unknown, keyof PlayerSlots>([
   [Transport, 'transport'],
   [UpNext, 'upNext'],
+  [Episodes, 'episodes'],
   [Credits, 'credits'],
   [PostPlay, 'postPlay'],
   [SkipIntro, 'skipIntro'],
@@ -108,6 +112,7 @@ export type {
 export { PlayerScope } from './player-scope.component';
 export type {
   PlayerCreditsProps,
+  PlayerEpisodesProps,
   PlayerPostPlayProps,
   PlayerReportProps,
   PlayerResumeProps,
@@ -119,6 +124,7 @@ export type {
 export {
   Actions,
   Credits,
+  Episodes,
   Media,
   Panel,
   PostPlay,

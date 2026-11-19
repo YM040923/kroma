@@ -1,6 +1,7 @@
 import {
   Actions,
   Credits as CreditsSlot,
+  Episodes as EpisodesSlot,
   Media,
   Panel,
   PostPlay as PostPlaySlot,
@@ -26,6 +27,7 @@ const Player = {
   Warning,
   Transport: TransportSlot,
   UpNext: UpNextSlot,
+  Episodes: EpisodesSlot,
   Credits: CreditsSlot,
   PostPlay: PostPlaySlot,
   SkipIntro: SkipIntroSlot,

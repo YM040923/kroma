@@ -4,7 +4,6 @@ import {
   Box,
   classes,
   Drawer,
-  IconButton,
   Logo,
   Row,
   styles,
@@ -15,6 +14,7 @@ import { Link, useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
 import { ScrollView } from 'react-native';
 import { CATALOG_NAV } from '#web/features/catalog/catalog-nav';
+import { useSidebarMode } from '#web/shared/lib/sidebar-collapsed.hook';
 import { UserChip } from '#web/features/catalog/sidebar-account.component';
 import { SidebarVersion } from '#web/features/catalog/sidebar-version.component';
 import {
@@ -29,9 +29,16 @@ import { useNavActions } from '#web/shared/ui/nav-actions';
 import { NavMenuButton } from '#web/shared/ui/nav-menu-button.component';
 import { SideNav, SideNavCompactProvider } from '#web/shared/ui/side-nav.component';
 import { SIDE_NAV_FRAME, SIDE_NAV_GUTTER } from '#web/shared/ui/side-nav-style';
+import {
+  HiddenSidebarLauncher,
+  SidebarModeControls,
+} from '#web/shared/ui/sidebar-chrome.component';
 
 // `position: sticky`, `100vh`, `overflow-y` and `env()` have no React Native
 // spelling, so the shell's own frames stay CSS around kit content.
+const SIDEBAR_WIDTH = 248;
+const SIDEBAR_RAIL_WIDTH = 76;
+
 const sDefinition = styles({
   sidebar: {
     position: 'sticky',
@@ -76,34 +83,42 @@ const sDefinition = styles({
 
 // `env()` has no React Native spelling, so the sheet's own insets stay CSS.
 
-export function Sidebar({
-  collapsed,
-  onToggleCollapsed,
-}: Readonly<{ collapsed: boolean; onToggleCollapsed: () => void }>) {
+/** The desktop navigation, in the mode the shared sidebar state holds. Hidden
+ *  is not a zero-width column: the rail is gone and the content owns the whole
+ *  width, with one floating button that opens the same navigation in a sheet. */
+export function Sidebar() {
   const s = useStyles(sDefinition);
-  const t = useT();
+  const [mode, setMode] = useSidebarMode();
 
   const step = useBreakpoint();
   if (step !== 'lg' && step !== 'tv') {
     return null;
   }
+  if (mode === 'hidden') {
+    return (
+      <HiddenSidebarLauncher
+        brand={<Logo size={24} />}
+        panelStyle={s.navFill}
+        onExpand={() => setMode('expanded')}
+      >
+        <SidebarNav />
+      </HiddenSidebarLauncher>
+    );
+  }
+  const compact = mode === 'rail';
   return (
-    <aside className={classes(s.sidebar)}>
-      <SideNavCompactProvider compact={collapsed}>
+    <aside
+      className={classes(s.sidebar)}
+      style={{ width: compact ? SIDEBAR_RAIL_WIDTH : SIDEBAR_WIDTH }}
+    >
+      <SideNavCompactProvider compact={compact}>
         <SideNav.Header
-          compact={collapsed}
-          toggle={
-            <IconButton
-              variant="ghost"
-              icon={collapsed ? 'chevron-right' : 'chevron-left'}
-              label={t(collapsed ? 'nav.expandSidebar' : 'nav.collapseSidebar')}
-              onPress={onToggleCollapsed}
-            />
-          }
+          compact={compact}
+          toggle={<SidebarModeControls compact={compact} onChange={setMode} />}
         >
-          <Logo size={collapsed ? 26 : 24} markOnly={collapsed} />
+          <Logo size={compact ? 26 : 24} markOnly={compact} />
         </SideNav.Header>
-        <SidebarBody collapsed={collapsed} />
+        <SidebarBody collapsed={compact} />
       </SideNavCompactProvider>
     </aside>
   );

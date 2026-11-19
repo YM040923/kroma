@@ -6,6 +6,7 @@ import type { StoryboardTile } from '#ui/services/storyboard.hook';
 import type { SubtitleAppearance } from './lib/subtitle-appearance';
 import type { PlayerMarker, PlayerReportCategory } from './media-types';
 import type { CreditsCardItem } from './parts/credits-card';
+import type { EpisodeItem, EpisodesData } from './parts/episodes-panel';
 import type { PostPlayItem } from './parts/post-play';
 import type { SubtitleGenBundle } from './parts/settings-panel/settings/gen';
 import type { UpNextData, UpNextItem } from './parts/up-next-sheet';
@@ -35,6 +36,22 @@ interface PlayerUpNextProps {
 /** The peeking sheet of what to watch next. */
 function UpNext(_props: Readonly<PlayerUpNextProps>) {
   useSlot('UpNext');
+  return null;
+}
+
+interface PlayerEpisodesProps {
+  /** The show's seasons and playable episodes; the playing one is named by
+   *  `currentId`. Writing the slot is also what gives the chrome its previous /
+   *  next pair and the episode drawer; a film writes none. */
+  data: EpisodesData | null;
+  /** Play the episode a row was activated on. */
+  onPlay?: (item: EpisodeItem) => void;
+}
+
+/** The season / episode drawer, and the pair of episode keys beside the
+ *  transport. */
+function Episodes(_props: Readonly<PlayerEpisodesProps>) {
+  useSlot('Episodes');
   return null;
 }
 
@@ -122,6 +139,7 @@ function Report(_props: Readonly<PlayerReportProps>) {
 
 export type {
   PlayerCreditsProps,
+  PlayerEpisodesProps,
   PlayerPostPlayProps,
   PlayerReportProps,
   PlayerResumeProps,
@@ -130,4 +148,4 @@ export type {
   PlayerTransportProps,
   PlayerUpNextProps,
 };
-export { Credits, PostPlay, Report, Resume, SkipIntro, Subtitles, Transport, UpNext };
+export { Credits, Episodes, PostPlay, Report, Resume, SkipIntro, Subtitles, Transport, UpNext };

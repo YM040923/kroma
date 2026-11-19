@@ -1,5 +1,6 @@
 import {
   activeTheme,
+  Badge,
   Box,
   backdropBlur,
   CheckboxFace,
@@ -57,9 +58,9 @@ const episodeRow = sv({
     gap: ROW_GAP,
     radius: 'xl',
     p: 14,
-    bg: 'white/2.5',
-    border: 'white/5',
-    _hover: { bg: 'white/6' },
+    bg: 'tint/3',
+    border: 'border',
+    _hover: { bg: 'tint/6' },
   },
   variants: {
     watched: { true: { border: 'accent/30' }, false: {} },
@@ -119,10 +120,10 @@ export function EpisodeRow({
             <Box fill style={s.scrim} />
             {watched ? <WatchedBadge size={28} /> : null}
             <Box w={44} h={44} center radius="circle" bg="bg/50" style={hovered ? s.lift : s.frost}>
-              <IconPlayerPlayFilled size={18} color={color('white', activeTheme(scope.theme))} />
+              <IconPlayerPlayFilled size={18} color={color('text', activeTheme(scope.theme))} />
             </Box>
             {progress != null && !watched ? (
-              <Box absolute left={0} right={0} bottom={0} h={4} bg="white/25">
+              <Box absolute left={0} right={0} bottom={0} h={4} bg="tint/25">
                 <Box h="100%" bg="accent" w={`${progress}%`} />
               </Box>
             ) : null}
@@ -130,17 +131,17 @@ export function EpisodeRow({
 
           <Box minW={0} flex>
             <Box row align="center" gap={10} mb={6}>
-              <Text variant="label" lines={1} color={watched ? 'white/55' : 'text'} style={s.bold}>
+              <Text variant="label" lines={1} color={watched ? 'textDim' : 'text'} style={s.bold}>
                 {`${episode.episode}. ${episode.episodeTitle ?? episode.title}`}
               </Text>
               {runtime ? (
-                <Text variant="meta" color="white/45" shrink={0}>
+                <Text variant="meta" color="textDim" shrink={0}>
                   {runtime}
                 </Text>
               ) : null}
             </Box>
             {synopsis ? (
-              <Text variant="meta" color="white/60" lines={2}>
+              <Text variant="meta" color="textMuted" lines={2}>
                 {synopsis}
               </Text>
             ) : null}
@@ -177,9 +178,9 @@ const missingRow = sv({
     gap: ROW_GAP,
     radius: 'xl',
     p: 14,
-    bg: 'white/1.5',
-    border: 'white/5',
-    _hover: { bg: 'white/5' },
+    bg: 'tint/2',
+    border: 'border',
+    _hover: { bg: 'tint/5' },
   },
   variants: {
     selected: { true: { border: 'accent/45', bg: 'accentWash/8' }, false: {} },
@@ -191,12 +192,15 @@ const missingRow = sv({
  * picking three episodes is three presses and one request from the bar below;
  * a row already asked for shows its status instead. What the provider lists
  * for the episode (title, still, air date, synopsis, runtime) rides along once
- * enrichment has fetched the season. */
+ * enrichment has fetched the season; a row with no still borrows the show's
+ * poster, then a plain numbered plate, rather than rendering a grey hole. */
 export function MissingEpisodeRow({
   episode,
   listed,
   pending,
   selected,
+  selectable = true,
+  poster = null,
   onToggle,
 }: Readonly<{
   season: number;
@@ -204,6 +208,8 @@ export function MissingEpisodeRow({
   listed: SeasonGap | null;
   pending: boolean;
   selected: boolean;
+  selectable?: boolean;
+  poster?: string | null;
   onToggle: () => void;
 }>) {
   const t = useT();
@@ -212,10 +218,18 @@ export function MissingEpisodeRow({
     : t('content.episodeN', { n: episode });
   if (pending) {
     return (
-      <Box row align="center" gap={ROW_GAP} radius="xl" p={14} bg="white/1.5" border="white/5">
-        <MissingStill episode={episode} still={listed?.stillUrl ?? null} />
-        <MissingText label={label} listed={listed} color="white/70" />
+      <Box row align="center" gap={ROW_GAP} radius="xl" p={14} bg="tint/2" border="border">
+        <MissingStill episode={episode} still={listed?.stillUrl ?? null} poster={poster} />
+        <MissingText label={label} listed={listed} color="textMuted" />
         <RequestStatusChip status="pending" size="card" />
+      </Box>
+    );
+  }
+  if (!selectable) {
+    return (
+      <Box row align="center" gap={ROW_GAP} radius="xl" p={14} bg="tint/2" border="border">
+        <MissingStill episode={episode} still={listed?.stillUrl ?? null} poster={poster} />
+        <MissingText label={label} listed={listed} color="textMuted" />
       </Box>
     );
   }
@@ -228,8 +242,8 @@ export function MissingEpisodeRow({
       label={label}
       onPress={onToggle}
     >
-      <MissingStill episode={episode} still={listed?.stillUrl ?? null} />
-      <MissingText label={label} listed={listed} color={selected ? 'text' : 'white/70'} />
+      <MissingStill episode={episode} still={listed?.stillUrl ?? null} poster={poster} />
+      <MissingText label={label} listed={listed} color={selected ? 'text' : 'textMuted'} />
       <CheckboxFace checked={selected} />
     </Focusable>
   );
@@ -246,7 +260,7 @@ function MissingText({
   label,
   listed,
   color: tone,
-}: Readonly<{ label: string; listed: SeasonGap | null; color: 'text' | 'white/70' }>) {
+}: Readonly<{ label: string; listed: SeasonGap | null; color: 'text' | 'textMuted' }>) {
   const s = useStyles(sDefinition);
 
   const t = useT();
@@ -271,14 +285,15 @@ function MissingText({
         <Text variant="label" lines={1} color={tone} style={s.bold}>
           {label}
         </Text>
+        <Badge tone="neutral">{t('content.seasonNotInLibrary')}</Badge>
         {facts.length > 0 ? (
-          <Text variant="meta" color="white/45" shrink={0}>
+          <Text variant="meta" color="textDim" shrink={0}>
             {facts.join(' · ')}
           </Text>
         ) : null}
       </Box>
       {listed?.overview ? (
-        <Text variant="meta" color="white/60" lines={2}>
+        <Text variant="meta" color="textMuted" lines={2}>
           {listed.overview}
         </Text>
       ) : null}
@@ -286,21 +301,26 @@ function MissingText({
   );
 }
 
-function MissingStill({ episode, still }: Readonly<{ episode: number; still: string | null }>) {
+function MissingStill({
+  episode,
+  still,
+  poster,
+}: Readonly<{ episode: number; still: string | null; poster: string | null }>) {
   const webRuntime = useWebRuntime();
 
   const s = useStyles(sDefinition);
 
-  const src = webRuntime.client.media.artwork.resolve(still);
+  const art = webRuntime.client.media.artwork.resolve(still) ?? poster;
   return (
-    <Box w={STILL_W} aspect={16 / 9} shrink={0} center overflow="hidden" radius="md" bg="white/4">
-      {src ? (
+    <Box w={STILL_W} aspect={16 / 9} shrink={0} center overflow="hidden" radius="md" bg="tint/4">
+      {art ? (
         <>
-          <Image src={src} fit="cover" fill style={s.dimmed} />
+          <Image src={art} fit="cover" fill style={still ? s.dimmed : undefined} />
           <Box fill style={s.scrim} />
         </>
-      ) : (
-        <Text variant="label" color="white/35" style={s.bold}>
+      ) : null}
+      {still ? null : (
+        <Text variant="label" color="textDim" style={s.bold}>
           {String(episode)}
         </Text>
       )}

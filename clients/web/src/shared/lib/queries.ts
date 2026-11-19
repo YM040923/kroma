@@ -4,6 +4,8 @@
 import type { DiscoverDetail, DiscoverType } from '@kromatv/client/discovery';
 import type {
   ItemId,
+  Library,
+  LibraryId,
   SectionLayoutRequest,
   Show,
   ShowDetail,
@@ -42,23 +44,33 @@ const HOME_LAYOUTS: readonly SectionLayoutRequest[] = ['hero', 'spotlight', 'ran
 /** Query factories capture the API client owned by this router. */
 export function createQueries(client: QueryClient) {
   const catalogQueries = {
-    /** All movies as a grid draws them, art pre-resolved. */
-    moviesView: () =>
+    /** The libraries this account was granted, for the browse page's scope. */
+    libraries: () =>
       queryOptions({
-        queryKey: ['movies', 'view'] as const,
+        queryKey: ['libraries'] as const,
+        staleTime: 5 * 60_000,
+        queryFn: async (): Promise<Library[]> => client.media.libraries(),
+      }),
+
+    /** All movies as a grid draws them, art pre-resolved. `library` narrows the
+     * list server-side (`GET /movies?library=`), so a library scope is never a
+     * client-side slice of the whole catalogue. */
+    moviesView: (library?: LibraryId) =>
+      queryOptions({
+        queryKey: ['movies', 'view', library ?? 'all'] as const,
         queryFn: async (): Promise<MovieCardView[]> => {
           const c = client;
-          return (await c.media.movieCards()).map((m) => toMovieCardView(c, m));
+          return (await c.media.movieCards(library)).map((m) => toMovieCardView(c, m));
         },
       }),
 
-    /** All shows, art pre-resolved. */
-    showsView: () =>
+    /** All shows, art pre-resolved. `library` narrows server-side. */
+    showsView: (library?: LibraryId) =>
       queryOptions({
-        queryKey: ['shows', 'view'] as const,
+        queryKey: ['shows', 'view', library ?? 'all'] as const,
         queryFn: async (): Promise<ShowView[]> => {
           const c = client;
-          return (await c.media.showCards()).map((s) => toShowView(c, s));
+          return (await c.media.showCards(library)).map((s) => toShowView(c, s));
         },
       }),
 
@@ -155,6 +167,9 @@ export function createQueries(client: QueryClient) {
     home: () => client.query.media.homeCards({ layouts: HOME_LAYOUTS }),
 
     continueWatching: () => client.query.playback.continueWatching(),
+
+    /** Watched titles and unfinished resumes for the personal history screen. */
+    history: () => client.query.playback.history(),
 
     /** Resume progress for every item, keyed for cheap lookup. */
     progress: () => client.query.playback.progress(),

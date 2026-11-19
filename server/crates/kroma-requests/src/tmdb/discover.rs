@@ -16,7 +16,7 @@ mod release;
 mod tests;
 mod wire;
 
-pub use hits::{search, trending};
+pub use hits::{filter, search, trending};
 use hits::hit_from;
 use release::movie_dates;
 use wire::DetailResp;
@@ -45,6 +45,35 @@ pub struct DiscoverPage {
     pub hits: Vec<DiscoverHit>,
     pub page: u32,
     pub total_pages: u32,
+    pub total_results: u32,
+}
+
+/// How a filtered discovery listing is ordered. `Release` means the newest
+/// release (or first air) date first, whatever the media kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilterSort {
+    Popularity,
+    Release,
+    Rating,
+}
+
+/// One TMDB `/discover/{movie,tv}` query. The API layer validates the ranges;
+/// this is the transport shape the client library sends.
+#[derive(Debug, Clone)]
+pub struct FilterQuery<'a> {
+    pub api_key: &'a str,
+    pub language: &'a str,
+    pub kind: RequestKind,
+    pub sort: FilterSort,
+    /// ISO 639-1 code TMDB filters on (`with_original_language`).
+    pub original_language: Option<&'a str>,
+    /// One exact release / first-air year.
+    pub year: Option<u32>,
+    /// First year of a decade, e.g. 1990 for the 1990s.
+    pub decade: Option<u32>,
+    /// TMDB genre id (`with_genres`).
+    pub genre: Option<u32>,
+    pub page: u32,
 }
 
 /// A title's detail for the request flow (movie runtime / show seasons).

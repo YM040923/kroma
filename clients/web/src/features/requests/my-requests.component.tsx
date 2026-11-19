@@ -2,7 +2,7 @@ import { tmdbKindOf } from '@kromatv/client/discovery';
 import { KromaEvents, type ServerEvent } from '@kromatv/client/events';
 import type { DownloadProgressEvent, MediaRequest } from '@kromatv/client/requests';
 import { useLocale, useT } from '@kromatv/ui';
-import { Box, Button, EmptyState, Icon, IconButton, Row, Text } from '@kromatv/ui/kit';
+import { Box, Button, Dialog, EmptyState, Icon, IconButton, Row, Text } from '@kromatv/ui/kit';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { ViewProps } from 'react-native';
@@ -29,6 +29,7 @@ export function MyRequestsList() {
   });
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<MediaRequest | null>(null);
 
   const lastReloadRef = useRef(0);
   useEffect(() => {
@@ -52,6 +53,7 @@ export function MyRequestsList() {
   }, [queryClient, requestsQuery.queryKey, eventClient.sessionToken, eventClient]);
 
   const cancel = (req: MediaRequest) => {
+    setMenu(null);
     setBusyId(req.id);
     client.requests
       .delete(req.id)
@@ -77,15 +79,45 @@ export function MyRequestsList() {
 
       <Box gap={10}>
         {(requests ?? []).map((req) => (
-          <RequestRow
+          <div
             key={req.id}
-            req={req}
-            progress={progress[req.id]}
-            busy={busyId === req.id}
-            onCancel={() => cancel(req)}
-          />
+            onContextMenu={(event) => {
+              if (req.status !== 'available') {
+                event.preventDefault();
+                setMenu(req);
+              }
+            }}
+          >
+            <RequestRow
+              req={req}
+              progress={progress[req.id]}
+              busy={busyId === req.id}
+              onCancel={() => cancel(req)}
+            />
+          </div>
         ))}
       </Box>
+
+      <Dialog.Root
+        open={!!menu}
+        title={menu?.title ?? ''}
+        width="sm"
+        onClose={() => setMenu(null)}
+      >
+        <Box gap={8}>
+          <Button
+            variant="dangerGhost"
+            label={t('requests.cancel')}
+            disabled={!menu || busyId === menu.id}
+            onPress={() => {
+              if (menu) {
+                cancel(menu);
+              }
+            }}
+          />
+          <Button variant="ghost" label={t('common.cancel')} onPress={() => setMenu(null)} />
+        </Box>
+      </Dialog.Root>
     </>
   );
 }

@@ -61,6 +61,23 @@ pub struct UpNext {
     pub resume: bool,
 }
 
+/// One title a user marked watched, hydrated for the history screen.
+#[derive(Debug, Clone, Serialize)]
+pub struct WatchedEntry {
+    pub item: MediaItem,
+    #[serde(rename = "watchedAt")]
+    pub watched_at: String,
+}
+
+/// `GET /api/history`: the caller's watched marks and unfinished resumes,
+/// newest first, both hydrated for the history screen.
+#[derive(Debug, Clone, Serialize)]
+pub struct HistoryView {
+    pub watched: Vec<WatchedEntry>,
+    #[serde(rename = "inProgress")]
+    pub in_progress: Vec<ContinueItem>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

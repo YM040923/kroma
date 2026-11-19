@@ -7,6 +7,7 @@ import {
   Surface,
   styles,
   Text,
+  useConfirm,
   useStyles,
 } from '@kromatv/ui/kit';
 
@@ -65,42 +66,88 @@ export function RequestBar({
   );
 }
 
+export interface MissingSeason {
+  number: number;
+  count: number;
+}
+
+/** The request actions for what the season view is missing. Both submit a
+ * request and say so; each asks for confirmation first, naming the seasons and
+ * episodes it covers and warning that what is owned or already asked for is
+ * skipped. A fully available current season never offers its own whole-season
+ * request. */
 export function SeasonAsk({
   season,
-  seasonPickable,
-  allPickable,
+  seasonMissing,
+  seasonRequestable,
+  allMissing,
   busy,
   onRequestSeason,
   onRequestAll,
 }: Readonly<{
   season: number;
-  seasonPickable: boolean;
-  allPickable: boolean;
+  seasonMissing: number;
+  seasonRequestable: boolean;
+  allMissing: MissingSeason[];
   busy: boolean;
   onRequestSeason: () => void;
   onRequestAll: () => void;
 }>) {
   const t = useT();
-  if (!seasonPickable && !allPickable) {
+  const confirm = useConfirm();
+  if (!seasonRequestable && allMissing.length === 0) {
     return null;
   }
+  const askSeason = async () => {
+    const ok = await confirm({
+      title: t('requests.requestMissingTitle'),
+      message: `${t('requests.requestSeasonScope', {
+        number: season,
+        count: seasonMissing,
+      })} ${t('requests.requestSkipNote')}`,
+      confirmLabel: t('requests.confirmRequest'),
+      cancelLabel: t('common.cancel'),
+    });
+    if (ok) {
+      onRequestSeason();
+    }
+  };
+  const askAll = async () => {
+    const scope = allMissing
+      .map((one) =>
+        t('requests.requestSeasonScopeLine', { number: one.number, count: one.count }),
+      )
+      .join(' · ');
+    const ok = await confirm({
+      title: t('requests.requestMissingTitle'),
+      message: `${t('requests.requestAllScope', { seasons: scope })} ${t(
+        'requests.requestSkipNote',
+      )}`,
+      confirmLabel: t('requests.confirmRequest'),
+      cancelLabel: t('common.cancel'),
+    });
+    if (ok) {
+      onRequestAll();
+    }
+  };
   return (
-    <Row wrap gap={8}>
-      {seasonPickable ? (
+    <Row wrap gap={8} align="center">
+      {seasonRequestable ? (
         <Button
-          variant="outline"
           size="sm"
-          label={t('requests.askForSeason', { number: season })}
-          onPress={onRequestSeason}
+          icon="plus"
+          label={t('requests.requestSeasonLabel', { number: season, count: seasonMissing })}
+          onPress={() => void askSeason()}
           disabled={busy}
         />
       ) : null}
-      {allPickable ? (
+      {allMissing.length > 0 ? (
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
-          label={t('requests.askForAllSeasons')}
-          onPress={onRequestAll}
+          icon="download"
+          label={t('requests.requestAllMissingLabel', { count: allMissing.length })}
+          onPress={() => void askAll()}
           disabled={busy}
         />
       ) : null}

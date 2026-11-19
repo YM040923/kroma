@@ -882,11 +882,23 @@ fn backdrop_urls(meta: Option<&crate::model::Metadata>) -> Vec<String> {
     };
     let mut urls: Vec<String> = meta.backdrop_url.iter().cloned().collect();
     for url in &meta.backdrops {
+        if urls.len() >= 4 {
+            break;
+        }
         if !urls.iter().any(|seen| seen == url) {
             urls.push(url.clone());
         }
     }
     urls
+}
+
+fn tagged_backdrop<'a>(
+    meta: &'a crate::model::Metadata,
+    tag: &str,
+) -> Option<&'a String> {
+    meta.backdrop_url.iter()
+        .chain(meta.backdrops.iter())
+        .find(|url| library_image_tag_value(url) == tag)
 }
 
 /// Jellyfin expects one tag per backdrop, index-aligned to the images it serves.
@@ -1698,7 +1710,8 @@ async fn image(
     Query(params): Query<HashMap<String, String>>,
     Path((id, kind)): Path<(String, String)>,
 ) -> Result<Response, Response> {
-    image_art(&state, &headers, &params, id, kind, 0).await
+    let tag = query_value(&params, "tag").cloned();
+    image_art(&state, &headers, &params, id, kind, 0, tag.as_deref()).await
 }
 
 async fn image_index(
@@ -1707,10 +1720,14 @@ async fn image_index(
     Query(params): Query<HashMap<String, String>>,
     Path((id, kind, index)): Path<(String, String, String)>,
 ) -> Result<Response, Response> {
-    // The index addresses one slide of the gallery; anything unparsable is the
-    // first one, which every item that has art at all can serve.
-    let index = index.trim().parse::<usize>().unwrap_or(0);
-    image_art(&state, &headers, &params, id, kind, index).await
+    // Clients disagree on this slot: some send the numeric slide index, others
+    // send the ImageTag itself. A tag must resolve to its slide, never to 0,
+    // or every card in an artwork gallery shows the primary backdrop.
+    let (index, tag) = match index.trim().parse::<usize>() {
+        Ok(index) => (index, None),
+        Err(_) => (0, Some(index.trim().to_string())),
+    };
+    image_art(&state, &headers, &params, id, kind, index, tag.as_deref()).await
 }
 
 /// The images an item advertises, matching the tags its DTO carries.
@@ -1774,6 +1791,7 @@ async fn image_art(
     id: String,
     kind: String,
     index: usize,
+    tag: Option<&str>,
 ) -> Result<Response, Response> {
     let (user, _) = user_of(state, headers, params).await?;
     if id.starts_with("person:") {
@@ -1798,7 +1816,9 @@ async fn image_art(
         .await?;
         // Extra slides are provider art: an operator override only ever
         // replaces the first backdrop, so later indices bypass it.
-        let own = if backdrop && index > 0 {
+        let own = if backdrop && tag.is_some() {
+            item.metadata.as_ref().and_then(|meta| tagged_backdrop(meta, tag.unwrap()).cloned())
+        } else if backdrop && index > 0 {
             item.metadata.as_ref().and_then(|meta| backdrop_at(meta, index))
         } else {
             overrides.get(art_key).cloned().or_else(|| {
@@ -1862,6 +1882,14 @@ async fn image_art(
         } else {
             overrides.get(art_key).cloned()
         };
+        if backdrop {
+            if let Some(tag) = tag {
+                if let Some(url) = detail.show.metadata.as_ref()
+                    .and_then(|meta| tagged_backdrop(meta, tag).cloned()) {
+                    return redirect(&client_url(headers, &url));
+                }
+            }
+        }
         picked.or_else(|| {
             detail.show.metadata.as_ref().and_then(|meta| {
                 if backdrop {

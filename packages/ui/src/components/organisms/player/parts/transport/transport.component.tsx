@@ -11,6 +11,7 @@ import type { PlayerNav } from '../../hooks/use-player-nav.hook';
 import { currentChapter, normalizeChapters } from '../../lib/chapters';
 import { endsAtClock } from '../../lib/fmt';
 import { type ChromeMetrics, GUTTER, scaler } from '../../lib/metrics';
+import type { ControlId } from '../../lib/nav';
 import type { Chapter, PlayerController } from '../../types';
 import { ControlCluster } from '../control-cluster';
 import { SeekBar } from '../seek-bar';
@@ -21,6 +22,8 @@ interface TransportProps {
   tileAt: (sec: number) => StoryboardTile | null;
   metrics: ChromeMetrics;
   nav: PlayerNav;
+  /** Drawn but out of reach (the ends of a series run). */
+  disabledControls?: readonly ControlId[];
   /** Left or Right on the focused seek bar. */
   onSeekNudge: (dir: -1 | 1) => void;
   /** Up or Down on the focused volume pill. */
@@ -38,6 +41,7 @@ function Transport({
   tileAt,
   metrics,
   nav,
+  disabledControls,
   onSeekNudge,
   onVolumeNudge,
   chromeShown,
@@ -105,6 +109,7 @@ function Transport({
           pipActive={c.pipActive}
           fullscreen={c.fullscreen}
           metrics={metrics}
+          disabled={disabledControls}
           onActivate={nav.activate}
           onFocus={nav.focus}
           onBlur={nav.blur}

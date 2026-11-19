@@ -16,5 +16,6 @@ export const CATALOG_NAV: readonly CatalogNavItem[] = [
   { labelKey: 'nav.search', to: '/search', icon: 'search' },
   { labelKey: 'nav.films', to: '/movies', icon: 'movie' },
   { labelKey: 'nav.series', to: '/shows', icon: 'device-tv' },
+  { labelKey: 'nav.history', to: '/history', icon: 'history' },
   { labelKey: 'nav.genres', to: '/genres', icon: 'category' },
 ];

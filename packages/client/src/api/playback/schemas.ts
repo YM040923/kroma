@@ -1,6 +1,21 @@
 import { z } from 'zod';
-import { ItemId } from '../media';
+import { ContinueItem, ItemId, MediaItem } from '../media';
 import { PlaybackSessionId } from './ids';
+
+/** One finished title on the history screen: the hydrated item plus when it
+ * was marked watched. */
+export const WatchedEntry = z.object({
+  item: MediaItem,
+  watchedAt: z.string(),
+});
+export type WatchedEntry = z.infer<typeof WatchedEntry>;
+
+/** `GET /api/history`: finished titles and unfinished resumes, newest first. */
+export const HistoryView = z.object({
+  watched: z.array(WatchedEntry),
+  inProgress: z.array(ContinueItem),
+});
+export type HistoryView = z.infer<typeof HistoryView>;
 
 export const PlaybackState = z.enum(['playing', 'paused', 'buffering']);
 export type PlaybackState = z.infer<typeof PlaybackState>;

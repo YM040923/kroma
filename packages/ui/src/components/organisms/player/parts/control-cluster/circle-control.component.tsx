@@ -5,6 +5,7 @@ import { CONTROL_SIZE, type Px, scaler } from '#ui/components/organisms/player/l
 import type { ControlId } from '#ui/components/organisms/player/lib/nav';
 import {
   IconAudioTrack,
+  IconEpisodes,
   IconSkipBack,
   IconCast,
   IconFullscreen,
@@ -13,6 +14,7 @@ import {
   IconGear,
   IconNext,
   IconPip,
+  IconPrev,
   IconSubtitles,
 } from '#ui/components/organisms/player/parts/icons.component';
 import { NO_OUTLINE } from '#ui/lib/field-shell';
@@ -24,6 +26,7 @@ interface CircleProps {
   id: ControlId;
   diameter: number;
   label: string;
+  disabled?: boolean;
   onActivate: (id: ControlId) => void;
   onFocus: (id: ControlId) => void;
   onBlur: (id: ControlId) => void;
@@ -34,6 +37,7 @@ export function Circle({
   id,
   diameter,
   label,
+  disabled,
   onActivate,
   onFocus,
   onBlur,
@@ -43,6 +47,7 @@ export function Circle({
     <IconButton
       variant="glass"
       diameter={diameter}
+      disabled={disabled}
       style={NO_OUTLINE}
       states={CIRCLE_FOCUS}
       label={label}
@@ -68,7 +73,15 @@ const CIRCLES: Record<
 > = {
   rewind: { label: 'player.back10', glyph: (_s, px) => <IconSkipBack size={px(27)} /> },
   forward: { label: 'player.fwd10', glyph: (_s, px) => <IconSkipForward size={px(27)} /> },
+  previous: {
+    label: 'player.previousEpisode',
+    glyph: (_s, px) => <IconPrev size={px(24)} color="text" />,
+  },
   next: { label: 'player.nextEpisode', glyph: (_s, px) => <IconNext size={px(24)} /> },
+  episodes: {
+    label: 'player.episodesPicker',
+    glyph: (_s, px) => <IconEpisodes size={px(23)} color="text" />,
+  },
   subtitles: { label: 'player.subtitles', glyph: (_s, px) => <IconSubtitles size={px(25)} /> },
   audio: { label: 'player.audioTrack', glyph: (_s, px) => <IconAudioTrack size={px(24)} /> },
   settings: { label: 'player.settings', glyph: (_s, px) => <IconGear size={px(25)} /> },
@@ -91,6 +104,7 @@ interface CircleControlProps {
   scale: number;
   pipActive: boolean;
   fullscreen: boolean;
+  disabled?: boolean;
   onActivate: (id: ControlId) => void;
   onFocus: (id: ControlId) => void;
   onBlur: (id: ControlId) => void;
@@ -101,6 +115,7 @@ export const CircleControl = memo(function CircleControl({
   scale,
   pipActive,
   fullscreen,
+  disabled,
   onActivate,
   onFocus,
   onBlur,
@@ -113,6 +128,7 @@ export const CircleControl = memo(function CircleControl({
       id={id}
       diameter={px(CONTROL_SIZE[id])}
       label={t(label)}
+      disabled={disabled}
       onActivate={onActivate}
       onFocus={onFocus}
       onBlur={onBlur}

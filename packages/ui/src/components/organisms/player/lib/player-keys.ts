@@ -26,6 +26,9 @@ export interface PlayerKeysParams {
   resume?: { active: boolean; onBack: () => void };
   credits?: { active: boolean; onBack: () => void };
   postPlay?: { active: boolean; onBack: () => void };
+  /** The parked up-next peek: Back / Escape puts it away before it puts the
+   *  chrome away. */
+  peek?: { active: boolean; onDismiss: () => void };
 }
 
 /**
@@ -59,6 +62,10 @@ export function routeRemoteKey(p: Readonly<PlayerKeysParams>, key: RemoteKey): v
       return;
     }
     nav.handleKey(key);
+    return;
+  }
+  if (p.peek?.active) {
+    p.peek.onDismiss();
     return;
   }
   if (p.resume?.active) {

@@ -22,6 +22,7 @@ import {
 import { useCallback, useMemo, useState } from 'react';
 import { usePlaybackSession } from '#web/features/playback/use-playback-session.hook';
 import { useResumeProgress } from '#web/features/playback/use-resume-progress.hook';
+import { useSeriesEpisodes } from '#web/features/playback/use-series-episodes.hook';
 import { useWebController } from '#web/features/playback/use-web-controller.hook';
 import type { MovieView } from '#web/shared/lib/api';
 import { useStoryboard } from '#web/shared/lib/use-storyboard.hook';
@@ -63,6 +64,7 @@ export function Player({
   const storyboard = useStoryboard(item.id);
   const tileAt = useCallback((sec: number) => storyboard.tile(sec, PREVIEW_W), [storyboard]);
   const upNext = useUpNext(webRuntime.client, t, item, following);
+  const episodes = useSeriesEpisodes(item);
   const flags = useMemo(() => ({ ...WEB_FLAGS, cast: cast.available }), [cast.available]);
 
   const position = useMemo(() => ({ getPosition: pb.getPosition }), [pb.getPosition]);
@@ -154,6 +156,9 @@ export function Player({
         gen={subtitleGen}
       />
       <UnifiedPlayer.UpNext data={upNext.data} onPlay={(i) => onPlayItem?.(i.id)} />
+      {episodes ? (
+        <UnifiedPlayer.Episodes data={episodes} onPlay={(i) => onPlayItem?.(i.id)} />
+      ) : null}
       <UnifiedPlayer.Credits
         markers={item.markers ?? undefined}
         next={nextTitle}

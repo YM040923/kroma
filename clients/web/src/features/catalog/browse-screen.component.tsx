@@ -117,10 +117,14 @@ export interface BrowseScreenProps<T extends Sortable & { backdrop: string | nul
   emptyTitle: string;
   sort: SortMode;
   genre?: string;
+  /** Every library this account may see, and the one the grid is scoped to. */
+  libraries?: readonly { id: string; name: string }[];
+  library?: string;
   /** `resetScroll: false` marks a rail jump: the screen lands on the letter
    *  itself, so the router must not scroll back to the top. */
   onSort: (mode: SortMode, opts?: { resetScroll?: boolean }) => void;
   onGenre: (genre: string | undefined) => void;
+  onLibrary?: (id: string | undefined) => void;
   renderGrid: (view: T[]) => ReactElement;
 }
 
@@ -136,14 +140,19 @@ export function BrowseScreen<T extends Sortable & { backdrop: string | null }>({
   emptyTitle,
   sort,
   genre,
+  libraries,
+  library,
   onSort,
   onGenre,
+  onLibrary,
   renderGrid,
 }: Readonly<BrowseScreenProps<T>>) {
   const t = useT();
   const gridWrap = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLDivElement>(null);
   const pending = useRef<string | null>(null);
+
+  const libraryName = libraries?.find((l) => l.id === library)?.name;
 
   const genres = useMemo(() => collectGenres(items), [items]);
   const filtered = useMemo(
@@ -221,7 +230,9 @@ export function BrowseScreen<T extends Sortable & { backdrop: string | null }>({
     <PageFrame>
       <BrowseHero
         heading={heading}
-        eyebrow={genre ? genreLabel(t, genreOfSegment(genre)) : t('browse.library')}
+        eyebrow={
+          genre ? genreLabel(t, genreOfSegment(genre)) : (libraryName ?? t('browse.library'))
+        }
         countText={items.length > 0 ? t(countKey, { count: view.length }) : undefined}
         backdrop={featured?.backdrop}
         creditTitle={featured?.title}
@@ -239,6 +250,9 @@ export function BrowseScreen<T extends Sortable & { backdrop: string | null }>({
             genres={genres}
             genre={genre}
             onGenre={onGenre}
+            libraries={libraries}
+            library={library}
+            onLibrary={onLibrary}
           />
           {view.length === 0 ? (
             <EmptyState.Root icon={emptyIcon}>

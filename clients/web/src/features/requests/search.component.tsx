@@ -1,34 +1,53 @@
-// The discovery page: browse trending titles or search across the local
-// library + TMDB (Overseerr-style). A prominent search hero, trending rails as
-// the empty state, and counted result grids. TMDB is gated on requests.create.
+// The discovery page: two server-backed sources. The library tab browses this
+// server's own catalogue with server-side filters; the TMDB tab browses TMDB's
+// discover endpoint (or searches it with a text query). Filters are URL state,
+// counts and totals come from the server, and paging asks for the next slice
+// instead of filtering a whole download in the browser.
 
 import { hasPermission } from '@kromatv/client/accounts';
-import type { DiscoverType } from '@kromatv/client/discovery';
+import type { MessageKey } from '@kromatv/i18n';
+import { useQuery } from '@tanstack/react-query';
 import { useT } from '@kromatv/ui';
 import {
   Box,
+  Button,
   classes,
   EmptyState,
   Icon,
   InputGroup,
   PageHeader,
+  Row,
   SegmentGroup,
   styles,
+  Text,
   useStyles,
 } from '@kromatv/ui/kit';
 import type { ReactNode } from 'react';
-import { SearchResults } from '#web/features/requests/search-results.component';
+import { DiscoverFilterBar } from '#web/features/requests/discover-filter-bar.component';
+import {
+  DEFAULT_DISCOVER_SEARCH,
+  type DiscoverSearch,
+  type DiscoverSource,
+} from '#web/features/requests/discover-search';
+import { LocalResults, TmdbResults } from '#web/features/requests/search-results.component';
 import { TrendingBrowse } from '#web/features/requests/trending.component';
-import { useDiscoverSearch, useTrending } from '#web/features/requests/use-discover-search.hook';
+import {
+  useDiscoverFilter,
+  useDiscoverSearch,
+  useLocalDiscovery,
+  useTrending,
+} from '#web/features/requests/use-discover-search.hook';
 import { useAuth } from '#web/shared/lib/auth';
+import { useWebRuntime } from '#web/shared/lib/web-runtime';
 
-const TYPES: {
-  value: DiscoverType;
-  labelKey: 'discover.all' | 'discover.movies' | 'discover.shows';
+const SOURCES: {
+  value: DiscoverSource | 'douban';
+  labelKey: MessageKey;
+  disabled?: boolean;
 }[] = [
-  { value: 'all', labelKey: 'discover.all' },
-  { value: 'movie', labelKey: 'discover.movies' },
-  { value: 'tv', labelKey: 'discover.shows' },
+  { value: 'library', labelKey: 'discover.source.library' },
+  { value: 'tmdb', labelKey: 'discover.source.tmdb' },
+  { value: 'douban', labelKey: 'discover.source.douban', disabled: true },
 ];
 
 const GUTTER = { paddingLeft: 'var(--gutter-web)', paddingRight: 'var(--gutter-web)' } as const;
@@ -49,40 +68,167 @@ const sDefinition = styles({
       'radial-gradient(48% 60% at 28% 20%, color-mix(in srgb, var(--kroma-accent-wash) 10%, transparent), transparent 70%)',
   },
   aboveWash: { position: 'relative' },
+  count: { fontVariant: ['tabular-nums'] },
 });
 
+function ResultCount({
+  count,
+  page,
+  totalPages,
+}: Readonly<{ count: number; page: number; totalPages: number }>) {
+  const s = useStyles(sDefinition);
+  const t = useT();
+  return (
+    <Row between gap={12} mt={28} mb={14}>
+      <Text variant="meta" color="textDim" style={s.count}>
+        {t('discover.resultCount', { count })}
+      </Text>
+      {totalPages > 1 ? (
+        <Text variant="meta" color="textDim" style={s.count}>
+          {t('discover.pageOf', { page, total: totalPages })}
+        </Text>
+      ) : null}
+    </Row>
+  );
+}
+
+function Pager({
+  page,
+  totalPages,
+  onPage,
+}: Readonly<{ page: number; totalPages: number; onPage: (page: number) => void }>) {
+  const t = useT();
+  if (totalPages <= 1) {
+    return null;
+  }
+  return (
+    <Row center gap={12} mt={28}>
+      <Button
+        variant="ghost"
+        size="sm"
+        icon="chevron-left"
+        label={t('discover.prev')}
+        disabled={page <= 1}
+        onPress={() => onPage(page - 1)}
+      />
+      <Text variant="meta" color="textDim">
+        {t('discover.pageOf', { page, total: totalPages })}
+      </Text>
+      <Button
+        variant="ghost"
+        size="sm"
+        iconRight="chevron-right"
+        label={t('discover.next')}
+        disabled={page >= totalPages}
+        onPress={() => onPage(page + 1)}
+      />
+    </Row>
+  );
+}
+
+function NoMatches() {
+  const t = useT();
+  return (
+    <EmptyState.Root icon="mood-empty">
+      <EmptyState.Title>{t('discover.noResults')}</EmptyState.Title>
+      <EmptyState.Hint>{t('discover.noResultsHint')}</EmptyState.Hint>
+    </EmptyState.Root>
+  );
+}
+
 export function SearchPage({
-  query,
-  type,
-  setQuery,
-  setType,
+  search: incoming,
+  onChange,
 }: Readonly<{
-  query: string;
-  type: DiscoverType;
-  setQuery: (q: string) => void;
-  setType: (t: DiscoverType) => void;
+  search: Partial<DiscoverSearch> & Pick<DiscoverSearch, 'q' | 'type'>;
+  onChange: (patch: Partial<DiscoverSearch>) => void;
 }>) {
+  const search: DiscoverSearch = { ...DEFAULT_DISCOVER_SEARCH, ...incoming };
   const s = useStyles(sDefinition);
 
   const t = useT();
   const { user } = useAuth();
+  const webRuntime = useWebRuntime();
   const canDiscover = !!user && hasPermission(user, 'requests.create');
-  const state = useDiscoverSearch(query, type);
-  const trending = useTrending(canDiscover);
-  const searching = query.trim().length > 0;
+  const { data: libraries = [] } = useQuery({
+    ...webRuntime.queries.catalogQueries.libraries(),
+    enabled: !!user && search.source === 'library',
+  });
+  const state = useDiscoverSearch(search.q, search.type, search.state);
+  const trending = useTrending(canDiscover && search.source === 'tmdb');
+  const filtered = useDiscoverFilter(search);
+  const localState = useLocalDiscovery(search);
+  const searching = search.q.trim().length > 0;
+  const setPage = (page: number) => onChange({ page });
 
-  // Page body: search results while searching, else the trending browse (when
-  // discovery is available) or a local-only empty state.
+  // Page body: the source tab decides who answers. On TMDB, a text query uses
+  // the search endpoint (which can span both kinds), an empty query with a
+  // kind uses discover, and an empty query on "all" keeps the trending browse.
   let body: ReactNode;
-  if (searching) {
-    body = <SearchResults state={state} />;
-  } else if (canDiscover) {
-    body = <TrendingBrowse entries={trending.entries} loading={trending.loading} type={type} />;
-  } else {
+  if (search.source === 'library') {
+    if (localState.loading) {
+      body = <LocalResults results={[]} loading />;
+    } else if (localState.results.length === 0) {
+      body = <NoMatches />;
+    } else {
+      body = (
+        <>
+          <ResultCount
+            count={localState.totalResults}
+            page={search.page}
+            totalPages={localState.totalPages}
+          />
+          <LocalResults results={localState.results} loading={false} />
+          <Pager page={search.page} totalPages={localState.totalPages} onPage={setPage} />
+        </>
+      );
+    }
+  } else if (searching) {
+    if (state.loading) {
+      body = <TmdbResults entries={[]} loading />;
+    } else if (state.discover.length === 0 && state.people.length === 0) {
+      body = <NoMatches />;
+    } else {
+      body = (
+        <>
+          {state.canDiscover && state.discover.length > 0 ? (
+            <ResultCount
+              count={state.discover.length}
+              page={1}
+              totalPages={1}
+            />
+          ) : null}
+          <TmdbResults
+            entries={state.discover}
+            people={state.people}
+            loading={false}
+          />
+        </>
+      );
+    }
+  } else if (!canDiscover) {
     body = (
       <EmptyState.Root icon="mood-empty">
         <EmptyState.Title>{t('discover.empty')}</EmptyState.Title>
       </EmptyState.Root>
+    );
+  } else if (search.type === 'all') {
+    body = <TrendingBrowse entries={trending.entries} loading={trending.loading} type="all" />;
+  } else if (filtered.loading) {
+    body = <TmdbResults entries={[]} loading />;
+  } else if (filtered.entries.length === 0) {
+    body = <NoMatches />;
+  } else {
+    body = (
+      <>
+        <ResultCount
+          count={filtered.totalResults}
+          page={search.page}
+          totalPages={filtered.totalPages}
+        />
+        <TmdbResults entries={filtered.entries} loading={false} />
+        <Pager page={search.page} totalPages={filtered.totalPages} onPage={setPage} />
+      </>
     );
   }
 
@@ -107,36 +253,53 @@ export function SearchPage({
               </InputGroup.Addon>
               <InputGroup.Input
                 type="search"
-                value={query}
-                onValueChange={setQuery}
+                value={search.q}
+                onValueChange={(q) => onChange({ q, page: 1 })}
                 placeholder={t('discover.placeholder')}
               />
-              {query ? (
+              {search.q ? (
                 <InputGroup.Addon align="inline-end">
                   <InputGroup.IconButton
                     icon="x"
                     label={t('common.clear')}
-                    onPress={() => setQuery('')}
+                    onPress={() => onChange({ q: '', page: 1 })}
                   />
                 </InputGroup.Addon>
               ) : null}
             </InputGroup.Root>
 
-            {canDiscover ? (
-              <SegmentGroup.Root
-                size="md"
-                label={t('discover.title')}
-                value={type}
-                onValueChange={setType}
-              >
-                {TYPES.map((tp) => (
-                  <SegmentGroup.Item key={tp.value} value={tp.value}>
-                    <SegmentGroup.Label>{t(tp.labelKey)}</SegmentGroup.Label>
-                  </SegmentGroup.Item>
-                ))}
-              </SegmentGroup.Root>
-            ) : null}
+            <SegmentGroup.Root
+              size="md"
+              label={t('discover.source')}
+              value={search.source}
+              onValueChange={(v) =>
+                onChange({ source: v as DiscoverSource, page: 1 })
+              }
+            >
+              {SOURCES.map((source) => (
+                <SegmentGroup.Item
+                  key={source.value}
+                  value={source.value}
+                  disabled={source.disabled}
+                >
+                  <SegmentGroup.Label>{t(source.labelKey)}</SegmentGroup.Label>
+                </SegmentGroup.Item>
+              ))}
+            </SegmentGroup.Root>
           </Box>
+
+          <DiscoverFilterBar
+            search={search}
+            canDiscover={canDiscover}
+            libraries={libraries}
+            onChange={onChange}
+          />
+
+          {search.source === 'tmdb' ? (
+            <Text variant="meta" color="textDim" mt={10}>
+              {t('discover.source.doubanUnavailable')}
+            </Text>
+          ) : null}
         </div>
       </div>
 

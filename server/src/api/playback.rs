@@ -3,12 +3,13 @@
 //! item the caller's library grant does not cover (ACCT-21).
 
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 
 use crate::state::SharedState;
 
 mod heartbeat;
+mod history;
 mod progress;
 mod up_next;
 mod watch_state;
@@ -38,6 +39,12 @@ pub fn routes() -> Router<SharedState> {
             "/my-list/{id}",
             put(watch_state::add_to_list).delete(watch_state::remove_from_list),
         )
+        .route(
+            "/history",
+            get(history::history).delete(history::clear_all),
+        )
+        .route("/history/shows/{id}", delete(history::clear_show))
+        .route("/history/items", delete(history::clear_items))
         .route(
             "/playback/ping",
             post(heartbeat::ping).layer(DefaultBodyLimit::max(heartbeat::MAX_BEAT_BYTES)),

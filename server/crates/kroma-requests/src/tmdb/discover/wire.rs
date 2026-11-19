@@ -9,6 +9,8 @@ pub(super) struct PageResp {
     #[serde(default)]
     pub(super) total_pages: u32,
     #[serde(default)]
+    pub(super) total_results: u32,
+    #[serde(default)]
     pub(super) results: Vec<RawHit>,
 }
 
