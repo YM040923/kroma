@@ -12,6 +12,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use kroma_module_sdk::domain::Permission;
 use kroma_module_sdk::host::{json_error, AuthUser, HostCtx};
@@ -226,16 +227,79 @@ async fn account<S: HostCtx + Clone + Send + Sync + 'static>(
             "115 的 Cookie 还没配置",
         ));
     }
-    match client::space(&config.cookie, client::MODULE_UA).await {
-        Ok(space) => Ok(Json(
-            serde_json::to_value(space).unwrap_or_default(),
-        )),
-        Err(error) if error.cookie_expired() => Err(json_error(
-            StatusCode::BAD_GATEWAY,
-            "115 登录已失效，请更新 Cookie",
-        )),
-        Err(error) => Err(json_error(StatusCode::BAD_GATEWAY, &error.to_string())),
-    }
+    let space = match client::space(&config.cookie, client::MODULE_UA).await {
+        Ok(space) => space,
+        Err(error) if error.cookie_expired() => {
+            return Err(json_error(
+                StatusCode::BAD_GATEWAY,
+                "115 登录已失效，请更新 Cookie",
+            ))
+        }
+        Err(error) => return Err(json_error(StatusCode::BAD_GATEWAY, &error.to_string())),
+    };
+    let nav = client::user_nav(&config.cookie, client::MODULE_UA)
+        .await
+        .unwrap_or(Value::Null);
+    let text = |key: &str| {
+        nav.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    let user_name = {
+        let name = text("user_name");
+        if name.is_empty() {
+            text("nickname")
+        } else {
+            name
+        }
+    };
+    let user_id = {
+        let id = text("user_id");
+        if id.is_empty() {
+            config
+                .cookie
+                .split(';')
+                .find_map(|part| part.trim().strip_prefix("UID="))
+                .and_then(|value| value.split('_').next())
+                .unwrap_or("")
+                .to_string()
+        } else {
+            id
+        }
+    };
+    let avatar = ["user_face", "face", "avatar", "head_img"]
+        .iter()
+        .map(|key| text(key))
+        .find(|value| !value.is_empty())
+        .map(|value| {
+            if value.starts_with("http") {
+                value
+            } else {
+                format!("https://www.115.com/{}", value.trim_start_matches('/'))
+            }
+        })
+        .unwrap_or_default();
+    let vip = match nav.get("vip") {
+        Some(Value::Bool(value)) => *value,
+        Some(Value::Number(value)) => value.as_i64().unwrap_or(0) != 0,
+        Some(Value::String(value)) => {
+            value == "1" || value.eq_ignore_ascii_case("true")
+        }
+        _ => false,
+    };
+    Ok(Json(serde_json::json!({
+        "total": space.total,
+        "used": space.used,
+        "remain": space.remain,
+        "totalText": space.total_text,
+        "usedText": space.used_text,
+        "remainText": space.remain_text,
+        "userName": user_name,
+        "userId": user_id,
+        "vip": vip,
+        "avatarUrl": avatar,
+    })))
 }
 
 #[derive(Serialize)]

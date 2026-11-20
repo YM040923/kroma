@@ -165,6 +165,8 @@
   "cloud115.loginRequiredHint": "Everything in this section is sent as the signed-in 115 account. Sign in by QR on the Account tab, or import a cookie under Advanced.",
   "cloud115.goAccount": "Connect now",
   "cloud115.accountHint": "Connect by QR or an imported cookie; capacity is read from 115.",
+  "cloud115.member": "Member",
+  "cloud115.uid": "UID {id}",
   "cloud115.capacity": "Capacity",
   "cloud115.intervalHint": "The least wait between two calls to 115.",
   "cloud115.budgetHint": "A sync run stops at this many calls, leaving the rest for playback and other work.",

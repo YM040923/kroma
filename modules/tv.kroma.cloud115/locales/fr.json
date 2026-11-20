@@ -149,6 +149,8 @@
   "cloud115.loginRequiredHint": "Tout ici est envoyé avec le compte 115 connecté. Connectez-vous par QR dans l'onglet Compte, ou importez un cookie dans Avancé.",
   "cloud115.goAccount": "Se connecter",
   "cloud115.accountHint": "Connectez par QR ou cookie importé ; la capacité vient de 115.",
+  "cloud115.member": "Membre",
+  "cloud115.uid": "UID {id}",
   "cloud115.capacity": "Capacité",
   "cloud115.intervalHint": "L'attente minimale entre deux appels à 115.",
   "cloud115.budgetHint": "Une passe s'arrête à ce nombre d'appels, laissant le reste à la lecture et aux autres tâches.",

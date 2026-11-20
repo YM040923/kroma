@@ -346,6 +346,23 @@ pub async fn share_receive(
     Ok(envelope.data)
 }
 
+/// The signed-in account's own profile: display name, id, avatar and whether
+/// the membership is active. Read through the web session, no open-platform
+/// token involved.
+pub async fn user_nav(cookie: &str, ua: &str) -> Result<Value, ApiError> {
+    pacer().acquire().await.map_err(ApiError::network)?;
+    let (status, body) = call(
+        "GET",
+        "https://my.115.com/?ct=ajax&ac=nav",
+        cookie,
+        ua,
+        None,
+    )?;
+    pacer().note(status, errno_of(&body)).await;
+    let envelope = check(status, &body)?;
+    Ok(envelope.data)
+}
+
 /// Resolve a path like `/电影` to its folder id. The drive's root is `0`, which
 /// the lookup endpoint does not answer for, so it is answered here.
 pub async fn folder_id_by_path(cookie: &str, ua: &str, path: &str) -> Result<String, ApiError> {

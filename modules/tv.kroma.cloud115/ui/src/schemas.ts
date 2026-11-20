@@ -154,6 +154,10 @@ export const CloudAccount = z.object({
   totalText: z.string().default(''),
   usedText: z.string().default(''),
   remainText: z.string().default(''),
+  userName: z.string().default(''),
+  userId: z.string().default(''),
+  vip: z.boolean().default(false),
+  avatarUrl: z.string().default(''),
 });
 export type CloudAccount = z.infer<typeof CloudAccount>;
 

@@ -587,25 +587,42 @@ export function Cloud115Settings() {
         {tab === 'account' ? (
           <>
             <Surface elevated border="border" pad="none" px={22} py={20}>
-              <Row wrap gap={24} align="center">
-                <Row gap={14} center flex minW={240}>
-                  <Box w={48} h={48} radius="xl" bg="accentSoft" center shrink={0}>
-                    <Icon name="cloud" size={24} thickness={1.7} color="accentText" />
+              <Row wrap gap={20} align="center" justify="space-between">
+                <Row gap={14} center flex minW={260}>
+                  <Box w={48} h={48} radius="xl" bg="accentSoft" center shrink={0} overflow="hidden">
+                    {account?.avatarUrl ? (
+                      <img
+                        src={account.avatarUrl}
+                        alt=""
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <Text variant="title" color="accentText">
+                        {account?.userName?.slice(0, 1) || '1'}
+                      </Text>
+                    )}
                   </Box>
                   <Box shrink={1} minW={0} gap={4}>
                     <Row wrap gap={8} center>
-                      <Text variant="title">115 Cloud</Text>
+                      <Text variant="title" lines={1}>
+                        {account?.userName || '115 Cloud'}
+                      </Text>
                       <Badge tone={hasCookie ? 'success' : 'warning'}>
                         {hasCookie ? t('cloud115.cookieSet') : t('cloud115.cookieMissing')}
                       </Badge>
+                      {account?.vip ? (
+                        <Badge tone="neutral">{t('cloud115.member')}</Badge>
+                      ) : null}
                     </Row>
-                    <Text variant="meta" color="textDim">
-                      {t('cloud115.accountHint')}
+                    <Text variant="meta" color="textDim" lines={1}>
+                      {account?.userId
+                        ? t('cloud115.uid', { id: account.userId })
+                        : t('cloud115.accountHint')}
                     </Text>
                   </Box>
                 </Row>
 
-                <Box flex minW={220} maxW={360} gap={6}>
+                <Box flex minW={260} maxW={380} gap={6} px={16} py={12} bg="surface2" radius="lg">
                   <Row between gap={12} center>
                     <Text variant="meta" color="textDim">
                       {t('cloud115.capacity')}
@@ -1974,7 +1991,7 @@ export default function Cloud115Page() {
         <PageHeader.Title>{t('cloud115.title')}</PageHeader.Title>
         <PageHeader.Subtitle>{t('cloud115.subtitle')}</PageHeader.Subtitle>
         <PageHeader.Actions>
-          <StatusChip running={running} report={report} />
+          {running ? <StatusChip running={running} report={report} /> : null}
         </PageHeader.Actions>
       </PageHeader.Root>
 

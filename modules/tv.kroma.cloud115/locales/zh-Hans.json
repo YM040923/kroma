@@ -165,6 +165,8 @@
   "cloud115.loginRequiredHint": "这个分区里的操作都会以已登录的 115 账号发出。到「账号」扫码登录，或在高级里导入 Cookie。",
   "cloud115.goAccount": "去连接",
   "cloud115.accountHint": "扫码或导入 Cookie 连接账号；容量读取自 115。",
+  "cloud115.member": "会员",
+  "cloud115.uid": "UID {id}",
   "cloud115.capacity": "容量",
   "cloud115.intervalHint": "每次 115 接口调用之间至少等待这么久。",
   "cloud115.budgetHint": "一轮同步用到这个调用数就停，余量留给播放和其它任务。",
