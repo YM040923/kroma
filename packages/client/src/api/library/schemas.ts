@@ -4,6 +4,8 @@ import { LibraryId } from '../media';
 /** Per-library scraping choices; null/empty follows the server default. */
 export const ScrapeOptions = z.object({
   language: z.string().nullable(),
+  /** Ordered languages: the first is asked for, the rest fill gaps. Null follows the household default. */
+  languagePriority: z.array(z.string()).nullable().optional(),
   nfo: z.boolean(),
   posterLanguage: z.string().nullable(),
   backdropLanguage: z.string().nullable(),
@@ -31,6 +33,12 @@ export const AdminLibrary = z.object({
   demo: z.boolean().default(false),
 });
 export type AdminLibrary = z.infer<typeof AdminLibrary>;
+
+/** Household scraping defaults every library follows until it overrides them. */
+export const ScrapeDefaults = z.object({
+  languagePriority: z.array(z.string()),
+});
+export type ScrapeDefaults = z.infer<typeof ScrapeDefaults>;
 
 /** `POST /api/admin/libraries` body. */
 export const LibraryBody = AdminLibrary.pick({ name: true, folders: true }).extend({

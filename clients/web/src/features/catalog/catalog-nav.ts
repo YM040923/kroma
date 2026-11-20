@@ -20,5 +20,4 @@ export const CATALOG_NAV: readonly CatalogNavItem[] = [
   { labelKey: 'nav.photos', to: '/photos', icon: 'photo' },
   { labelKey: 'nav.other', to: '/other', icon: 'folder' },
   { labelKey: 'nav.genres', to: '/genres', icon: 'category' },
-  { labelKey: 'nav.douban', to: '/douban', icon: 'star' },
 ];

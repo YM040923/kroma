@@ -130,6 +130,19 @@ const LINK_TEXT: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
+const DETAILS: CSSProperties = {
+  marginTop: 16,
+  borderTop: '1px solid var(--kroma-border)',
+  paddingTop: 12,
+};
+
+const SUMMARY: CSSProperties = {
+  cursor: 'pointer',
+  font: 'var(--type-meta)',
+  color: 'var(--kroma-text-muted)',
+  listStyle: 'none',
+};
+
 const SAVE_BAR: CSSProperties = {
   position: 'sticky',
   bottom: 0,
@@ -450,15 +463,16 @@ export function Cloud115Settings() {
         <Surface elevated border="border" pad="none" px={22} py={20}>
           <div style={SUMMARY_GRID}>
             <Box>
-              <Text variant="h2">115 Cloud</Text>
-              <Row gap={8} center mt={8}>
+              <Row gap={8} center>
+                <Icon name="cloud" size={22} thickness={1.7} color="accentText" />
+                <Text variant="h2">115 Cloud</Text>
                 <Badge tone={hasCookie ? 'success' : 'warning'}>
                   {hasCookie ? t('cloud115.cookieSet') : t('cloud115.cookieMissing')}
                 </Badge>
-                <Text variant="meta" color="textDim">
-                  {baseUrl || origin || '—'}
-                </Text>
               </Row>
+              <Text variant="meta" color="textDim" mt={6}>
+                {baseUrl || origin || '—'}
+              </Text>
             </Box>
             <SummaryStat label={t('cloud115.mappings')} value={String(libraries.filter((l) => l.remote && l.local).length)} />
             <SummaryStat label={t('cloud115.indexedDirs')} value={String(status.indexedDirs)} />
@@ -471,38 +485,7 @@ export function Cloud115Settings() {
               <Stat label={t('cloud115.spaceRemain')} value={account.remainText} />
             </Row>
           ) : null}
-          <div style={{ ...GRID_ROW, marginTop: 24, marginBottom: 0 }}>
-            <div style={CELL}>
-              <Field.Root label={t('cloud115.cookie')} value={cookie} onValueChange={(value) => { setDirty(true); setCookie(value); }}>
-                <Field.Input
-                  type="password"
-                  placeholder={hasCookie ? t('cloud115.cookieKeep') : 'UID=…; CID=…; SEID=…'}
-                />
-                <Field.Hint>{t('cloud115.cookieHint')}</Field.Hint>
-              </Field.Root>
-            </div>
-            <div style={CELL}>
-              <Field.Root label={t('cloud115.baseUrl')} value={baseUrl} onValueChange={(value) => { setDirty(true); setBaseUrl(value); }}>
-                <Field.Input placeholder="http://192.168.1.10:4040" />
-                <Field.Hint>{t('cloud115.baseUrlHint')}</Field.Hint>
-              </Field.Root>
-            </div>
-            <Row gap={8}>
-              {cookie.trim() ? (
-                <Button
-                  label={t('cloud115.cookieImport')}
-                  variant="glass"
-                  size="sm"
-                  onPress={() => void importCookie()}
-                  disabled={busy}
-                />
-              ) : null}
-              {hasCookie ? (
-                <Button label={t('cloud115.clearCookie')} variant="ghost" size="sm" onPress={() => void clearCookie()} />
-              ) : null}
-            </Row>
-          </div>
-          <Row wrap gap={10} mt={18} center>
+          <Row wrap gap={10} mt={24} center>
             <select
               value={loginApp}
               onChange={(event) => setLoginApp(event.target.value)}
@@ -527,6 +510,40 @@ export function Cloud115Settings() {
               {t('cloud115.qrHint')}
             </Text>
           </Row>
+          <details style={DETAILS}>
+            <summary style={SUMMARY}>{t('cloud115.advanced')}</summary>
+            <div style={{ ...GRID_ROW, marginTop: 12, marginBottom: 0 }}>
+              <div style={CELL}>
+                <Field.Root label={t('cloud115.cookie')} value={cookie} onValueChange={(value) => { setDirty(true); setCookie(value); }}>
+                  <Field.Input
+                    type="password"
+                    placeholder={hasCookie ? t('cloud115.cookieKeep') : 'UID=…; CID=…; SEID=…'}
+                  />
+                  <Field.Hint>{t('cloud115.cookieHint')}</Field.Hint>
+                </Field.Root>
+              </div>
+              <div style={CELL}>
+                <Field.Root label={t('cloud115.baseUrl')} value={baseUrl} onValueChange={(value) => { setDirty(true); setBaseUrl(value); }}>
+                  <Field.Input placeholder="http://192.168.1.10:4040" />
+                  <Field.Hint>{t('cloud115.baseUrlHint')}</Field.Hint>
+                </Field.Root>
+              </div>
+              <Row gap={8}>
+                {cookie.trim() ? (
+                  <Button
+                    label={t('cloud115.cookieImport')}
+                    variant="glass"
+                    size="sm"
+                    onPress={() => void importCookie()}
+                    disabled={busy}
+                  />
+                ) : null}
+                {hasCookie ? (
+                  <Button label={t('cloud115.clearCookie')} variant="ghost" size="sm" onPress={() => void clearCookie()} />
+                ) : null}
+              </Row>
+            </div>
+          </details>
           {login ? (
             <Row wrap gap={20} mt={14} align="flex-start">
               <img
@@ -673,12 +690,7 @@ export function Cloud115Settings() {
         </Text>
         <Surface elevated border="border" pad="none" px={22} py={20}>
           <Row between gap={16} mb={16}>
-            <Box shrink={1} minW={0}>
-              <Text variant="cardTitle">{t('cloud115.watch')}</Text>
-              <Text variant="meta" color="textDim" mt={2}>
-                {t('cloud115.watchHint')}
-              </Text>
-            </Box>
+            <Text variant="cardTitle">{t('cloud115.watch')}</Text>
             <Switch
               checked={options.watchEnabled}
               onCheckedChange={(watchEnabled) => patchOptions({ watchEnabled })}

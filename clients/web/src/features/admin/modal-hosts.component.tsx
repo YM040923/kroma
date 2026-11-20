@@ -3,7 +3,7 @@
 import { ExportModal, ImportModal } from '#web/features/admin/backup-modals';
 import { StopStreamModal } from '#web/features/admin/dashboard-now-playing.component';
 import { ScheduleModal } from '#web/features/admin/jobs-schedule.component';
-import { AddLibraryModal, ManageLibraryModal } from '#web/features/admin/libraries-modals';
+import { AddLibraryModal } from '#web/features/admin/libraries-modals';
 import { InstallModal } from '#web/features/admin/module-install.component';
 import { PermissionsSheet } from '#web/features/admin/module-permissions-sheet.component';
 import { UploadConsentModal } from '#web/features/admin/module-upload-consent.component';
@@ -25,7 +25,6 @@ export function AdminModalHosts() {
       <ExportModal />
       <ImportModal />
       <AddLibraryModal />
-      <ManageLibraryModal />
       <ScheduleModal />
       <PipelineDrawer />
       <ReportDrawer />

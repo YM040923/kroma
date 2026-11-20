@@ -168,7 +168,10 @@ export function SearchPage({
   let body: ReactNode;
   if (search.source === 'douban') {
     body = searching ? (
-      <DoubanResults q={search.q} />
+      <DoubanResults
+        q={search.q}
+        onPick={(title) => onChange({ source: 'tmdb', q: title, page: 1 })}
+      />
     ) : (
       <EmptyState.Root icon="search">
         <EmptyState.Title>{t('discover.doubanHint')}</EmptyState.Title>

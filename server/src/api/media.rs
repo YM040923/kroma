@@ -367,12 +367,19 @@ pub async fn get_item(
 ) -> Result<Response, Response> {
     visibility::gate_item(&state, &user, &id).await?;
     let beside = state.external_subtitles.clone();
+    let library_folders: std::collections::HashMap<String, Vec<String>> =
+        crate::services::settings::library_defs(&state.settings, &state.config)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|def| (def.id, def.folders))
+            .collect();
     let item = query(&state.db, move |pool| {
         let Some(mut item) = db::get_item(&pool, &id)? else {
             return Ok(None);
         };
         db::localize::overlay_items(&pool, std::slice::from_mut(&mut item), locale)?;
-        beside.attach(&mut item);
+        let folders = library_folders.get(&item.library).cloned().unwrap_or_default();
+        beside.attach(&mut item, &folders);
         Ok(Some(item))
     })
     .await?

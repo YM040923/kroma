@@ -34,6 +34,10 @@ pub fn routes() -> Router<SharedState> {
             patch(update_library).delete(delete_library),
         )
         .route("/libraries/{id}/scan", post(scan_library))
+        .route(
+            "/libraries/{id}/refresh-metadata",
+            post(refresh_library_metadata),
+        )
 }
 
 async fn configured(state: &SharedState, user: &User) -> Result<Vec<LibraryDef>, Response> {
@@ -86,7 +90,13 @@ pub async fn list_libraries(
             }
         })
         .collect();
-    Ok(Json(json!({ "libraries": libraries })).into_response())
+    let defaults = settings::scrape_defaults(&state.settings, &state.config);
+    Ok(Json(json!({
+        "libraries": libraries,
+        "scrapeDefaults": { "languagePriority": defaults.language_priority.unwrap_or_default() },
+        "languages": settings::language_tags(),
+    }))
+    .into_response())
 }
 
 fn kind_label(def: &LibraryDef, _st: Option<&crate::model::LibraryStat>) -> String {
@@ -186,10 +196,6 @@ pub async fn update_library(
     if let Some(auto) = body.auto_scan {
         def.auto_scan = auto;
     }
-    let scrape_changed = body
-        .scrape
-        .as_ref()
-        .is_some_and(|scrape| *scrape != settings::library_scrape(&state.settings, &id));
     if let Some(scrape) = body.scrape {
         settings::set_library_scrape(&state.settings, &state.db, &id, &scrape);
     }
@@ -197,11 +203,21 @@ pub async fn update_library(
     if needs_scan {
         spawn_rescan(state.clone());
     }
-    if scrape_changed {
-        rescrape_metadata(state.clone()).await;
-    }
     state.events.publish(ServerEvent::LibraryUpdated);
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+/// Applies the saved scraping choices to titles that are already matched.
+/// Saving a library no longer re-queues the whole catalog on every keystroke;
+/// this is the explicit "refresh metadata" the pending-changes banner offers.
+pub async fn refresh_library_metadata(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    AxPath(_id): AxPath<String>,
+) -> Result<Response, Response> {
+    super::require(&user, Permission::LibraryManage)?;
+    rescrape_metadata(state.clone()).await;
+    Ok(Json(json!({ "started": true })).into_response())
 }
 
 /// The vanished library and its items are cascade-deleted by the diff-sync.

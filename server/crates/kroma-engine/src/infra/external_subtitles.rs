@@ -47,18 +47,30 @@ impl ExternalSubtitles {
     /// to the item itself. A file nothing has probed yet is left alone: the item
     /// carries no embedded track to put these after, and the index a client
     /// would build would move once the probe landed.
-    pub fn attach(&self, item: &mut MediaItem) {
+    ///
+    /// A streamed library stores the play URL in `abs_path`, so the folder is
+    /// resolved from the library roots and the file's relative path; otherwise
+    /// a subtitle sitting beside the `.strm` would never be found.
+    pub fn attach(&self, item: &mut MediaItem, folders: &[String]) {
         for file in &mut item.files {
-            let Some(abs) = file.abs_path.clone().filter(|_| file.probed) else {
+            if !file.probed {
                 continue;
-            };
-            file.subtitles.extend(self.tracks_of(&abs));
+            }
+            let abs = disk_path(&file.abs_path, file.rel_path.as_deref(), folders);
+            if let Some(abs) = abs {
+                file.subtitles.extend(self.tracks_of(&abs.to_string_lossy()));
+            }
         }
-        let Some(abs) = item.abs_path.clone() else {
+        if !item.files.iter().any(|file| file.probed) {
             return;
-        };
-        if item.files.iter().any(|file| file.probed) {
-            item.subtitles.extend(self.tracks_of(&abs));
+        }
+        let abs = disk_path(
+            item.abs_path.as_deref().unwrap_or_default(),
+            item.rel_path.as_deref(),
+            folders,
+        );
+        if let Some(abs) = abs {
+            item.subtitles.extend(self.tracks_of(&abs.to_string_lossy()));
         }
     }
 
@@ -84,6 +96,25 @@ impl ExternalSubtitles {
         let listing = held.get(folder)?;
         (listing.read_at.elapsed() < REMEMBERED_FOR).then(|| Arc::clone(&listing.files))
     }
+}
+
+/// The path a sidecar subtitle search should list. Local files keep their
+/// stored path; a stream URL is replaced by the `.strm` under one of the
+/// library's roots, exactly like the NFO writer does.
+fn disk_path(abs: &str, rel: Option<&str>, folders: &[String]) -> Option<PathBuf> {
+    let abs = abs.trim();
+    if !abs.is_empty() && !abs.starts_with("http://") && !abs.starts_with("https://") {
+        return Some(PathBuf::from(abs));
+    }
+    let rel = rel?.trim();
+    if rel.is_empty() {
+        return None;
+    }
+    folders
+        .iter()
+        .map(|folder| Path::new(folder).join(rel))
+        .find(|path| path.exists())
+        .or_else(|| folders.first().map(|folder| Path::new(folder).join(rel)))
 }
 
 fn as_track(found: ExternalSubtitle) -> SubtitleTrack {
@@ -261,12 +292,34 @@ mod tests {
         write(&dir.path().join("Film/Film.fr.srt"));
         let mut item = item_over(&film, true);
 
-        ExternalSubtitles::default().attach(&mut item);
+        ExternalSubtitles::default().attach(&mut item, &[]);
 
         assert_eq!(item.subtitles.len(), 2);
         assert_eq!(item.subtitles[0].language.as_deref(), Some("eng"));
         assert_eq!(item.subtitles[1].language.as_deref(), Some("fr"));
         assert_eq!(item.files[0].subtitles.len(), 1);
+    }
+
+    #[test]
+    fn a_strm_sidecar_is_found_through_the_library_root() {
+        let dir = scratch("strm-beside");
+        let library = dir.path().join("lib");
+        let strm = library.join("Show/Show.S01E01.strm");
+        write(&strm);
+        write(&library.join("Show/Show.S01E01.zh.ass"));
+        let mut item = item_over(&strm, true);
+        item.abs_path = Some("https://cdn.example/play?pc=abc".into());
+        item.rel_path = Some("Show/Show.S01E01.strm".into());
+        item.files[0].abs_path = item.abs_path.clone();
+        item.files[0].rel_path = Some("Show/Show.S01E01.strm".into());
+        let folders = vec![library.to_string_lossy().into_owned()];
+
+        ExternalSubtitles::default().attach(&mut item, &folders);
+
+        let external = item.subtitles.last().expect("a text track beside the .strm");
+        assert_eq!(external.language.as_deref(), Some("zh"));
+        assert_eq!(external.codec, "ass");
+        assert_eq!(item.subtitles.len(), 2, "embedded first, then the sidecar");
     }
 
     #[test]
@@ -277,7 +330,7 @@ mod tests {
         write(&dir.path().join("Film/Film.fr.srt"));
         let mut item = item_over(&film, false);
 
-        ExternalSubtitles::default().attach(&mut item);
+        ExternalSubtitles::default().attach(&mut item, &[]);
 
         assert_eq!(item.subtitles.len(), 1);
         assert!(item.files[0].subtitles.is_empty());

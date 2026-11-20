@@ -75,6 +75,15 @@ pub(super) fn tmdb_language_options() -> Vec<String> {
     options_for(i18n::content_locales())
 }
 
+/// The regioned tags a household can rank, without the `Auto` sentinel: what
+/// the scraping language chips are built from.
+pub fn language_tags() -> Vec<String> {
+    tmdb_language_options()
+        .into_iter()
+        .filter(|tag| tag != TMDB_LANGUAGE_AUTO)
+        .collect()
+}
+
 // TMDB takes a regional code and the region changes the artwork it picks, so
 // each language offers the one it is usually wanted in.
 fn options_for(locales: &[&str]) -> Vec<String> {

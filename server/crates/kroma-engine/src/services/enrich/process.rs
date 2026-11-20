@@ -431,18 +431,12 @@ pub(super) fn process_job(
     if let Some(activity) = activity {
         activity::enrich_current(activity, job.title.clone());
     }
-    // A library may scrape in its own language; everything below reads the
-    // engine, so overriding the clone keeps every lookup on one language.
+    // A library may scrape with its own language list; everything below reads
+    // the engine, so overriding the clone keeps every lookup on the library's
+    // primary language.
     let mut local = eng.clone();
-    if let Some(options) = local.scrape.get(&job.library) {
-        if let Some(language) = options
-            .language
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            local.language = language.to_string();
-        }
+    if let Some(first) = local.priority_for(&job.library).into_iter().next() {
+        local.language = first;
     }
     let eng = &local;
     let mut job = job;

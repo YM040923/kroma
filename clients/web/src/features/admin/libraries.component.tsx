@@ -1,5 +1,6 @@
 import type { Activity } from '@kromatv/client/admin';
 import type { AdminLibrary } from '@kromatv/client/library';
+import { langName } from '@kromatv/core';
 import { useFormat, useT } from '@kromatv/ui';
 import {
   Box,
@@ -15,10 +16,10 @@ import {
   Surface,
   Text,
 } from '@kromatv/ui/kit';
+import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import {
   AddLibraryModal,
-  ManageLibraryModal,
   normalizeLibKind,
 } from '#web/features/admin/libraries-modals';
 import { Pill } from '#web/features/admin/pill.component';
@@ -53,6 +54,8 @@ export function LibrariesScreen() {
 function LibrariesPageInner() {
   const t = useT();
   const { client } = useAuth();
+  const navigate = useNavigate();
+  const canScrape = useCap('settings.manage');
   const { data, reload } = usePoll(['admin', 'libraries'], () => client.library.list(), 8000);
   const { data: activity } = usePoll(['admin', 'status'], () => client.admin.status(), 3000);
 
@@ -61,13 +64,12 @@ function LibrariesPageInner() {
       await reload();
     }
   };
-  const openManage = async (lib: AdminLibrary) => {
-    await ManageLibraryModal.call({ lib });
-    // The cover picker inside the modal writes on its own, so refresh either way.
-    await reload();
+  const openManage = (lib: AdminLibrary) => {
+    void navigate({ to: '/admin/libraries/$id', params: { id: lib.id } });
   };
 
   const libraries = data?.libraries ?? [];
+  const defaults = data?.scrapeDefaults?.languagePriority ?? [];
 
   return (
     <>
@@ -75,6 +77,14 @@ function LibrariesPageInner() {
         <PageHeader.Title>{t('admin.librariesTitle')}</PageHeader.Title>
         <PageHeader.Subtitle>{t('admin.librariesSub')}</PageHeader.Subtitle>
         <PageHeader.Actions>
+          {canScrape ? (
+            <Button
+              variant="glass"
+              icon="language"
+              label={t('admin.scrapeTitle')}
+              onPress={() => void navigate({ to: '/admin/scrape' })}
+            />
+          ) : null}
           <Button
             variant="primary"
             icon="plus"
@@ -95,8 +105,9 @@ function LibrariesPageInner() {
               <LibraryCard
                 key={l.id}
                 lib={l}
+                defaults={defaults}
                 scanning={activity?.scanning ?? false}
-                onManage={() => void openManage(l)}
+                onManage={() => openManage(l)}
               />
             ))}
           </Grid>
@@ -177,10 +188,12 @@ function LibraryActivity({ activity }: Readonly<{ activity: Activity }>) {
 
 function LibraryCard({
   lib,
+  defaults,
   scanning,
   onManage,
 }: Readonly<{
   lib: AdminLibrary;
+  defaults: string[];
   scanning: boolean;
   onManage: () => void;
 }>) {
@@ -201,6 +214,8 @@ function LibraryCard({
   const glyph = ICONS[lib.kind] ?? 'movie';
   const cover = imageUrl(lib.cover);
   const busyScan = scanning || starting;
+  const priority = lib.scrape.languagePriority ?? defaults;
+  const language = priority.map((tag) => langName(t, tag) ?? tag).join(' → ');
 
   return (
     <Surface elevated pad="none" radius="xl" border="border" overflow="hidden">
@@ -223,6 +238,12 @@ function LibraryCard({
           <Text variant="meta" color="textDim">
             {t(KIND_LABEL[normalizeLibKind(lib.kind)])} ·{' '}
             {t('admin.itemsCount', { count: lib.itemCount })}
+          </Text>
+          <Text variant="meta" color="textDim" lines={1}>
+            {lib.scrape.languagePriority?.length
+              ? t('admin.overridden')
+              : t('admin.followGlobal')}
+            {language ? ` · ${language}` : ''}
           </Text>
         </Box>
         {lib.autoScan ? (

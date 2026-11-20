@@ -22,7 +22,6 @@ import { Route as AppSplatRouteImport } from './routes/_app.$';
 import { Route as AppPlayerRouteImport } from './routes/_app._player';
 import { Route as AppAccountRouteImport } from './routes/_app.account';
 import { Route as AppConnectRouteImport } from './routes/_app.connect';
-import { Route as AppDoubanRouteImport } from './routes/_app.douban';
 import { Route as AppHistoryRouteImport } from './routes/_app.history';
 import { Route as AppInviteRouteImport } from './routes/_app.invite';
 import { Route as AppMyListRouteImport } from './routes/_app.my-list';
@@ -44,6 +43,7 @@ import { Route as AdminNetworkRouteImport } from './routes/admin.network';
 import { Route as AdminNotificationsRouteImport } from './routes/admin.notifications';
 import { Route as AdminPipelineRouteImport } from './routes/admin.pipeline';
 import { Route as AdminReportsRouteImport } from './routes/admin.reports';
+import { Route as AdminScrapeRouteImport } from './routes/admin.scrape';
 import { Route as AdminSignInRouteImport } from './routes/admin.sign-in';
 import { Route as AdminStorageRouteImport } from './routes/admin.storage';
 import { Route as AdminStoreRouteImport } from './routes/admin.store';
@@ -51,7 +51,6 @@ import { Route as AdminTranscoderRouteImport } from './routes/admin.transcoder';
 import { Route as AdminUpdatesRouteImport } from './routes/admin.updates';
 import { Route as AdminUsersRouteImport } from './routes/admin.users';
 import { Route as SSlugRouteImport } from './routes/s.$slug';
-import { Route as AppDoubanIdRouteImport } from './routes/_app.douban.$id';
 import { Route as AppGenresIndexRouteImport } from './routes/_app.genres.index';
 import { Route as AppGenresIdRouteImport } from './routes/_app.genres.$id';
 import { Route as AppMoviesIndexRouteImport } from './routes/_app.movies.index';
@@ -60,6 +59,7 @@ import { Route as AppPeoplePersonRouteImport } from './routes/_app.people.$perso
 import { Route as AppShowsIndexRouteImport } from './routes/_app.shows.index';
 import { Route as AppShowsIdRouteImport } from './routes/_app.shows.$id';
 import { Route as AppTrendingTypeRouteImport } from './routes/_app.trending.$type';
+import { Route as AdminLibrariesIdRouteImport } from './routes/admin.libraries.$id';
 import { Route as AdminModulesIndexRouteImport } from './routes/admin.modules.index';
 import { Route as AdminModulesIdRouteImport } from './routes/admin.modules.$id';
 import { Route as AdminMonitoringIndexRouteImport } from './routes/admin.monitoring.index';
@@ -130,11 +130,6 @@ const AppAccountRoute = AppAccountRouteImport.update({
 const AppConnectRoute = AppConnectRouteImport.update({
   id: '/connect',
   path: '/connect',
-  getParentRoute: () => AppRoute,
-} as any);
-const AppDoubanRoute = AppDoubanRouteImport.update({
-  id: '/douban',
-  path: '/douban',
   getParentRoute: () => AppRoute,
 } as any);
 const AppHistoryRoute = AppHistoryRouteImport.update({
@@ -242,6 +237,11 @@ const AdminReportsRoute = AdminReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AdminRoute,
 } as any);
+const AdminScrapeRoute = AdminScrapeRouteImport.update({
+  id: '/scrape',
+  path: '/scrape',
+  getParentRoute: () => AdminRoute,
+} as any);
 const AdminSignInRoute = AdminSignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
@@ -276,11 +276,6 @@ const SSlugRoute = SSlugRouteImport.update({
   id: '/s/$slug',
   path: '/s/$slug',
   getParentRoute: () => rootRouteImport,
-} as any);
-const AppDoubanIdRoute = AppDoubanIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AppDoubanRoute,
 } as any);
 const AppGenresIndexRoute = AppGenresIndexRouteImport.update({
   id: '/genres/',
@@ -321,6 +316,11 @@ const AppTrendingTypeRoute = AppTrendingTypeRouteImport.update({
   id: '/trending/$type',
   path: '/trending/$type',
   getParentRoute: () => AppRoute,
+} as any);
+const AdminLibrariesIdRoute = AdminLibrariesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdminLibrariesRoute,
 } as any);
 const AdminModulesIndexRoute = AdminModulesIndexRouteImport.update({
   id: '/modules/',
@@ -377,7 +377,6 @@ export interface FileRoutesByFullPath {
   '/$': typeof AppSplatRoute;
   '/account': typeof AppAccountRoute;
   '/connect': typeof AppConnectRoute;
-  '/douban': typeof AppDoubanRouteWithChildren;
   '/history': typeof AppHistoryRoute;
   '/invite': typeof AppInviteRoute;
   '/my-list': typeof AppMyListRoute;
@@ -392,12 +391,13 @@ export interface FileRoutesByFullPath {
   '/admin/general': typeof AdminGeneralRoute;
   '/admin/history': typeof AdminHistoryRoute;
   '/admin/jobs': typeof AdminJobsRoute;
-  '/admin/libraries': typeof AdminLibrariesRoute;
+  '/admin/libraries': typeof AdminLibrariesRouteWithChildren;
   '/admin/logs': typeof AdminLogsRoute;
   '/admin/network': typeof AdminNetworkRoute;
   '/admin/notifications': typeof AdminNotificationsRoute;
   '/admin/pipeline': typeof AdminPipelineRoute;
   '/admin/reports': typeof AdminReportsRoute;
+  '/admin/scrape': typeof AdminScrapeRoute;
   '/admin/sign-in': typeof AdminSignInRoute;
   '/admin/storage': typeof AdminStorageRoute;
   '/admin/store': typeof AdminStoreRoute;
@@ -406,12 +406,12 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminUsersRoute;
   '/s/$slug': typeof SSlugRoute;
   '/admin/': typeof AdminIndexRoute;
-  '/douban/$id': typeof AppDoubanIdRoute;
   '/genres/$id': typeof AppGenresIdRoute;
   '/movies/$id': typeof AppMoviesIdRoute;
   '/people/$person': typeof AppPeoplePersonRoute;
   '/shows/$id': typeof AppShowsIdRoute;
   '/trending/$type': typeof AppTrendingTypeRoute;
+  '/admin/libraries/$id': typeof AdminLibrariesIdRoute;
   '/admin/modules/$id': typeof AdminModulesIdRoute;
   '/admin/requests/$id': typeof AdminRequestsIdRoute;
   '/genres/': typeof AppGenresIndexRoute;
@@ -435,7 +435,6 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute;
   '/account': typeof AppAccountRoute;
   '/connect': typeof AppConnectRoute;
-  '/douban': typeof AppDoubanRouteWithChildren;
   '/history': typeof AppHistoryRoute;
   '/invite': typeof AppInviteRoute;
   '/my-list': typeof AppMyListRoute;
@@ -450,12 +449,13 @@ export interface FileRoutesByTo {
   '/admin/general': typeof AdminGeneralRoute;
   '/admin/history': typeof AdminHistoryRoute;
   '/admin/jobs': typeof AdminJobsRoute;
-  '/admin/libraries': typeof AdminLibrariesRoute;
+  '/admin/libraries': typeof AdminLibrariesRouteWithChildren;
   '/admin/logs': typeof AdminLogsRoute;
   '/admin/network': typeof AdminNetworkRoute;
   '/admin/notifications': typeof AdminNotificationsRoute;
   '/admin/pipeline': typeof AdminPipelineRoute;
   '/admin/reports': typeof AdminReportsRoute;
+  '/admin/scrape': typeof AdminScrapeRoute;
   '/admin/sign-in': typeof AdminSignInRoute;
   '/admin/storage': typeof AdminStorageRoute;
   '/admin/store': typeof AdminStoreRoute;
@@ -464,12 +464,12 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminUsersRoute;
   '/s/$slug': typeof SSlugRoute;
   '/admin': typeof AdminIndexRoute;
-  '/douban/$id': typeof AppDoubanIdRoute;
   '/genres/$id': typeof AppGenresIdRoute;
   '/movies/$id': typeof AppMoviesIdRoute;
   '/people/$person': typeof AppPeoplePersonRoute;
   '/shows/$id': typeof AppShowsIdRoute;
   '/trending/$type': typeof AppTrendingTypeRoute;
+  '/admin/libraries/$id': typeof AdminLibrariesIdRoute;
   '/admin/modules/$id': typeof AdminModulesIdRoute;
   '/admin/requests/$id': typeof AdminRequestsIdRoute;
   '/genres': typeof AppGenresIndexRoute;
@@ -496,7 +496,6 @@ export interface FileRoutesById {
   '/_app/_player': typeof AppPlayerRouteWithChildren;
   '/_app/account': typeof AppAccountRoute;
   '/_app/connect': typeof AppConnectRoute;
-  '/_app/douban': typeof AppDoubanRouteWithChildren;
   '/_app/history': typeof AppHistoryRoute;
   '/_app/invite': typeof AppInviteRoute;
   '/_app/my-list': typeof AppMyListRoute;
@@ -511,12 +510,13 @@ export interface FileRoutesById {
   '/admin/general': typeof AdminGeneralRoute;
   '/admin/history': typeof AdminHistoryRoute;
   '/admin/jobs': typeof AdminJobsRoute;
-  '/admin/libraries': typeof AdminLibrariesRoute;
+  '/admin/libraries': typeof AdminLibrariesRouteWithChildren;
   '/admin/logs': typeof AdminLogsRoute;
   '/admin/network': typeof AdminNetworkRoute;
   '/admin/notifications': typeof AdminNotificationsRoute;
   '/admin/pipeline': typeof AdminPipelineRoute;
   '/admin/reports': typeof AdminReportsRoute;
+  '/admin/scrape': typeof AdminScrapeRoute;
   '/admin/sign-in': typeof AdminSignInRoute;
   '/admin/storage': typeof AdminStorageRoute;
   '/admin/store': typeof AdminStoreRoute;
@@ -526,12 +526,12 @@ export interface FileRoutesById {
   '/s/$slug': typeof SSlugRoute;
   '/_app/': typeof AppIndexRoute;
   '/admin/': typeof AdminIndexRoute;
-  '/_app/douban/$id': typeof AppDoubanIdRoute;
   '/_app/genres/$id': typeof AppGenresIdRoute;
   '/_app/movies/$id': typeof AppMoviesIdRoute;
   '/_app/people/$person': typeof AppPeoplePersonRoute;
   '/_app/shows/$id': typeof AppShowsIdRoute;
   '/_app/trending/$type': typeof AppTrendingTypeRoute;
+  '/admin/libraries/$id': typeof AdminLibrariesIdRoute;
   '/admin/modules/$id': typeof AdminModulesIdRoute;
   '/admin/requests/$id': typeof AdminRequestsIdRoute;
   '/_app/genres/': typeof AppGenresIndexRoute;
@@ -558,7 +558,6 @@ export interface FileRouteTypes {
     | '/$'
     | '/account'
     | '/connect'
-    | '/douban'
     | '/history'
     | '/invite'
     | '/my-list'
@@ -579,6 +578,7 @@ export interface FileRouteTypes {
     | '/admin/notifications'
     | '/admin/pipeline'
     | '/admin/reports'
+    | '/admin/scrape'
     | '/admin/sign-in'
     | '/admin/storage'
     | '/admin/store'
@@ -587,12 +587,12 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/s/$slug'
     | '/admin/'
-    | '/douban/$id'
     | '/genres/$id'
     | '/movies/$id'
     | '/people/$person'
     | '/shows/$id'
     | '/trending/$type'
+    | '/admin/libraries/$id'
     | '/admin/modules/$id'
     | '/admin/requests/$id'
     | '/genres/'
@@ -616,7 +616,6 @@ export interface FileRouteTypes {
     | '/'
     | '/account'
     | '/connect'
-    | '/douban'
     | '/history'
     | '/invite'
     | '/my-list'
@@ -637,6 +636,7 @@ export interface FileRouteTypes {
     | '/admin/notifications'
     | '/admin/pipeline'
     | '/admin/reports'
+    | '/admin/scrape'
     | '/admin/sign-in'
     | '/admin/storage'
     | '/admin/store'
@@ -645,12 +645,12 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/s/$slug'
     | '/admin'
-    | '/douban/$id'
     | '/genres/$id'
     | '/movies/$id'
     | '/people/$person'
     | '/shows/$id'
     | '/trending/$type'
+    | '/admin/libraries/$id'
     | '/admin/modules/$id'
     | '/admin/requests/$id'
     | '/genres'
@@ -676,7 +676,6 @@ export interface FileRouteTypes {
     | '/_app/_player'
     | '/_app/account'
     | '/_app/connect'
-    | '/_app/douban'
     | '/_app/history'
     | '/_app/invite'
     | '/_app/my-list'
@@ -697,6 +696,7 @@ export interface FileRouteTypes {
     | '/admin/notifications'
     | '/admin/pipeline'
     | '/admin/reports'
+    | '/admin/scrape'
     | '/admin/sign-in'
     | '/admin/storage'
     | '/admin/store'
@@ -706,12 +706,12 @@ export interface FileRouteTypes {
     | '/s/$slug'
     | '/_app/'
     | '/admin/'
-    | '/_app/douban/$id'
     | '/_app/genres/$id'
     | '/_app/movies/$id'
     | '/_app/people/$person'
     | '/_app/shows/$id'
     | '/_app/trending/$type'
+    | '/admin/libraries/$id'
     | '/admin/modules/$id'
     | '/admin/requests/$id'
     | '/_app/genres/'
@@ -828,13 +828,6 @@ declare module '@tanstack/react-router' {
       path: '/connect';
       fullPath: '/connect';
       preLoaderRoute: typeof AppConnectRouteImport;
-      parentRoute: typeof AppRoute;
-    };
-    '/_app/douban': {
-      id: '/_app/douban';
-      path: '/douban';
-      fullPath: '/douban';
-      preLoaderRoute: typeof AppDoubanRouteImport;
       parentRoute: typeof AppRoute;
     };
     '/_app/history': {
@@ -984,6 +977,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminReportsRouteImport;
       parentRoute: typeof AdminRoute;
     };
+    '/admin/scrape': {
+      id: '/admin/scrape';
+      path: '/scrape';
+      fullPath: '/admin/scrape';
+      preLoaderRoute: typeof AdminScrapeRouteImport;
+      parentRoute: typeof AdminRoute;
+    };
     '/admin/sign-in': {
       id: '/admin/sign-in';
       path: '/sign-in';
@@ -1032,13 +1032,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/s/$slug';
       preLoaderRoute: typeof SSlugRouteImport;
       parentRoute: typeof rootRouteImport;
-    };
-    '/_app/douban/$id': {
-      id: '/_app/douban/$id';
-      path: '/$id';
-      fullPath: '/douban/$id';
-      preLoaderRoute: typeof AppDoubanIdRouteImport;
-      parentRoute: typeof AppDoubanRoute;
     };
     '/_app/genres/': {
       id: '/_app/genres/';
@@ -1095,6 +1088,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/trending/$type';
       preLoaderRoute: typeof AppTrendingTypeRouteImport;
       parentRoute: typeof AppRoute;
+    };
+    '/admin/libraries/$id': {
+      id: '/admin/libraries/$id';
+      path: '/$id';
+      fullPath: '/admin/libraries/$id';
+      preLoaderRoute: typeof AdminLibrariesIdRouteImport;
+      parentRoute: typeof AdminLibrariesRoute;
     };
     '/admin/modules/': {
       id: '/admin/modules/';
@@ -1169,24 +1169,11 @@ const AppPlayerRouteWithChildren = AppPlayerRoute._addFileChildren(
   AppPlayerRouteChildren,
 );
 
-interface AppDoubanRouteChildren {
-  AppDoubanIdRoute: typeof AppDoubanIdRoute;
-}
-
-const AppDoubanRouteChildren: AppDoubanRouteChildren = {
-  AppDoubanIdRoute: AppDoubanIdRoute,
-};
-
-const AppDoubanRouteWithChildren = AppDoubanRoute._addFileChildren(
-  AppDoubanRouteChildren,
-);
-
 interface AppRouteChildren {
   AppSplatRoute: typeof AppSplatRoute;
   AppPlayerRoute: typeof AppPlayerRouteWithChildren;
   AppAccountRoute: typeof AppAccountRoute;
   AppConnectRoute: typeof AppConnectRoute;
-  AppDoubanRoute: typeof AppDoubanRouteWithChildren;
   AppHistoryRoute: typeof AppHistoryRoute;
   AppInviteRoute: typeof AppInviteRoute;
   AppMyListRoute: typeof AppMyListRoute;
@@ -1212,7 +1199,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppPlayerRoute: AppPlayerRouteWithChildren,
   AppAccountRoute: AppAccountRoute,
   AppConnectRoute: AppConnectRoute,
-  AppDoubanRoute: AppDoubanRouteWithChildren,
   AppHistoryRoute: AppHistoryRoute,
   AppInviteRoute: AppInviteRoute,
   AppMyListRoute: AppMyListRoute,
@@ -1235,6 +1221,18 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren);
 
+interface AdminLibrariesRouteChildren {
+  AdminLibrariesIdRoute: typeof AdminLibrariesIdRoute;
+}
+
+const AdminLibrariesRouteChildren: AdminLibrariesRouteChildren = {
+  AdminLibrariesIdRoute: AdminLibrariesIdRoute,
+};
+
+const AdminLibrariesRouteWithChildren = AdminLibrariesRoute._addFileChildren(
+  AdminLibrariesRouteChildren,
+);
+
 interface AdminRouteChildren {
   AdminSplatRoute: typeof AdminSplatRoute;
   AdminAiRoute: typeof AdminAiRoute;
@@ -1242,12 +1240,13 @@ interface AdminRouteChildren {
   AdminGeneralRoute: typeof AdminGeneralRoute;
   AdminHistoryRoute: typeof AdminHistoryRoute;
   AdminJobsRoute: typeof AdminJobsRoute;
-  AdminLibrariesRoute: typeof AdminLibrariesRoute;
+  AdminLibrariesRoute: typeof AdminLibrariesRouteWithChildren;
   AdminLogsRoute: typeof AdminLogsRoute;
   AdminNetworkRoute: typeof AdminNetworkRoute;
   AdminNotificationsRoute: typeof AdminNotificationsRoute;
   AdminPipelineRoute: typeof AdminPipelineRoute;
   AdminReportsRoute: typeof AdminReportsRoute;
+  AdminScrapeRoute: typeof AdminScrapeRoute;
   AdminSignInRoute: typeof AdminSignInRoute;
   AdminStorageRoute: typeof AdminStorageRoute;
   AdminStoreRoute: typeof AdminStoreRoute;
@@ -1269,12 +1268,13 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminGeneralRoute: AdminGeneralRoute,
   AdminHistoryRoute: AdminHistoryRoute,
   AdminJobsRoute: AdminJobsRoute,
-  AdminLibrariesRoute: AdminLibrariesRoute,
+  AdminLibrariesRoute: AdminLibrariesRouteWithChildren,
   AdminLogsRoute: AdminLogsRoute,
   AdminNetworkRoute: AdminNetworkRoute,
   AdminNotificationsRoute: AdminNotificationsRoute,
   AdminPipelineRoute: AdminPipelineRoute,
   AdminReportsRoute: AdminReportsRoute,
+  AdminScrapeRoute: AdminScrapeRoute,
   AdminSignInRoute: AdminSignInRoute,
   AdminStorageRoute: AdminStorageRoute,
   AdminStoreRoute: AdminStoreRoute,

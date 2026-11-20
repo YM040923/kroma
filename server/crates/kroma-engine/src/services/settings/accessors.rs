@@ -164,7 +164,13 @@ fn default_true() -> bool {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ScrapeOptions {
+    /// The primary language, kept in sync with `language_priority[0]` so every
+    /// reader that still asks for one tag keeps working.
     pub language: Option<String>,
+    /// Ordered language fallbacks: TMDB is asked in the first one, the rest
+    /// fill fields the primary translation does not carry. None = follow the
+    /// global default, never "no language".
+    pub language_priority: Option<Vec<String>>,
     pub nfo: bool,
     pub poster_language: Option<String>,
     pub backdrop_language: Option<String>,
@@ -177,8 +183,41 @@ pub struct ScrapeOptions {
     pub artwork_refresh_days: Option<u16>,
 }
 
+/// Trim, dedupe and cap an ordered language list. The cap is what the UI
+/// promises: a primary plus at most two fallbacks.
+pub fn clean_language_priority(values: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for tag in values {
+        let tag = tag.trim();
+        if tag.is_empty() || tag.len() > 16 {
+            continue;
+        }
+        if !out.iter().any(|held| held.eq_ignore_ascii_case(tag)) {
+            out.push(tag.to_string());
+        }
+        if out.len() == 3 {
+            break;
+        }
+    }
+    out
+}
+
 impl ScrapeOptions {
     fn sane(mut self) -> Self {
+        self.language_priority = self
+            .language_priority
+            .map(clean_language_priority)
+            .filter(|list| !list.is_empty());
+        if self.language_priority.is_none() {
+            self.language_priority = self
+                .language
+                .as_deref()
+                .map(|tag| clean_language_priority(vec![tag.to_string()]))
+                .filter(|list| !list.is_empty());
+        }
+        if let Some(first) = self.language_priority.as_ref().and_then(|list| list.first()) {
+            self.language = Some(first.clone());
+        }
         self.backdrop_count = self.backdrop_count.map(|count| count.min(8));
         self.artwork_size = self
             .artwork_size
@@ -238,6 +277,60 @@ pub fn set_library_scrape(
     let mut patch = BTreeMap::new();
     patch.insert("libraryScrape".to_string(), Value::Object(map));
     settings.set_patch(pool, patch);
+}
+
+/// The household defaults every library follows until it overrides them.
+/// Stored under `scrapeDefaults`; the primary tag is mirrored into
+/// `tmdbLanguage`, which is what the enrichment engine has always read.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ScrapeDefaults {
+    pub language_priority: Option<Vec<String>>,
+}
+
+pub fn scrape_defaults(settings: &Settings, config: &crate::config::Config) -> ScrapeDefaults {
+    let mut defaults: ScrapeDefaults =
+        serde_json::from_value(settings.get("scrapeDefaults")).unwrap_or_default();
+    defaults.language_priority = defaults
+        .language_priority
+        .map(clean_language_priority)
+        .filter(|list| !list.is_empty());
+    if defaults.language_priority.is_none() {
+        defaults.language_priority = Some(vec![metadata_language(settings, config)]);
+    }
+    defaults
+}
+
+pub fn set_scrape_defaults(settings: &Settings, pool: &Pool, priority: Vec<String>) {
+    let priority = clean_language_priority(priority);
+    let mut patch = BTreeMap::new();
+    patch.insert(
+        "scrapeDefaults".to_string(),
+        json!({ "languagePriority": priority }),
+    );
+    if let Some(first) = priority.first() {
+        patch.insert("tmdbLanguage".to_string(), json!(first));
+    }
+    settings.set_patch(pool, patch);
+}
+
+/// A library's options with the global language filled in when the library
+/// itself has no list. Artwork and NFO choices pass through untouched.
+pub fn effective_library_scrape(
+    settings: &Settings,
+    config: &crate::config::Config,
+    library_id: &str,
+) -> ScrapeOptions {
+    let mut options = library_scrape(settings, library_id);
+    if options.language_priority.is_none() {
+        options.language_priority = scrape_defaults(settings, config).language_priority;
+        options.language = options
+            .language_priority
+            .as_ref()
+            .and_then(|list| list.first())
+            .cloned();
+    }
+    options
 }
 
 /// The effective library definitions: persisted defs if present, else seeded
@@ -690,6 +783,7 @@ mod tests {
 
         let wanted = ScrapeOptions {
             language: Some("en-US".to_string()),
+            language_priority: Some(vec!["en-US".to_string()]),
             nfo: true,
             poster_language: Some("textless".to_string()),
             backdrop_language: None,

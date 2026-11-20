@@ -19,6 +19,8 @@ pub(super) struct Engine {
     /// Per-library scrape choices, by library id. A missing entry follows the
     /// global language and leaves NFO/art preferences alone.
     pub(super) scrape: BTreeMap<String, crate::services::settings::ScrapeOptions>,
+    /// The household language list a library follows until it overrides it.
+    pub(super) default_priority: Vec<String>,
     /// Library id -> scan folders, to find a `.strm` whose stored path is the
     /// stream URL rather than the file on disk.
     pub(super) folders: BTreeMap<String, Vec<String>>,
@@ -26,6 +28,17 @@ pub(super) struct Engine {
     pub(super) theme_songs: bool,
     pub(super) bus: Bus,
     pub(super) embedder: Point,
+}
+
+impl Engine {
+    /// The ordered languages for one library: its own list, else the household
+    /// default. Never empty once the engine has been built.
+    pub(super) fn priority_for(&self, library: &str) -> Vec<String> {
+        self.scrape
+            .get(library)
+            .and_then(|options| options.language_priority.clone())
+            .unwrap_or_else(|| self.default_priority.clone())
+    }
 }
 
 #[derive(Default)]
@@ -43,6 +56,12 @@ pub(super) fn engine_for(state: &SharedState, api_key: String) -> Engine {
         cache: state.metadata_cache.clone(),
         api_key,
         language: crate::services::settings::metadata_language(&state.settings, &state.config),
+        default_priority: crate::services::settings::scrape_defaults(
+            &state.settings,
+            &state.config,
+        )
+        .language_priority
+        .unwrap_or_default(),
         scrape: crate::services::settings::all_library_scrape(&state.settings),
         folders: crate::services::settings::library_defs(&state.settings, &state.config)
             .unwrap_or_default()

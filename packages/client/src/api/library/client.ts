@@ -2,9 +2,19 @@ import { z } from 'zod';
 import type { RequestContext } from '../../core/client';
 import { AdminFsList } from '../admin';
 import { LibraryId } from '../media';
-import { AdminLibrary, type LibraryBody, type LibraryPatch } from './schemas';
+import {
+  AdminLibrary,
+  ScrapeDefaults,
+  type LibraryBody,
+  type LibraryPatch,
+} from './schemas';
 
-const Libraries = z.object({ libraries: z.array(AdminLibrary) });
+const Libraries = z.object({
+  libraries: z.array(AdminLibrary),
+  scrapeDefaults: ScrapeDefaults.optional(),
+  languages: z.array(z.string()).optional(),
+});
+const ScrapeState = ScrapeDefaults.extend({ languages: z.array(z.string()).optional() });
 const LibraryCreated = z.object({ id: LibraryId });
 
 /** Admin library management: folders, scans, and the server-side folder picker. */
@@ -25,6 +35,17 @@ export default function libraryApi(ctx: RequestContext) {
 
     /** Kick a full rescan (from the libraries page). */
     scan: (id: LibraryId) => ctx.post('/admin/libraries/:id/scan', { params: { id } }),
+
+    /** Apply saved scraping choices to titles that are already matched. */
+    refreshMetadata: (id: LibraryId) =>
+      ctx.post('/admin/libraries/:id/refresh-metadata', { params: { id } }),
+
+    /** The household language list (requires `settings.manage`). */
+    scrapeDefaults: () => ctx.get('/admin/scrape', ScrapeState),
+
+    /** Replace the household language list; the first tag is the primary one. */
+    setScrapeDefaults: (languagePriority: string[]) =>
+      ctx.patch('/admin/scrape', ScrapeState, { body: { languagePriority } }),
 
     /** Browse server-side directories for the folder picker. An empty or absent
      * `path` returns the roots (NAS volumes, or `/` in dev). */

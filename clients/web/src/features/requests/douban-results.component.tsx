@@ -1,13 +1,14 @@
+import type { DoubanSearchItem } from '@kromatv/client/douban';
 import { useT } from '@kromatv/ui';
 import { EmptyState, Text } from '@kromatv/ui/kit';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { CSSProperties } from 'react';
-import type { ViewStyle } from 'react-native';
 import { imageUrl } from '#web/shared/lib/api';
 import { useAuth } from '#web/shared/lib/auth';
-import { RouteLink } from '#web/shared/ui/route-link.component';
 
-// Douban's own search: results open its detail page, not a library fiche.
+// Douban's own search, inside the search page and beside TMDB. It has no page
+// of its own: picking a title re-runs the search on TMDB, where a request can
+// actually be made.
 
 const GRID: CSSProperties = {
   display: 'grid',
@@ -16,7 +17,18 @@ const GRID: CSSProperties = {
   padding: '0 var(--gutter-web) 40px',
 };
 
-const TILE: ViewStyle = { display: 'flex' };
+const TILE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  background: 'none',
+  border: 0,
+  padding: 0,
+  color: 'inherit',
+  font: 'inherit',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
 
 const POSTER: CSSProperties = {
   width: '100%',
@@ -27,10 +39,13 @@ const POSTER: CSSProperties = {
   background: 'var(--kroma-surface-1)',
 };
 
-export function DoubanResults({ q }: Readonly<{ q: string }>) {
+export function DoubanResults({
+  q,
+  onPick,
+}: Readonly<{ q: string; onPick: (title: string) => void }>) {
   const t = useT();
   const { client } = useAuth();
-  const { data = [], isPending } = useQuery({
+  const { data = [], isPending } = useQuery<DoubanSearchItem[]>({
     queryKey: ['douban', 'search', q],
     queryFn: () => client.douban.search(q),
     staleTime: 10 * 60_000,
@@ -56,11 +71,11 @@ export function DoubanResults({ q }: Readonly<{ q: string }>) {
   return (
     <div style={GRID}>
       {data.map((item) => (
-        <RouteLink
+        <button
           key={item.id}
-          to="/douban/$id"
-          params={{ id: item.id }}
+          type="button"
           style={TILE}
+          onClick={() => onPick(item.title)}
         >
           <img
             src={imageUrl(client.douban.imageUrl(item.posterUrl)) ?? ''}
@@ -75,7 +90,7 @@ export function DoubanResults({ q }: Readonly<{ q: string }>) {
               {`${item.rating.toFixed(1)}★`}
             </Text>
           ) : null}
-        </RouteLink>
+        </button>
       ))}
     </div>
   );

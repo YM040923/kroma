@@ -75,6 +75,12 @@ export const NAV_GROUPS: AdminNavGroup[] = [
         icon: 'library',
       },
       {
+        to: '/admin/scrape',
+        labelKey: 'admin.navScrape',
+        cap: 'settings.manage',
+        icon: 'language',
+      },
+      {
         to: '/admin/transcoder',
         labelKey: 'admin.navTranscoder',
         cap: 'settings.manage',

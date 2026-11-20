@@ -22,6 +22,7 @@ mod network;
 mod notifications;
 mod pipeline;
 mod reports;
+mod scrape;
 mod settings;
 mod sign_in;
 mod stats;
@@ -73,6 +74,7 @@ pub fn routes(state: SharedState) -> Router<SharedState> {
         .merge(sign_in::routes())
         .merge(reports::routes())
         .merge(libraries::routes())
+        .merge(scrape::routes())
         .merge(settings::routes())
         .merge(storage::routes())
         .merge(stats::routes())

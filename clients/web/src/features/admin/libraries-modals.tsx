@@ -1,25 +1,25 @@
-import type { AdminLibrary } from '@kromatv/client/library';
+import type { MessageKey } from '@kromatv/i18n';
 import { useT } from '@kromatv/ui';
 import {
   Box,
   Button,
   Dialog,
   Field,
+  Grid,
+  Icon,
+  type IconName,
   Row,
-  SegmentGroup,
-  Select,
-  Switch,
+  Surface,
   Text,
-  useConfirm,
 } from '@kromatv/ui/kit';
+import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { createCallable } from 'react-call';
-import { FolderField, FolderListEditor } from '#web/shared/ui/folder-field.component';
+import { FolderListEditor } from '#web/shared/ui/folder-field.component';
 import { useAsyncAction } from '#web/features/admin/shell';
-import { ArtworkButton } from '#web/features/catalog/artwork-picker.component';
 import { useAuth } from '#web/shared/lib/auth';
 
-/** Library kind as accepted by the create/update API: `""` = Auto. */
+/** Library kind as accepted by the create/update API: `""` = Auto (legacy). */
 export type LibKind = '' | 'movies' | 'shows' | 'mixed' | 'photos' | 'other';
 
 /** Accepts both the legacy `film`/`tv` kinds and the current `movies`/`shows`. */
@@ -42,342 +42,177 @@ export function normalizeLibKind(kind: string): LibKind {
   return '';
 }
 
-export function LibraryTypeSelect({
-  value,
-  onChange,
-}: Readonly<{ value: LibKind; onChange: (v: LibKind) => void }>) {
-  const t = useT();
-  return (
-    <SegmentGroup.Root<LibKind> value={value} onValueChange={onChange}>
-      <SegmentGroup.Item value="">
-        <SegmentGroup.Label>{t('admin.typeAuto')}</SegmentGroup.Label>
-      </SegmentGroup.Item>
-      <SegmentGroup.Item value="movies">
-        <SegmentGroup.Label>{t('admin.typeMovies')}</SegmentGroup.Label>
-      </SegmentGroup.Item>
-      <SegmentGroup.Item value="shows">
-        <SegmentGroup.Label>{t('admin.typeShows')}</SegmentGroup.Label>
-      </SegmentGroup.Item>
-      <SegmentGroup.Item value="mixed">
-        <SegmentGroup.Label>{t('admin.typeMixed')}</SegmentGroup.Label>
-      </SegmentGroup.Item>
-      <SegmentGroup.Item value="photos">
-        <SegmentGroup.Label>{t('admin.typePhotos')}</SegmentGroup.Label>
-      </SegmentGroup.Item>
-      <SegmentGroup.Item value="other">
-        <SegmentGroup.Label>{t('admin.typeOther')}</SegmentGroup.Label>
-      </SegmentGroup.Item>
-    </SegmentGroup.Root>
-  );
-}
+type CreateKind = Exclude<LibKind, ''>;
+
+const CREATE_KINDS: readonly {
+  value: CreateKind;
+  icon: IconName;
+  labelKey: MessageKey;
+  descKey: MessageKey;
+}[] = [
+  { value: 'movies', icon: 'movie', labelKey: 'admin.typeMovies', descKey: 'admin.typeMoviesDesc' },
+  { value: 'shows', icon: 'device-tv', labelKey: 'admin.typeShows', descKey: 'admin.typeShowsDesc' },
+  { value: 'mixed', icon: 'apps', labelKey: 'admin.typeMixed', descKey: 'admin.typeMixedDesc' },
+  { value: 'photos', icon: 'photo', labelKey: 'admin.typePhotos', descKey: 'admin.typePhotosDesc' },
+  { value: 'other', icon: 'folder', labelKey: 'admin.typeOther', descKey: 'admin.typeOtherDesc' },
+];
+
+const cardStyle = (active: boolean): CSSProperties => ({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: 8,
+  padding: 16,
+  minHeight: 132,
+  borderRadius: 16,
+  border: `1px solid ${active ? 'var(--kroma-accent)' : 'var(--kroma-border)'}`,
+  background: active
+    ? 'color-mix(in srgb, var(--kroma-accent) 8%, var(--kroma-surface-1))'
+    : 'var(--kroma-surface-1)',
+  color: 'var(--kroma-text)',
+  textAlign: 'left',
+  cursor: 'pointer',
+});
 
 export const AddLibraryModal = createCallable<void, boolean>(({ call }) => {
   const t = useT();
   const { client } = useAuth();
+  const [step, setStep] = useState<1 | 2>(1);
+  const [kind, setKind] = useState<CreateKind | ''>('');
   const [name, setName] = useState('');
-  const [kind, setKind] = useState<LibKind>('');
-  const [folder, setFolder] = useState('');
+  const [folders, setFolders] = useState<string[]>([]);
   const { busy, run } = useAsyncAction();
 
   const create = () => {
-    if (!name.trim()) {
+    if (!name.trim() || !kind) {
       return;
     }
     void run(async () => {
       await client.library.create({
         name: name.trim(),
         kind,
-        folders: folder.trim() ? [folder.trim()] : [],
+        folders: folders.map((folder) => folder.trim()).filter(Boolean),
       });
       call.end(true);
     });
   };
 
   return (
-    <Dialog.Root open title={t('admin.addLibrary')} width="md" onClose={() => call.end(false)}>
-      <Field.Root label={t('admin.name')}>
-        <Field.Input
-          icon="tag"
-          value={name}
-          onValueChange={setName}
-          placeholder={t('admin.kindMovies')}
-        />
-      </Field.Root>
-      <Field.Root label={t('admin.libraryType')}>
-        <LibraryTypeSelect value={kind} onChange={setKind} />
-      </Field.Root>
-      <Field.Root label={t('admin.firstFolder')}>
-        <FolderField
-          value={folder}
-          onChange={setFolder}
-          placeholder={t('admin.chooseFolder')}
-          onClear={() => setFolder('')}
-        />
-      </Field.Root>
+    <Dialog.Root
+      open
+      title={t('admin.addLibrary')}
+      width="lg"
+      onClose={() => call.end(false)}
+    >
+      <Text variant="meta" color="textDim" mb={16}>
+        {t('admin.wizardStep', { step, total: 2 })}
+      </Text>
+      {step === 1 ? (
+        <Box gap={14}>
+          <Text variant="label">{t('admin.wizardPickType')}</Text>
+          <Grid min={230} gap={12}>
+            {CREATE_KINDS.map((option) => {
+              const active = kind === option.value;
+              return (
+                <div
+                  key={option.value}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={active}
+                  style={cardStyle(active)}
+                  onClick={() => setKind(option.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setKind(option.value);
+                    }
+                  }}
+                >
+                  <Row between w="100%">
+                    <Icon name={option.icon} size={26} thickness={1.7} color="accentText" />
+                    {active ? <Icon name="circle-check" size={20} color="accentText" /> : null}
+                  </Row>
+                  <Text variant="title">{t(option.labelKey)}</Text>
+                  <Text variant="meta" color="textDim">
+                    {t(option.descKey)}
+                  </Text>
+                </div>
+              );
+            })}
+          </Grid>
+          <Text variant="meta" color="textDim">
+            {t('admin.typeLocked')}
+          </Text>
+        </Box>
+      ) : (
+        <Box gap={18}>
+          <Row gap={10} align="center">
+            <Text variant="label">{t(CREATE_KINDS.find((k) => k.value === kind)?.labelKey ?? 'admin.typeMovies')}</Text>
+            <Button
+              variant="ghost"
+              size="sm"
+              label={t('admin.wizardChangeType')}
+              onPress={() => setStep(1)}
+            />
+          </Row>
+          <Field.Root label={t('admin.name')}>
+            <Field.Input
+              icon="tag"
+              value={name}
+              onValueChange={setName}
+              placeholder={t('admin.kindMovies')}
+            />
+          </Field.Root>
+          <Field.Root label={t('admin.scannedFolders')}>
+            <FolderListEditor folders={folders} onChange={setFolders} />
+          </Field.Root>
+          <Text variant="meta" color="textDim" mt={-8}>
+            {t('admin.firstRootHint')}
+          </Text>
+          <Surface pad="none" radius="lg" border="border" px={16} py={14}>
+            <Row gap={10} align="flex-start">
+              <Icon name="info-circle" size={18} thickness={1.8} color="accentText" />
+              <Text variant="meta" color="textMuted" flex>
+                {t('admin.recommendedBox')}
+              </Text>
+            </Row>
+          </Surface>
+        </Box>
+      )}
       <Dialog.Footer>
-        <Dialog.Actions
-          onCancel={() => call.end(false)}
-          cancelLabel={t('common.cancel')}
-          onConfirm={() => {
-            create();
-          }}
-          confirmLabel={busy ? t('common.creating') : t('common.create')}
-          busy={busy}
-          disabled={!name.trim()}
-        />
+        <Row between gap={10}>
+          <Button
+            variant="ghost"
+            label={t('common.cancel')}
+            onPress={() => call.end(false)}
+          />
+          <Row gap={10}>
+            {step === 2 ? (
+              <Button
+                variant="glass"
+                label={t('admin.wizardBack')}
+                onPress={() => setStep(1)}
+              />
+            ) : null}
+            {step === 1 ? (
+              <Button
+                variant="primary"
+                label={t('admin.nextName')}
+                disabled={!kind}
+                onPress={() => setStep(2)}
+              />
+            ) : (
+              <Button
+                variant="primary"
+                label={busy ? t('common.creating') : t('admin.createScan')}
+                loading={busy}
+                disabled={!name.trim() || folders.length === 0}
+                onPress={create}
+              />
+            )}
+          </Row>
+        </Row>
       </Dialog.Footer>
     </Dialog.Root>
   );
 });
-
-const AUTO_ART = 'auto';
-const ART_LANGUAGES = ['textless', 'zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'fr'];
-
-function ArtPreferenceSelect({
-  label,
-  value,
-  onChange,
-}: Readonly<{ label: string; value: string; onChange: (v: string) => void }>) {
-  const t = useT();
-  const current = value || AUTO_ART;
-  const tags = ART_LANGUAGES.includes(current) ? ART_LANGUAGES : [...ART_LANGUAGES, current];
-  return (
-    <Select.Root
-      label={label}
-      value={current}
-      onValueChange={(next) => onChange(next === AUTO_ART ? '' : next)}
-    >
-      <Select.Trigger />
-      <Select.Item value={AUTO_ART} label={t('admin.artAuto')} />
-      {tags.map((tag) => (
-        <Select.Item
-          key={tag}
-          value={tag}
-          label={tag === 'textless' ? t('admin.artTextless') : tag}
-        />
-      ))}
-    </Select.Root>
-  );
-}
-
-const BACKDROP_COUNTS = ['6', '4', '2', '0'] as const;
-
-function BackdropCountSelect({
-  value,
-  onChange,
-}: Readonly<{ value: string; onChange: (v: string) => void }>) {
-  const t = useT();
-  return (
-    <Select.Root label={t('admin.backdropCount')} value={value} onValueChange={onChange}>
-      <Select.Trigger />
-      <Select.Item value="" label={t('admin.backdropCountAll')} />
-      {BACKDROP_COUNTS.map((count) => (
-        <Select.Item
-          key={count}
-          value={count}
-          label={
-            count === '0'
-              ? t('admin.backdropCountNone')
-              : t('admin.backdropCountN', { count: Number(count) })
-          }
-        />
-      ))}
-    </Select.Root>
-  );
-}
-
-const ARTWORK_SIZES = ['w500', 'w780', 'w1280', 'original'] as const;
-
-function ArtworkSizeSelect({
-  value,
-  onChange,
-}: Readonly<{ value: string; onChange: (v: string) => void }>) {
-  const t = useT();
-  return (
-    <Select.Root label={t('admin.artworkSize')} value={value} onValueChange={onChange}>
-      <Select.Trigger />
-      <Select.Item value="" label={t('admin.artworkSizeDefault')} />
-      {ARTWORK_SIZES.map((size) => (
-        <Select.Item key={size} value={size} label={size} />
-      ))}
-    </Select.Root>
-  );
-}
-
-const REFRESH_DAYS = ['7', '14', '30', '90'] as const;
-
-function ArtworkRefreshSelect({
-  value,
-  onChange,
-}: Readonly<{ value: string; onChange: (v: string) => void }>) {
-  const t = useT();
-  return (
-    <Select.Root
-      label={t('admin.artworkRefresh')}
-      value={value}
-      onValueChange={onChange}
-    >
-      <Select.Trigger />
-      <Select.Item value="" label={t('admin.artworkRefreshOff')} />
-      {REFRESH_DAYS.map((days) => (
-        <Select.Item
-          key={days}
-          value={days}
-          label={t('admin.artworkRefreshDays', { count: Number(days) })}
-        />
-      ))}
-    </Select.Root>
-  );
-}
-
-export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>(
-  ({ call, lib }) => {
-    const confirm = useConfirm();
-    const t = useT();
-    const { client } = useAuth();
-    const [name, setName] = useState(lib.name);
-    const [kind, setKind] = useState<LibKind>(() => normalizeLibKind(lib.kind));
-    const [folders, setFolders] = useState(lib.folders);
-    const [autoScan, setAutoScan] = useState(lib.autoScan);
-    const [scrapeLanguage, setScrapeLanguage] = useState(lib.scrape.language ?? '');
-    const [nfo, setNfo] = useState(lib.scrape.nfo);
-    const [posterLanguage, setPosterLanguage] = useState(lib.scrape.posterLanguage ?? '');
-    const [backdropLanguage, setBackdropLanguage] = useState(lib.scrape.backdropLanguage ?? '');
-    const [backdropCount, setBackdropCount] = useState(
-      lib.scrape.backdropCount == null ? '' : String(lib.scrape.backdropCount),
-    );
-    const [artworkSize, setArtworkSize] = useState(lib.scrape.artworkSize ?? '');
-    const [artworkRefreshDays, setArtworkRefreshDays] = useState(
-      lib.scrape.artworkRefreshDays == null ? '' : String(lib.scrape.artworkRefreshDays),
-    );
-    const { busy, run } = useAsyncAction();
-
-    const save = () =>
-      run(async () => {
-        await client.library.update(lib.id, {
-          name: name.trim(),
-          kind,
-          folders,
-          autoScan,
-          scrape: {
-            language: scrapeLanguage.trim() || null,
-            nfo,
-            posterLanguage: posterLanguage || null,
-            backdropLanguage: backdropLanguage || null,
-            backdropCount: backdropCount === '' ? null : Number(backdropCount),
-            artworkSize: artworkSize || null,
-            artworkRefreshDays:
-              artworkRefreshDays === '' ? null : Number(artworkRefreshDays),
-          },
-        });
-        call.end(true);
-      });
-    const remove = async () => {
-      const ok = await confirm({
-        title: t('common.delete'),
-        message: t('admin.confirmDeleteLibrary', { name: lib.name }),
-        confirmLabel: t('common.delete'),
-        cancelLabel: t('common.cancel'),
-        destructive: true,
-      });
-      if (!ok) {
-        return;
-      }
-      await run(async () => {
-        await client.library.delete(lib.id);
-        call.end(true);
-      });
-    };
-
-    return (
-      <Dialog.Root
-        open
-        title={t('admin.manageLibrary', { name: lib.name })}
-        width="lg"
-        onClose={() => call.end(false)}
-      >
-        <Field.Root label={t('admin.name')}>
-          <Field.Input icon="tag" value={name} onValueChange={setName} />
-        </Field.Root>
-        <Field.Root label={t('admin.libraryType')}>
-          <LibraryTypeSelect value={kind} onChange={setKind} />
-        </Field.Root>
-        <Field.Root label={t('admin.scannedFolders')}>
-          <FolderListEditor folders={folders} onChange={setFolders} />
-        </Field.Root>
-        <Row between gap={16}>
-          <Box>
-            <Text variant="label">{t('admin.autoScan')}</Text>
-            <Text variant="meta" color="textDim" mt={2}>
-              {t('admin.autoScanHint')}
-            </Text>
-          </Box>
-          <Switch checked={autoScan} onCheckedChange={setAutoScan} label={t('admin.autoScan')} />
-        </Row>
-        <Row between gap={16}>
-          <Box>
-            <Text variant="label">{t('admin.libraryCover')}</Text>
-            <Text variant="meta" color="textDim" mt={2}>
-              {t('admin.libraryCoverHint')}
-            </Text>
-          </Box>
-          <ArtworkButton itemId={lib.id} title={lib.name} />
-        </Row>
-        <Text variant="label">{t('admin.scrapeSection')}</Text>
-        <Field.Root label={t('admin.scrapeLanguage')}>
-          <Field.Input
-            icon="language"
-            value={scrapeLanguage}
-            onValueChange={setScrapeLanguage}
-            placeholder={t('admin.scrapeLanguagePlaceholder')}
-          />
-        </Field.Root>
-        <Text variant="meta" color="textDim">
-          {t('admin.scrapeLanguageHint')}
-        </Text>
-        <Row between gap={16}>
-          <Box>
-            <Text variant="label">{t('admin.nfoFiles')}</Text>
-            <Text variant="meta" color="textDim" mt={2}>
-              {t('admin.nfoFilesHint')}
-            </Text>
-          </Box>
-          <Switch checked={nfo} onCheckedChange={setNfo} label={t('admin.nfoFiles')} />
-        </Row>
-        <ArtPreferenceSelect
-          label={t('admin.posterPreference')}
-          value={posterLanguage}
-          onChange={setPosterLanguage}
-        />
-        <ArtPreferenceSelect
-          label={t('admin.backdropPreference')}
-          value={backdropLanguage}
-          onChange={setBackdropLanguage}
-        />
-        <BackdropCountSelect value={backdropCount} onChange={setBackdropCount} />
-        <ArtworkSizeSelect value={artworkSize} onChange={setArtworkSize} />
-        <ArtworkRefreshSelect value={artworkRefreshDays} onChange={setArtworkRefreshDays} />
-        <Dialog.Footer>
-          <Dialog.Actions
-            onCancel={() => call.end(false)}
-            cancelLabel={t('common.cancel')}
-            onConfirm={() => void save()}
-            confirmLabel={busy ? t('common.saving') : t('common.save')}
-            busy={busy}
-            disabled={!name.trim()}
-          >
-            <Button
-              variant="dangerGhost"
-              size="sm"
-              label={t('common.delete')}
-              onPress={() => {
-                void remove();
-              }}
-              disabled={busy}
-            />
-          </Dialog.Actions>
-        </Dialog.Footer>
-      </Dialog.Root>
-    );
-  },
-);

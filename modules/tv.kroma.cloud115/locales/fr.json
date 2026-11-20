@@ -114,5 +114,6 @@
   "cloud115.probeHint": "Lit l'en-tête du conteneur de chaque nouvel élément via HTTP et écrit un .info.json à côté du .strm, pour afficher les détails techniques sans télécharger le fichier. Chaque sonde signe un lien et lit quelques Mo ; elle compte dans le budget d'appels.",
   "cloud115.budgetProgress": "Budget d'appels utilisé",
   "cloud115.budgetLine": "{calls} / {total} appels",
-  "cloud115.statFilesRate": "{rate} fichiers/s"
+  "cloud115.statFilesRate": "{rate} fichiers/s",
+  "cloud115.advanced": "Avancé : cookie et URL d'accès"
 }

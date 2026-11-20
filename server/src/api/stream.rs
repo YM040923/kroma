@@ -241,6 +241,40 @@ pub(super) async fn load_item(state: &SharedState, viewer: &User, id: String) ->
     visibility::item_in_scope(state, Some(viewer), id).await
 }
 
+/// The disk path of an item's media file. A streamed library stores the play
+/// URL in `abs_path`; sidecar subtitles live beside the `.strm` under one of
+/// the library's roots, so that is what a beside-search must list.
+fn local_media_path(state: &SharedState, item: &MediaItem, abs: &str) -> String {
+    if !abs.starts_with("http://") && !abs.starts_with("https://") {
+        return abs.to_string();
+    }
+    let Ok(defs) = crate::services::settings::library_defs(&state.settings, &state.config) else {
+        return abs.to_string();
+    };
+    let Some(def) = defs.iter().find(|def| def.id == item.library) else {
+        return abs.to_string();
+    };
+    let Some(rel) = item
+        .rel_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|rel| !rel.is_empty())
+    else {
+        return abs.to_string();
+    };
+    def.folders
+        .iter()
+        .map(|folder| std::path::Path::new(folder).join(rel))
+        .find(|path| path.exists())
+        .or_else(|| {
+            def.folders
+                .first()
+                .map(|folder| std::path::Path::new(folder).join(rel))
+        })
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| abs.to_string())
+}
+
 /// `GET /api/items/:id/storyboard` → the sprite-sheet manifest mapping a cursor
 /// time to a tile. 202 `{"status":"pending"}` while generating (the client polls).
 pub async fn storyboard(
@@ -312,7 +346,8 @@ pub async fn subtitles(
     };
 
     if let Some(nth) = index.checked_sub(item.subtitles.len()) {
-        if let Some(bytes) = nth_beside(&state, &abs, nth).await {
+        let beside_abs = local_media_path(&state, &item, &abs);
+        if let Some(bytes) = nth_beside(&state, &beside_abs, nth).await {
             return vtt_response(bytes);
         }
     }

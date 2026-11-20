@@ -197,16 +197,7 @@ export function AdminSidebar() {
   const [mode, setMode] = useSidebarMode();
 
   if (mode === 'hidden') {
-    return (
-      <HiddenSidebarLauncher
-        brand={<AdminBrand />}
-        panelStyle={s.navFill}
-        onExpand={() => setMode('expanded')}
-      >
-        <AdminServerLink />
-        <AdminNav />
-      </HiddenSidebarLauncher>
-    );
+    return <HiddenSidebarLauncher onExpand={() => setMode('expanded')} />;
   }
   const compact = mode === 'rail';
   return (

@@ -95,15 +95,7 @@ export function Sidebar() {
     return null;
   }
   if (mode === 'hidden') {
-    return (
-      <HiddenSidebarLauncher
-        brand={<Logo size={24} />}
-        panelStyle={s.navFill}
-        onExpand={() => setMode('expanded')}
-      >
-        <SidebarNav />
-      </HiddenSidebarLauncher>
-    );
+    return <HiddenSidebarLauncher onExpand={() => setMode('expanded')} />;
   }
   const compact = mode === 'rail';
   return (
