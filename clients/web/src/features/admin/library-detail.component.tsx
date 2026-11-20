@@ -41,6 +41,12 @@ interface ScrapeDraft {
   backdropLanguages: string[] | null;
   backdropMinWidth: number | null;
   backdropSize: string | null;
+  logoLanguages: string[] | null;
+  logoMinWidth: number | null;
+  logoSize: string | null;
+  seasonLanguages: string[] | null;
+  seasonMinWidth: number | null;
+  seasonSize: string | null;
 }
 
 function normalizedKind(kind: string): keyof typeof KIND_LABEL {
@@ -131,6 +137,12 @@ function LibraryDetail({
     backdropLanguages: lib.scrape.backdropLanguages ?? null,
     backdropMinWidth: lib.scrape.backdropMinWidth ?? null,
     backdropSize: lib.scrape.backdropSize ?? null,
+    logoLanguages: lib.scrape.logoLanguages ?? null,
+    logoMinWidth: lib.scrape.logoMinWidth ?? null,
+    logoSize: lib.scrape.logoSize ?? null,
+    seasonLanguages: lib.scrape.seasonLanguages ?? null,
+    seasonMinWidth: lib.scrape.seasonMinWidth ?? null,
+    seasonSize: lib.scrape.seasonSize ?? null,
   }));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -170,6 +182,12 @@ function LibraryDetail({
           backdropLanguages: next.backdropLanguages,
           backdropMinWidth: next.backdropMinWidth,
           backdropSize: next.backdropSize,
+          logoLanguages: next.logoLanguages,
+          logoMinWidth: next.logoMinWidth,
+          logoSize: next.logoSize,
+          seasonLanguages: next.seasonLanguages,
+          seasonMinWidth: next.seasonMinWidth,
+          seasonSize: next.seasonSize,
         },
       });
       setPending(true);
@@ -204,11 +222,30 @@ function LibraryDetail({
     draft.posterLanguages !== null ||
     draft.posterMinWidth !== null ||
     draft.posterSize !== null;
+  const logo: ArtRuleValue = {
+    languages: draft.logoLanguages ?? defaults.logoLanguages ?? null,
+    minWidth: draft.logoMinWidth ?? defaults.logoMinWidth ?? null,
+    size: draft.logoSize ?? defaults.logoSize ?? null,
+  };
   const backdropOverridden =
     draft.backdropLanguages !== null ||
     draft.backdropMinWidth !== null ||
     draft.backdropSize !== null;
-  const anyOverridden = overridden || posterOverridden || backdropOverridden;
+  const season: ArtRuleValue = {
+    languages: draft.seasonLanguages ?? defaults.seasonLanguages ?? null,
+    minWidth: draft.seasonMinWidth ?? defaults.seasonMinWidth ?? null,
+    size: draft.seasonSize ?? defaults.seasonSize ?? null,
+  };
+  const logoOverridden =
+    draft.logoLanguages !== null ||
+    draft.logoMinWidth !== null ||
+    draft.logoSize !== null;
+  const seasonOverridden =
+    draft.seasonLanguages !== null ||
+    draft.seasonMinWidth !== null ||
+    draft.seasonSize !== null;
+  const anyOverridden =
+    overridden || posterOverridden || backdropOverridden || logoOverridden || seasonOverridden;
   const kind = normalizedKind(lib.kind);
 
   const remove = async () => {
@@ -458,6 +495,68 @@ function LibraryDetail({
                 })
               }
             />
+
+            <ArtRuleEditor
+              title={t('artwork.logo')}
+              hint={t('admin.logoRuleHint')}
+              value={logo}
+              languages={languages}
+              minWidthPlaceholder="200"
+              overridden={logoOverridden}
+              onFollow={() =>
+                void persistScrape({
+                  ...draft,
+                  logoLanguages: null,
+                  logoMinWidth: null,
+                  logoSize: null,
+                })
+              }
+              onChange={(patch) =>
+                void persistScrape({
+                  ...draft,
+                  logoLanguages:
+                    patch.languages !== undefined
+                      ? patch.languages
+                      : draft.logoLanguages,
+                  logoMinWidth:
+                    patch.minWidth !== undefined ? patch.minWidth : draft.logoMinWidth,
+                  logoSize: patch.size !== undefined ? patch.size : draft.logoSize,
+                })
+              }
+            />
+
+            {kind === 'shows' || kind === 'mixed' ? (
+              <ArtRuleEditor
+                title={t('admin.seasonPoster')}
+                hint={t('admin.seasonRuleHint')}
+                value={season}
+                languages={languages}
+                overridden={seasonOverridden}
+                onFollow={() =>
+                  void persistScrape({
+                    ...draft,
+                    seasonLanguages: null,
+                    seasonMinWidth: null,
+                    seasonSize: null,
+                  })
+                }
+                onChange={(patch) =>
+                  void persistScrape({
+                    ...draft,
+                    seasonLanguages:
+                      patch.languages !== undefined
+                        ? patch.languages
+                        : draft.seasonLanguages,
+                    seasonMinWidth:
+                      patch.minWidth !== undefined
+                        ? patch.minWidth
+                        : draft.seasonMinWidth,
+                    seasonSize:
+                      patch.size !== undefined ? patch.size : draft.seasonSize,
+                  })
+                }
+              />
+            ) : null}
 
             {pending ? (
               <Surface pad="none" radius="lg" border="border" px={16} py={12}>

@@ -14,7 +14,14 @@ const Libraries = z.object({
   scrapeDefaults: ScrapeDefaults.optional(),
   languages: z.array(z.string()).optional(),
 });
-const ScrapeState = ScrapeDefaults.extend({ languages: z.array(z.string()).optional() });
+const ScrapeState = ScrapeDefaults.extend({
+  languages: z.array(z.string()).optional(),
+  fanartConfigured: z.boolean().optional(),
+});
+type ScrapePatch = Partial<ScrapeDefaults> & {
+  fanartApiKey?: string;
+  clearFanartKey?: boolean;
+};
 const LibraryCreated = z.object({ id: LibraryId });
 
 /** Admin library management: folders, scans, and the server-side folder picker. */
@@ -44,7 +51,7 @@ export default function libraryApi(ctx: RequestContext) {
     scrapeDefaults: () => ctx.get('/admin/scrape', ScrapeState),
 
     /** Replace the household scraping defaults; the first language tag is primary. */
-    setScrapeDefaults: (patch: Partial<ScrapeDefaults>) =>
+    setScrapeDefaults: (patch: ScrapePatch) =>
       ctx.patch('/admin/scrape', ScrapeState, { body: patch }),
 
     /** Browse server-side directories for the folder picker. An empty or absent

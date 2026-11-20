@@ -1,6 +1,6 @@
 import type { ScrapeDefaults } from '@kromatv/client/library';
 import { useT } from '@kromatv/ui';
-import { Box, Row, Surface, Switch, Text } from '@kromatv/ui/kit';
+import { Badge, Box, Button, Field, Row, Surface, Switch, Text } from '@kromatv/ui/kit';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ArtRuleEditor, type ArtRuleValue } from '#web/features/admin/scrape-art.component';
@@ -24,6 +24,8 @@ function ScrapeSettingsInner() {
   });
   const [draft, setDraft] = useState<Partial<ScrapeDefaults>>({});
   const [saved, setSaved] = useState(false);
+  const [fanartKey, setFanartKey] = useState('');
+  const [fanartSaved, setFanartSaved] = useState(false);
 
   if (query.isPending) {
     return null;
@@ -49,6 +51,29 @@ function ScrapeSettingsInner() {
     posterSize: draft.posterSize !== undefined ? draft.posterSize : (data.posterSize ?? null),
     backdropSize:
       draft.backdropSize !== undefined ? draft.backdropSize : (data.backdropSize ?? null),
+    logoLanguages:
+      draft.logoLanguages !== undefined ? draft.logoLanguages : (data.logoLanguages ?? null),
+    logoMinWidth:
+      draft.logoMinWidth !== undefined ? draft.logoMinWidth : (data.logoMinWidth ?? null),
+    logoSize: draft.logoSize !== undefined ? draft.logoSize : (data.logoSize ?? null),
+    seasonLanguages:
+      draft.seasonLanguages !== undefined
+        ? draft.seasonLanguages
+        : (data.seasonLanguages ?? null),
+    seasonMinWidth:
+      draft.seasonMinWidth !== undefined ? draft.seasonMinWidth : (data.seasonMinWidth ?? null),
+    seasonSize:
+      draft.seasonSize !== undefined ? draft.seasonSize : (data.seasonSize ?? null),
+    posterSources:
+      draft.posterSources !== undefined ? draft.posterSources : (data.posterSources ?? null),
+    backdropSources:
+      draft.backdropSources !== undefined
+        ? draft.backdropSources
+        : (data.backdropSources ?? null),
+    logoSources:
+      draft.logoSources !== undefined ? draft.logoSources : (data.logoSources ?? null),
+    seasonSources:
+      draft.seasonSources !== undefined ? draft.seasonSources : (data.seasonSources ?? null),
     writeImages: draft.writeImages ?? data.writeImages ?? false,
   };
   const languages = data.languages ?? [];
@@ -73,6 +98,28 @@ function ScrapeSettingsInner() {
     minWidth: value.backdropMinWidth ?? null,
     size: value.backdropSize ?? null,
   };
+  const logo: ArtRuleValue = {
+    languages: value.logoLanguages ?? null,
+    minWidth: value.logoMinWidth ?? null,
+    size: value.logoSize ?? null,
+  };
+  const season: ArtRuleValue = {
+    languages: value.seasonLanguages ?? null,
+    minWidth: value.seasonMinWidth ?? null,
+    size: value.seasonSize ?? null,
+  };
+  const fanart = data.fanartConfigured === true;
+  const sourceProps = (
+    configured: string[] | null | undefined,
+    fallback: string[],
+    key: 'posterSources' | 'backdropSources' | 'logoSources' | 'seasonSources',
+  ) =>
+    fanart
+      ? {
+          value: configured ?? fallback,
+          onChange: (next: string[]) => save({ [key]: next }),
+        }
+      : undefined;
 
   return (
     <>
@@ -119,6 +166,7 @@ function ScrapeSettingsInner() {
               hint={t('admin.posterRuleHint')}
               value={poster}
               languages={languages}
+              sources={sourceProps(value.posterSources, ['tmdb', 'fanart'], 'posterSources')}
               onChange={(patch) =>
                 save({
                   posterLanguages:
@@ -135,6 +183,11 @@ function ScrapeSettingsInner() {
               value={backdrop}
               languages={languages}
               minWidthPlaceholder="1920"
+              sources={sourceProps(
+                value.backdropSources,
+                ['tmdb', 'fanart'],
+                'backdropSources',
+              )}
               onChange={(patch) =>
                 save({
                   backdropLanguages:
@@ -146,6 +199,110 @@ function ScrapeSettingsInner() {
                 })
               }
             />
+            <ArtRuleEditor
+              title={t('artwork.logo')}
+              hint={t('admin.logoRuleHint')}
+              value={logo}
+              languages={languages}
+              minWidthPlaceholder="200"
+              sources={sourceProps(value.logoSources, ['fanart', 'tmdb'], 'logoSources')}
+              onChange={(patch) =>
+                save({
+                  logoLanguages:
+                    patch.languages !== undefined ? patch.languages : value.logoLanguages,
+                  logoMinWidth:
+                    patch.minWidth !== undefined ? patch.minWidth : value.logoMinWidth,
+                  logoSize: patch.size !== undefined ? patch.size : value.logoSize,
+                })
+              }
+            />
+            <ArtRuleEditor
+              title={t('admin.seasonPoster')}
+              hint={t('admin.seasonRuleHint')}
+              value={season}
+              languages={languages}
+              minWidthPlaceholder="500"
+              sources={sourceProps(
+                value.seasonSources,
+                ['fanart', 'tmdb'],
+                'seasonSources',
+              )}
+              onChange={(patch) =>
+                save({
+                  seasonLanguages:
+                    patch.languages !== undefined ? patch.languages : value.seasonLanguages,
+                  seasonMinWidth:
+                    patch.minWidth !== undefined ? patch.minWidth : value.seasonMinWidth,
+                  seasonSize:
+                    patch.size !== undefined ? patch.size : value.seasonSize,
+                })
+              }
+            />
+          </Box>
+        </Surface>
+
+        <Surface pad="none" radius="xl" border="border">
+          <Box px={20} py={18} gap={14}>
+            <Row between gap={12} wrap>
+              <Box>
+                <Text variant="title">Fanart.tv</Text>
+                <Text variant="meta" color="textDim" mt={4}>
+                  {t('admin.fanartHint')}
+                </Text>
+              </Box>
+              <Badge tone={fanart ? 'success' : 'neutral'}>
+                {fanart ? t('admin.fanartConfigured') : t('admin.fanartNotConfigured')}
+              </Badge>
+            </Row>
+            <Row wrap gap={12} align="flex-end">
+              <Box w={320}>
+                <Field.Root
+                  label={t('admin.fanartKey')}
+                  value={fanartKey}
+                  onValueChange={setFanartKey}
+                >
+                  <Field.Input
+                    type="password"
+                    placeholder={
+                      fanart ? t('admin.fanartKeyKeep') : 'https://fanart.tv 个人 API Key'
+                    }
+                  />
+                </Field.Root>
+              </Box>
+              <Button
+                variant="glass"
+                size="sm"
+                label={t('admin.fanartSave')}
+                disabled={!fanartKey.trim()}
+                onPress={() => {
+                  void client.library
+                    .setScrapeDefaults({ fanartApiKey: fanartKey.trim() })
+                    .then(() => {
+                      setFanartKey('');
+                      setFanartSaved(true);
+                      window.setTimeout(() => setFanartSaved(false), 1600);
+                      void query.refetch();
+                    });
+                }}
+              />
+              {fanart ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  label={t('admin.fanartClear')}
+                  onPress={() => {
+                    void client.library
+                      .setScrapeDefaults({ clearFanartKey: true })
+                      .then(() => void query.refetch());
+                  }}
+                />
+              ) : null}
+              {fanartSaved ? (
+                <Text variant="meta" color="success">
+                  {t('admin.scrapeSaved')}
+                </Text>
+              ) : null}
+            </Row>
           </Box>
         </Surface>
 

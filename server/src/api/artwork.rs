@@ -189,7 +189,7 @@ async fn get_artwork(
             .map_err(|()| anyhow::anyhow!("TMDB 图片列表读取失败"))
     })
     .await;
-    let (posters, backdrops) = match lists {
+    let lists = match lists {
         Ok(lists) => lists,
         Err(response) => return response,
     };
@@ -204,8 +204,9 @@ async fn get_artwork(
             "backdrop": page.locked.iter().any(|art| art == db::art_overrides::BACKDROP),
             "logo": page.locked.iter().any(|art| art == db::art_overrides::LOGO),
         },
-        "posters": posters,
-        "backdrops": backdrops,
+        "posters": lists.posters,
+        "backdrops": lists.backdrops,
+        "logos": lists.logos,
     }))
     .into_response()
 }

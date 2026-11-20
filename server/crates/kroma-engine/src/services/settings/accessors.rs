@@ -184,6 +184,17 @@ pub struct ScrapeOptions {
     /// Per-artwork provider size; None falls back to `artwork_size`.
     pub poster_size: Option<String>,
     pub backdrop_size: Option<String>,
+    pub logo_languages: Option<Vec<String>>,
+    pub logo_min_width: Option<u16>,
+    pub logo_size: Option<String>,
+    pub season_languages: Option<Vec<String>>,
+    pub season_min_width: Option<u16>,
+    pub season_size: Option<String>,
+    /// Where each kind of artwork may come from, in order: "tmdb", "fanart".
+    pub poster_sources: Option<Vec<String>>,
+    pub backdrop_sources: Option<Vec<String>>,
+    pub logo_sources: Option<Vec<String>>,
+    pub season_sources: Option<Vec<String>>,
     /// Write the chosen poster/backdrop beside the media as poster.jpg /
     /// fanart.jpg. Existing files are never replaced; the household default
     /// carries this, a library does not override it yet.
@@ -229,6 +240,18 @@ fn clean_art_languages(values: Vec<String>) -> Vec<String> {
 fn valid_art_size(size: &str) -> Option<String> {
     let size = size.trim();
     matches!(size, "w500" | "w780" | "w1280" | "original").then(|| size.to_string())
+}
+
+/// "tmdb" and "fanart", once each, in the order given.
+fn clean_sources(values: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for value in values {
+        let source = value.trim().to_ascii_lowercase();
+        if (source == "tmdb" || source == "fanart") && !out.contains(&source) {
+            out.push(source);
+        }
+    }
+    out
 }
 
 impl ScrapeOptions {
@@ -287,6 +310,28 @@ impl ScrapeOptions {
         self.backdrop_size = self.backdrop_size.as_deref().and_then(valid_art_size);
         self.poster_min_width = self.poster_min_width.filter(|width| *width > 0);
         self.backdrop_min_width = self.backdrop_min_width.filter(|width| *width > 0);
+        self.logo_languages = self
+            .logo_languages
+            .map(clean_art_languages)
+            .filter(|list| !list.is_empty());
+        self.logo_min_width = self.logo_min_width.filter(|width| *width > 0);
+        self.logo_size = self.logo_size.as_deref().and_then(valid_art_size);
+        self.season_languages = self
+            .season_languages
+            .map(clean_art_languages)
+            .filter(|list| !list.is_empty());
+        self.season_min_width = self.season_min_width.filter(|width| *width > 0);
+        self.season_size = self.season_size.as_deref().and_then(valid_art_size);
+        self.poster_sources = self.poster_sources.map(clean_sources).filter(|list| !list.is_empty());
+        self.backdrop_sources = self
+            .backdrop_sources
+            .map(clean_sources)
+            .filter(|list| !list.is_empty());
+        self.logo_sources = self.logo_sources.map(clean_sources).filter(|list| !list.is_empty());
+        self.season_sources = self
+            .season_sources
+            .map(clean_sources)
+            .filter(|list| !list.is_empty());
         self.backdrop_count = self.backdrop_count.map(|count| count.min(8));
         self.artwork_size = self.artwork_size.as_deref().and_then(valid_art_size);
         self.artwork_refresh_days = self
@@ -356,6 +401,16 @@ pub struct ScrapeDefaults {
     pub backdrop_min_width: Option<u16>,
     pub poster_size: Option<String>,
     pub backdrop_size: Option<String>,
+    pub logo_languages: Option<Vec<String>>,
+    pub logo_min_width: Option<u16>,
+    pub logo_size: Option<String>,
+    pub season_languages: Option<Vec<String>>,
+    pub season_min_width: Option<u16>,
+    pub season_size: Option<String>,
+    pub poster_sources: Option<Vec<String>>,
+    pub backdrop_sources: Option<Vec<String>>,
+    pub logo_sources: Option<Vec<String>>,
+    pub season_sources: Option<Vec<String>>,
     pub write_images: bool,
 }
 
@@ -376,6 +431,34 @@ fn clean_defaults(mut defaults: ScrapeDefaults) -> ScrapeDefaults {
     defaults.backdrop_size = defaults.backdrop_size.as_deref().and_then(valid_art_size);
     defaults.poster_min_width = defaults.poster_min_width.filter(|width| *width > 0);
     defaults.backdrop_min_width = defaults.backdrop_min_width.filter(|width| *width > 0);
+    defaults.logo_languages = defaults
+        .logo_languages
+        .map(clean_art_languages)
+        .filter(|list| !list.is_empty());
+    defaults.logo_min_width = defaults.logo_min_width.filter(|width| *width > 0);
+    defaults.logo_size = defaults.logo_size.as_deref().and_then(valid_art_size);
+    defaults.season_languages = defaults
+        .season_languages
+        .map(clean_art_languages)
+        .filter(|list| !list.is_empty());
+    defaults.season_min_width = defaults.season_min_width.filter(|width| *width > 0);
+    defaults.season_size = defaults.season_size.as_deref().and_then(valid_art_size);
+    defaults.poster_sources = defaults
+        .poster_sources
+        .map(clean_sources)
+        .filter(|list| !list.is_empty());
+    defaults.backdrop_sources = defaults
+        .backdrop_sources
+        .map(clean_sources)
+        .filter(|list| !list.is_empty());
+    defaults.logo_sources = defaults
+        .logo_sources
+        .map(clean_sources)
+        .filter(|list| !list.is_empty());
+    defaults.season_sources = defaults
+        .season_sources
+        .map(clean_sources)
+        .filter(|list| !list.is_empty());
     defaults
 }
 
@@ -402,6 +485,19 @@ pub fn set_scrape_defaults(settings: &Settings, pool: &Pool, defaults: &ScrapeDe
     {
         patch.insert("tmdbLanguage".to_string(), json!(first));
     }
+    settings.set_patch(pool, patch);
+}
+
+/// The administrator's personal Fanart.tv API key. Empty disables the source.
+pub const FANART_KEY: &str = "fanartApiKey";
+
+pub fn fanart_api_key(settings: &Settings) -> String {
+    settings.get_str(FANART_KEY, "").trim().to_string()
+}
+
+pub fn set_fanart_api_key(settings: &Settings, pool: &Pool, key: &str) {
+    let mut patch = BTreeMap::new();
+    patch.insert(FANART_KEY.to_string(), json!(key.trim()));
     settings.set_patch(pool, patch);
 }
 
@@ -884,10 +980,14 @@ mod tests {
             backdrop_min_width: None,
             poster_size: None,
             backdrop_size: None,
+            logo_languages: None,
+            logo_min_width: None,
+            logo_size: None,
             write_images: false,
             backdrop_count: Some(4),
             artwork_size: Some("w780".to_string()),
             artwork_refresh_days: Some(30),
+            ..Default::default()
         };
         set_library_scrape(&s, &pool, "lib1", &wanted);
 

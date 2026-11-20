@@ -9,6 +9,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Json;
 use axum::Router;
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::api::error::lerr;
@@ -21,10 +22,14 @@ pub fn routes() -> Router<SharedState> {
     Router::new().route("/scrape", get(get_scrape).patch(put_scrape))
 }
 
-fn view(defaults: &ScrapeDefaults) -> Value {
+fn view(state: &SharedState, defaults: &ScrapeDefaults) -> Value {
     let mut value = serde_json::to_value(defaults).unwrap_or_else(|_| json!({}));
     if let Some(object) = value.as_object_mut() {
         object.insert("languages".to_string(), json!(settings::language_tags()));
+        object.insert(
+            "fanartConfigured".to_string(),
+            json!(!settings::fanart_api_key(&state.settings).is_empty()),
+        );
     }
     value
 }
@@ -35,32 +40,51 @@ async fn get_scrape(
 ) -> Result<Response, Response> {
     super::require(&user, Permission::SettingsManage)?;
     let defaults = settings::scrape_defaults(&state.settings, &state.config);
-    Ok(Json(view(&defaults)).into_response())
+    Ok(Json(view(&state, &defaults)).into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ScrapeBody {
+    #[serde(flatten)]
+    pub defaults: ScrapeDefaults,
+    #[serde(rename = "fanartApiKey", default)]
+    pub fanart_api_key: Option<String>,
+    #[serde(rename = "clearFanartKey", default)]
+    pub clear_fanart_key: bool,
 }
 
 async fn put_scrape(
     State(state): State<SharedState>,
     AuthUser(user): AuthUser,
-    Json(body): Json<ScrapeDefaults>,
+    Json(body): Json<ScrapeBody>,
 ) -> Result<Response, Response> {
     super::require(&user, Permission::SettingsManage)?;
-    let priority = body.language_priority.clone().unwrap_or_default();
-    let known = settings::language_tags();
-    let priority = settings::clean_language_priority(priority);
-    if priority.is_empty()
-        || priority
-            .iter()
-            .any(|tag| !known.iter().any(|option| option.eq_ignore_ascii_case(tag)))
-    {
-        return Err(lerr(
-            super::user_locale(&user),
-            StatusCode::BAD_REQUEST,
-            "admin.scrapeLanguageInvalid",
-        ));
+    // A key-only patch must not wipe the saved rules.
+    if let Some(priority) = body.defaults.language_priority.clone() {
+        let known = settings::language_tags();
+        let priority = settings::clean_language_priority(priority);
+        if priority.is_empty()
+            || priority
+                .iter()
+                .any(|tag| !known.iter().any(|option| option.eq_ignore_ascii_case(tag)))
+        {
+            return Err(lerr(
+                super::user_locale(&user),
+                StatusCode::BAD_REQUEST,
+                "admin.scrapeLanguageInvalid",
+            ));
+        }
+        let mut stored = body.defaults.clone();
+        stored.language_priority = Some(priority);
+        settings::set_scrape_defaults(&state.settings, &state.db, &stored);
     }
-    let mut stored = body;
-    stored.language_priority = Some(priority);
-    settings::set_scrape_defaults(&state.settings, &state.db, &stored);
+    if body.clear_fanart_key {
+        settings::set_fanart_api_key(&state.settings, &state.db, "");
+    } else if let Some(key) = body.fanart_api_key.as_deref().map(str::trim) {
+        if !key.is_empty() {
+            settings::set_fanart_api_key(&state.settings, &state.db, key);
+        }
+    }
     let saved = settings::scrape_defaults(&state.settings, &state.config);
-    Ok(Json(view(&saved)).into_response())
+    Ok(Json(view(&state, &saved)).into_response())
 }

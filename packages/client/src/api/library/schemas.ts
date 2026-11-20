@@ -15,6 +15,16 @@ export const ScrapeOptions = z.object({
   backdropMinWidth: z.number().nullable().optional(),
   posterSize: z.string().nullable().optional(),
   backdropSize: z.string().nullable().optional(),
+  logoLanguages: z.array(z.string()).nullable().optional(),
+  logoMinWidth: z.number().nullable().optional(),
+  logoSize: z.string().nullable().optional(),
+  seasonLanguages: z.array(z.string()).nullable().optional(),
+  seasonMinWidth: z.number().nullable().optional(),
+  seasonSize: z.string().nullable().optional(),
+  posterSources: z.array(z.string()).nullable().optional(),
+  backdropSources: z.array(z.string()).nullable().optional(),
+  logoSources: z.array(z.string()).nullable().optional(),
+  seasonSources: z.array(z.string()).nullable().optional(),
   /** Gallery backdrops kept per title; null keeps the provider's full set. */
   backdropCount: z.number().nullable().optional(),
   /** TMDB image size stored for provider URLs: w500, w780, w1280 or original. */
@@ -49,6 +59,16 @@ export const ScrapeDefaults = z.object({
   backdropMinWidth: z.number().nullable().optional(),
   posterSize: z.string().nullable().optional(),
   backdropSize: z.string().nullable().optional(),
+  logoLanguages: z.array(z.string()).nullable().optional(),
+  logoMinWidth: z.number().nullable().optional(),
+  logoSize: z.string().nullable().optional(),
+  seasonLanguages: z.array(z.string()).nullable().optional(),
+  seasonMinWidth: z.number().nullable().optional(),
+  seasonSize: z.string().nullable().optional(),
+  posterSources: z.array(z.string()).nullable().optional(),
+  backdropSources: z.array(z.string()).nullable().optional(),
+  logoSources: z.array(z.string()).nullable().optional(),
+  seasonSources: z.array(z.string()).nullable().optional(),
   writeImages: z.boolean().optional(),
 });
 export type ScrapeDefaults = z.infer<typeof ScrapeDefaults>;

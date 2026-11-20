@@ -7,7 +7,7 @@ import { apiBase } from '#web/shared/lib/api';
 import { useAuth } from '#web/shared/lib/auth';
 import { useKromaClient } from '#web/shared/lib/web-runtime';
 
-type ArtTab = 'poster' | 'backdrop';
+type ArtTab = 'poster' | 'backdrop' | 'logo';
 
 interface ArtImage {
   url: string;
@@ -28,6 +28,7 @@ interface ArtView {
   name?: string;
   posters: ArtImage[];
   backdrops: ArtImage[];
+  logos?: ArtImage[];
 }
 
 const COVER_W = 1280;
@@ -162,6 +163,15 @@ const IMG = (ratio: string): CSSProperties => ({
   display: 'block',
 });
 
+const LOGO_IMG: CSSProperties = {
+  width: '100%',
+  aspectRatio: '16 / 9',
+  objectFit: 'contain',
+  display: 'block',
+  padding: 10,
+  background: 'var(--kroma-surface-1)',
+};
+
 /** The manual artwork picker on a title's detail page. The override is stored
  *  apart from the scraped metadata, so the next enrichment pass cannot undo it. */
 export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; title: string }>) {
@@ -208,6 +218,7 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
         ...raw,
         posters: rankedImages(raw.posters),
         backdrops: rankedImages(raw.backdrops),
+        logos: rankedImages(raw.logos ?? []),
       };
       setView(next);
       setSelected({});
@@ -320,7 +331,13 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
     }
   };
 
-  const images = view ? (tab === 'poster' ? view.posters : view.backdrops) : [];
+  const images = view
+    ? tab === 'poster'
+      ? view.posters
+      : tab === 'backdrop'
+        ? view.backdrops
+        : (view.logos ?? [])
+    : [];
   const candidates = view ? (view.posters.length > 0 ? view.posters : view.backdrops) : [];
 
   return (
@@ -341,6 +358,14 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
               label={t('artwork.backdrop')}
               onPress={() => setTab('backdrop')}
             />
+            {!view?.library ? (
+              <Button
+                size="sm"
+                variant={tab === 'logo' ? 'primary' : 'ghost'}
+                label={t('artwork.logo')}
+                onPress={() => setTab('logo')}
+              />
+            ) : null}
           </Row>
         </Dialog.Header>
         <Dialog.Panel>
@@ -483,7 +508,11 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
                     }}
                     onClick={() => setSelected((current) => ({ ...current, [tab]: image.url }))}
                   >
-                    <img src={image.url} alt="" style={IMG(tab === 'poster' ? '2 / 3' : '16 / 9')} />
+                    <img
+                      src={image.url}
+                      alt=""
+                      style={tab === 'logo' ? LOGO_IMG : IMG(tab === 'poster' ? '2 / 3' : '16 / 9')}
+                    />
                     <Row between gap={8} px={8} py={6}>
                       <Text variant="meta" color="textDim" lines={1} minW={0}>
                         {image.note ?? (image.language || t('artwork.textless'))}

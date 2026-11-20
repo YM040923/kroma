@@ -29,6 +29,17 @@ struct ImagesBlock {
     posters: Vec<RawArt>,
     #[serde(default)]
     backdrops: Vec<RawArt>,
+    #[serde(default)]
+    logos: Vec<RawArt>,
+}
+
+/// Every candidate list one title offers, in one answer: the scraping rules
+/// ask for posters, backdrops and logos from the same provider call.
+#[derive(Debug, Default)]
+pub struct ArtLists {
+    pub posters: Vec<ArtImage>,
+    pub backdrops: Vec<ArtImage>,
+    pub logos: Vec<ArtImage>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -48,15 +59,9 @@ struct RawArt {
 /// Posters and backdrops TMDB offers for one title. The default detail call
 /// already appends `images`, but only for the logo; this asks the images
 /// endpoint directly so the picker gets the full lists.
-pub fn images(
-    api_key: &str,
-    language: &str,
-    languages: &[String],
-    target: Target,
-    id: u64,
-) -> Result<(Vec<ArtImage>, Vec<ArtImage>), ()> {
-    // The list must carry every language the artwork rules can ask for; TMDB
-    // otherwise answers only for the primary one.
+/// The languages TMDB should answer images for: every rule tag, the primary
+/// language, English and the textless plates.
+fn include_image_language(language: &str, languages: &[String]) -> String {
     let mut include: Vec<String> = Vec::new();
     for tag in languages.iter().map(String::as_str).chain([language]) {
         let lang2 = tag
@@ -73,9 +78,53 @@ pub fn images(
         include.push("en".to_string());
     }
     include.push("null".to_string());
+    include.join(",")
+}
+
+fn map_art(raw: Vec<RawArt>, size: &str) -> Vec<ArtImage> {
+    let mut unique: Vec<ArtImage> = Vec::new();
+    for image in raw {
+        let Some(path) = image.file_path else { continue };
+        let candidate = ArtImage {
+            url: format!("{IMG}/{size}{path}"),
+            width: image.width,
+            height: image.height,
+            language: image.iso_639_1,
+            votes: image.vote_average,
+        };
+        match unique.iter_mut().find(|seen| seen.url == candidate.url) {
+            Some(seen)
+                if candidate
+                    .votes
+                    .total_cmp(&seen.votes)
+                    .then((candidate.width * candidate.height).cmp(&(seen.width * seen.height)))
+                    .is_gt() => *seen = candidate,
+            Some(_) => {}
+            None => unique.push(candidate),
+        }
+    }
+    unique.sort_by(|a, b| {
+        b.votes
+            .total_cmp(&a.votes)
+            .then((b.width * b.height).cmp(&(a.width * a.height)))
+            .then(a.url.cmp(&b.url))
+    });
+    unique
+}
+
+pub fn images(
+    api_key: &str,
+    language: &str,
+    languages: &[String],
+    target: Target,
+    id: u64,
+) -> Result<ArtLists, ()> {
     let params = vec![
         ("language", language.to_string()),
-        ("include_image_language", include.join(",")),
+        (
+            "include_image_language",
+            include_image_language(language, languages),
+        ),
     ];
     let block: ImagesBlock = tmdb_json(
         "metadata.images",
@@ -83,37 +132,40 @@ pub fn images(
         api_key,
         &params,
     )?;
-    let map = |raw: Vec<RawArt>, size: &str| -> Vec<ArtImage> {
-        let mut unique: Vec<ArtImage> = Vec::new();
-        for image in raw {
-            let Some(path) = image.file_path else { continue };
-            let candidate = ArtImage {
-                url: format!("{IMG}/{size}{path}"),
-                width: image.width,
-                height: image.height,
-                language: image.iso_639_1,
-                votes: image.vote_average,
-            };
-            match unique.iter_mut().find(|seen| seen.url == candidate.url) {
-                Some(seen)
-                    if candidate
-                        .votes
-                        .total_cmp(&seen.votes)
-                        .then((candidate.width * candidate.height).cmp(&(seen.width * seen.height)))
-                        .is_gt() => *seen = candidate,
-                Some(_) => {}
-                None => unique.push(candidate),
-            }
-        }
-        unique.sort_by(|a, b| {
-            b.votes
-                .total_cmp(&a.votes)
-                .then((b.width * b.height).cmp(&(a.width * a.height)))
-                .then(a.url.cmp(&b.url))
-        });
-        unique
-    };
-    Ok((map(block.posters, "w500"), map(block.backdrops, "w1280")))
+    Ok(ArtLists {
+        posters: map_art(block.posters, "w500"),
+        backdrops: map_art(block.backdrops, "w1280"),
+        logos: map_art(block.logos, "original"),
+    })
+}
+
+/// The posters one season offers, for the season-poster rules.
+pub fn season_images(
+    api_key: &str,
+    language: &str,
+    languages: &[String],
+    tv_id: u64,
+    season: u32,
+) -> Result<Vec<ArtImage>, ()> {
+    #[derive(Debug, Deserialize, Default)]
+    struct SeasonImages {
+        #[serde(default)]
+        posters: Vec<RawArt>,
+    }
+    let params = vec![
+        ("language", language.to_string()),
+        (
+            "include_image_language",
+            include_image_language(language, languages),
+        ),
+    ];
+    let block: SeasonImages = tmdb_json(
+        "metadata.season_images",
+        &format!("{}/tv/{tv_id}/season/{season}/images", api()),
+        api_key,
+        &params,
+    )?;
+    Ok(map_art(block.posters, "w500"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
