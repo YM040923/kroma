@@ -588,7 +588,7 @@ export function Cloud115Settings() {
           <>
             <Surface elevated border="border" pad="none" px={22} py={20}>
               <Row wrap gap={20} align="center" justify="space-between">
-                <Row gap={14} center flex minW={260}>
+                <Row gap={14} align="center" flex minW={260}>
                   <Box w={48} h={48} radius="xl" bg="accentSoft" center shrink={0} overflow="hidden">
                     {account?.avatarUrl ? (
                       <img
@@ -603,7 +603,7 @@ export function Cloud115Settings() {
                     )}
                   </Box>
                   <Box shrink={1} minW={0} gap={4}>
-                    <Row wrap gap={8} center>
+                    <Row wrap gap={8} align="center">
                       <Text variant="title" lines={1}>
                         {account?.userName || '115 Cloud'}
                       </Text>
@@ -623,7 +623,7 @@ export function Cloud115Settings() {
                 </Row>
 
                 <Box flex minW={260} maxW={380} gap={6} px={16} py={12} bg="surface2" radius="lg">
-                  <Row between gap={12} center>
+                  <Row between gap={12} align="center">
                     <Text variant="meta" color="textDim">
                       {t('cloud115.capacity')}
                     </Text>
@@ -646,7 +646,7 @@ export function Cloud115Settings() {
                 </Box>
               </Row>
 
-              <Row wrap gap={12} center mt={20}>
+              <Row wrap gap={12} align="center" mt={20}>
                 <Text variant="meta" color="textDim">
                   {t('cloud115.qrApp')}
                 </Text>
@@ -859,7 +859,7 @@ export function Cloud115Settings() {
                     placeholder={t('cloud115.transferPlaceholder')}
                   />
                 </Field.Root>
-                <Row wrap gap={10} center>
+                <Row wrap gap={10} align="center">
                   <Button
                     label={
                       shareBusy ? t('cloud115.transferPreviewing') : t('cloud115.transferPreview')
@@ -1047,7 +1047,7 @@ export function Cloud115Settings() {
                     </Field.Root>
                   </Box>
                 </Box>
-                <Row wrap gap={8} center>
+                <Row wrap gap={8} align="center">
                   <Button
                     label={t('cloud115.uploadRapid')}
                     variant="ghost"
