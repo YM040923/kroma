@@ -60,6 +60,12 @@ impl Engine {
         if held.backdrop_min_width.is_some() {
             merged.backdrop_min_width = held.backdrop_min_width;
         }
+        if held.poster_min_votes.is_some() {
+            merged.poster_min_votes = held.poster_min_votes;
+        }
+        if held.backdrop_min_votes.is_some() {
+            merged.backdrop_min_votes = held.backdrop_min_votes;
+        }
         if held.poster_size.is_some() {
             merged.poster_size = held.poster_size.clone();
         }
@@ -146,6 +152,8 @@ fn default_options(state: &SharedState) -> crate::services::settings::ScrapeOpti
         backdrop_languages: defaults.backdrop_languages,
         poster_min_width: defaults.poster_min_width,
         backdrop_min_width: defaults.backdrop_min_width,
+        poster_min_votes: defaults.poster_min_votes,
+        backdrop_min_votes: defaults.backdrop_min_votes,
         poster_size: defaults.poster_size,
         backdrop_size: defaults.backdrop_size,
         logo_languages: defaults.logo_languages,

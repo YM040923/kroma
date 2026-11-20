@@ -21,6 +21,12 @@ export const CloudOptions = z.object({
   watchEnabled: z.boolean(),
   watchIntervalSecs: z.number(),
   skipIso: z.boolean(),
+  keepSuffix: z.boolean().default(false),
+  overwriteStrm: z.boolean().default(false),
+  minVideoSizeMb: z.number().default(0),
+  syncImages: z.boolean().default(true),
+  syncNfo: z.boolean().default(true),
+  syncSubtitles: z.boolean().default(true),
 });
 export type CloudOptions = z.infer<typeof CloudOptions>;
 
@@ -72,6 +78,50 @@ export const CloudHistoryEntry = z.object({
 });
 export type CloudHistoryEntry = z.infer<typeof CloudHistoryEntry>;
 
+export const TransferEntryView = z.object({
+  at: z.number(),
+  code: z.string(),
+  title: z.string(),
+  files: z.number(),
+  ok: z.boolean(),
+  message: z.string(),
+});
+export type TransferEntryView = z.infer<typeof TransferEntryView>;
+
+export const ShareEntryView = z.object({
+  id: z.string(),
+  name: z.string(),
+  isDir: z.boolean(),
+  size: z.number(),
+});
+export type ShareEntryView = z.infer<typeof ShareEntryView>;
+
+export const ShareView = z.object({
+  code: z.string(),
+  password: z.string(),
+  title: z.string(),
+  totalSize: z.number(),
+  entries: z.array(ShareEntryView),
+});
+export type ShareView = z.infer<typeof ShareView>;
+
+export const ReceiveReport = z.object({
+  files: z.number(),
+  message: z.string(),
+});
+export type ReceiveReport = z.infer<typeof ReceiveReport>;
+
+export const ReplaceSample = z.object({
+  path: z.string(),
+  old: z.string(),
+  new: z.string(),
+});
+export const ReplaceReport = z.object({
+  count: z.number(),
+  samples: z.array(ReplaceSample),
+});
+export type ReplaceReport = z.infer<typeof ReplaceReport>;
+
 export const CloudStatusView = z.object({
   running: z.boolean(),
   report: SyncReport,
@@ -93,6 +143,7 @@ export const CloudStatusView = z.object({
   playCount: z.number().default(0),
   signCount: z.number().default(0),
   history: z.array(CloudHistoryEntry).default([]),
+  transfers: z.array(TransferEntryView).default([]),
 });
 export type CloudStatusView = z.infer<typeof CloudStatusView>;
 

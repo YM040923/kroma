@@ -79,7 +79,7 @@ function LibrariesPageInner() {
         <PageHeader.Actions>
           {canScrape ? (
             <Button
-              variant="glass"
+              variant="ghost"
               icon="language"
               label={t('admin.scrapeTitle')}
               onPress={() => void navigate({ to: '/admin/scrape' })}

@@ -46,7 +46,17 @@ const MANUAL_PROBES_PER_RUN: u32 = 1000;
 const MAX_ASSETS_PER_RUN: u32 = 200;
 
 /// Companion files that live beside a video and belong with its `.strm`.
-const ASSET_EXTS: [&str; 8] = ["srt", "ass", "ssa", "sup", "nfo", "jpg", "jpeg", "png"];
+const ASSET_EXTS: [&str; 13] = [
+    "srt", "ass", "ssa", "sup", "vtt", "idx", "sub", "nfo", "jpg", "jpeg", "png", "webp", "tbn",
+];
+
+pub(crate) fn asset_allowed(config: &Config, ext: &str) -> bool {
+    match ext {
+        "jpg" | "jpeg" | "png" | "webp" | "tbn" => config.options.sync_images,
+        "nfo" => config.options.sync_nfo,
+        _ => config.options.sync_subtitles,
+    }
+}
 
 /// A companion larger than this is not a subtitle or a poster.
 const MAX_ASSET_BYTES: i64 = 200 * 1024 * 1024;
@@ -433,7 +443,7 @@ async fn sync_library(
                 .unwrap_or("")
                 .to_ascii_lowercase();
             if !is_video_ext(&ext) {
-                if is_asset_ext(&ext) && *assets_left > 0 {
+                if is_asset_ext(&ext) && asset_allowed(config, &ext) && *assets_left > 0 {
                     match download_asset(config, &entry.pick_code, name, entry.size, &dir).await {
                         Ok(true) => {
                             report.assets += 1;
@@ -448,13 +458,32 @@ async fn sync_library(
             if ext == "iso" && config.options.skip_iso {
                 continue;
             }
+            if config.options.min_video_size_mb > 0
+                && (entry.size.max(0) as u64)
+                    < config.options.min_video_size_mb * 1024 * 1024
+            {
+                continue;
+            }
             report.files += 1;
             if entry.pick_code.is_empty() {
                 report.errors.push(format!("{name} 没有 pickcode，已跳过"));
                 continue;
             }
-            let stem = safe_name(strip_extension(name));
-            if let Err(error) = write_entry(config, &dir, &stem, &entry.pick_code, entry.size, &mut seen, report) {
+            let stem = if config.options.keep_suffix {
+                safe_name(name)
+            } else {
+                safe_name(strip_extension(name))
+            };
+            if let Err(error) = write_entry(
+                config,
+                &dir,
+                &stem,
+                &entry.pick_code,
+                entry.size,
+                config.options.overwrite_strm,
+                &mut seen,
+                report,
+            ) {
                 report.errors.push(format!("{}: {error}", dir.display()));
                 continue;
             }
@@ -509,6 +538,7 @@ pub(crate) fn write_entry(
     stem: &str,
     pick_code: &str,
     size: i64,
+    overwrite: bool,
     seen: &mut HashSet<PathBuf>,
     report: &mut Report,
 ) -> Result<(), String> {
@@ -520,6 +550,8 @@ pub(crate) fn write_entry(
         pick_code.trim().to_ascii_lowercase()
     );
     if std::fs::read(&strm).ok().as_deref() == Some(content.as_bytes()) {
+        report.kept += 1;
+    } else if strm.exists() && !overwrite {
         report.kept += 1;
     } else {
         std::fs::write(&strm, &content).map_err(|e| format!("写 .strm 失败：{e}"))?;

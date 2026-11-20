@@ -1,6 +1,6 @@
 import { langName } from '@kromatv/core';
 import { useT } from '@kromatv/ui';
-import { Box, Button, Chip, Field, Row, Text } from '@kromatv/ui/kit';
+import { Box, Button, Chip, Row, Text } from '@kromatv/ui/kit';
 import { LanguagePriorityEditor } from '#web/features/admin/scrape-language.component';
 
 export const ART_SIZES = ['original', 'w1280', 'w780', 'w500'] as const;
@@ -8,6 +8,7 @@ export const ART_SIZES = ['original', 'w1280', 'w780', 'w500'] as const;
 export interface ArtRuleValue {
   languages: string[] | null;
   minWidth: number | null;
+  minVotes: number | null;
   size: string | null;
 }
 
@@ -18,7 +19,8 @@ export function ArtRuleEditor({
   hint,
   value,
   languages,
-  minWidthPlaceholder = '500',
+  widthOptions = [500, 780, 1000, 1280, 1920],
+  voteOptions,
   sources,
   overridden,
   onFollow,
@@ -28,7 +30,9 @@ export function ArtRuleEditor({
   hint: string;
   value: ArtRuleValue;
   languages: string[];
-  minWidthPlaceholder?: string;
+  widthOptions?: readonly number[];
+  /** Favourites-count presets; absent hides the filter for this image type. */
+  voteOptions?: readonly number[];
   /** Provider order; shown only when a second source is configured. */
   sources?: { value: string[]; onChange: (next: string[]) => void };
   /** Undefined on the global page; false/true states the library override. */
@@ -90,18 +94,60 @@ export function ArtRuleEditor({
         </Row>
       ) : null}
       <Row wrap gap={20} align="flex-end">
-        <Box w={150}>
-          <Field.Root
-            label={t('admin.artMinWidth')}
-            value={value.minWidth == null ? '' : String(value.minWidth)}
-            onValueChange={(text) => {
-              const digits = text.replace(/[^0-9]/g, '');
-              onChange({ minWidth: digits ? Number.parseInt(digits, 10) : null });
-            }}
-          >
-            <Field.Input placeholder={minWidthPlaceholder} />
-          </Field.Root>
+        <Box>
+          <Text variant="meta" color="textDim" mb={6}>
+            {t('admin.artMinWidth')}
+          </Text>
+          <Row wrap gap={8}>
+            <Chip
+              variant="surface"
+              active={value.minWidth == null}
+              label={t('admin.artWidthDefault')}
+              onPress={() => onChange({ minWidth: null })}
+            />
+            {widthOptions.map((width) => (
+              <Chip
+                key={width}
+                variant="surface"
+                active={value.minWidth === width}
+                label={String(width)}
+                onPress={() => onChange({ minWidth: width })}
+              />
+            ))}
+            {value.minWidth != null && !widthOptions.includes(value.minWidth) ? (
+              <Chip
+                variant="surface"
+                active
+                label={String(value.minWidth)}
+                onPress={() => onChange({ minWidth: null })}
+              />
+            ) : null}
+          </Row>
         </Box>
+        {voteOptions ? (
+          <Box>
+            <Text variant="meta" color="textDim" mb={6}>
+              {t('admin.artMinVotes')}
+            </Text>
+            <Row wrap gap={8}>
+              <Chip
+                variant="surface"
+                active={value.minVotes == null}
+                label={t('admin.artVotesAny')}
+                onPress={() => onChange({ minVotes: null })}
+              />
+              {voteOptions.map((votes) => (
+                <Chip
+                  key={votes}
+                  variant="surface"
+                  active={value.minVotes === votes}
+                  label={String(votes)}
+                  onPress={() => onChange({ minVotes: votes })}
+                />
+              ))}
+            </Row>
+          </Box>
+        ) : null}
         <Box>
           <Text variant="meta" color="textDim" mb={6}>
             {t('admin.artSize')}

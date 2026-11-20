@@ -20,7 +20,11 @@ pub struct ArtImage {
     pub width: u32,
     pub height: u32,
     pub language: Option<String>,
+    /// TMDB's vote average, or Fanart's likes for sources that have no score.
     pub votes: f64,
+    /// How many people liked it (TMDB vote count, Fanart likes). Comparable
+    /// enough across sources to be the "favourites" filter.
+    pub popularity: f64,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -54,6 +58,8 @@ struct RawArt {
     iso_639_1: Option<String>,
     #[serde(default)]
     vote_average: f64,
+    #[serde(default)]
+    vote_count: u32,
 }
 
 /// Posters and backdrops TMDB offers for one title. The default detail call
@@ -91,6 +97,7 @@ fn map_art(raw: Vec<RawArt>, size: &str) -> Vec<ArtImage> {
             height: image.height,
             language: image.iso_639_1,
             votes: image.vote_average,
+            popularity: f64::from(image.vote_count),
         };
         match unique.iter_mut().find(|seen| seen.url == candidate.url) {
             Some(seen)

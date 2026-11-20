@@ -181,6 +181,8 @@ pub struct ScrapeOptions {
     /// Smallest candidate accepted before falling back to a relaxed pass.
     pub poster_min_width: Option<u16>,
     pub backdrop_min_width: Option<u16>,
+    pub poster_min_votes: Option<u32>,
+    pub backdrop_min_votes: Option<u32>,
     /// Per-artwork provider size; None falls back to `artwork_size`.
     pub poster_size: Option<String>,
     pub backdrop_size: Option<String>,
@@ -310,6 +312,8 @@ impl ScrapeOptions {
         self.backdrop_size = self.backdrop_size.as_deref().and_then(valid_art_size);
         self.poster_min_width = self.poster_min_width.filter(|width| *width > 0);
         self.backdrop_min_width = self.backdrop_min_width.filter(|width| *width > 0);
+        self.poster_min_votes = self.poster_min_votes.filter(|votes| *votes > 0);
+        self.backdrop_min_votes = self.backdrop_min_votes.filter(|votes| *votes > 0);
         self.logo_languages = self
             .logo_languages
             .map(clean_art_languages)
@@ -399,6 +403,8 @@ pub struct ScrapeDefaults {
     pub backdrop_languages: Option<Vec<String>>,
     pub poster_min_width: Option<u16>,
     pub backdrop_min_width: Option<u16>,
+    pub poster_min_votes: Option<u32>,
+    pub backdrop_min_votes: Option<u32>,
     pub poster_size: Option<String>,
     pub backdrop_size: Option<String>,
     pub logo_languages: Option<Vec<String>>,
@@ -431,6 +437,8 @@ fn clean_defaults(mut defaults: ScrapeDefaults) -> ScrapeDefaults {
     defaults.backdrop_size = defaults.backdrop_size.as_deref().and_then(valid_art_size);
     defaults.poster_min_width = defaults.poster_min_width.filter(|width| *width > 0);
     defaults.backdrop_min_width = defaults.backdrop_min_width.filter(|width| *width > 0);
+    defaults.poster_min_votes = defaults.poster_min_votes.filter(|votes| *votes > 0);
+    defaults.backdrop_min_votes = defaults.backdrop_min_votes.filter(|votes| *votes > 0);
     defaults.logo_languages = defaults
         .logo_languages
         .map(clean_art_languages)

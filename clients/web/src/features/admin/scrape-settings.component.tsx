@@ -44,10 +44,16 @@ function ScrapeSettingsInner() {
         : (data.backdropLanguages ?? null),
     posterMinWidth:
       draft.posterMinWidth !== undefined ? draft.posterMinWidth : (data.posterMinWidth ?? null),
+    posterMinVotes:
+      draft.posterMinVotes !== undefined ? draft.posterMinVotes : (data.posterMinVotes ?? null),
     backdropMinWidth:
       draft.backdropMinWidth !== undefined
         ? draft.backdropMinWidth
         : (data.backdropMinWidth ?? null),
+    backdropMinVotes:
+      draft.backdropMinVotes !== undefined
+        ? draft.backdropMinVotes
+        : (data.backdropMinVotes ?? null),
     posterSize: draft.posterSize !== undefined ? draft.posterSize : (data.posterSize ?? null),
     backdropSize:
       draft.backdropSize !== undefined ? draft.backdropSize : (data.backdropSize ?? null),
@@ -91,21 +97,25 @@ function ScrapeSettingsInner() {
   const poster: ArtRuleValue = {
     languages: value.posterLanguages ?? null,
     minWidth: value.posterMinWidth ?? null,
+    minVotes: value.posterMinVotes ?? null,
     size: value.posterSize ?? null,
   };
   const backdrop: ArtRuleValue = {
     languages: value.backdropLanguages ?? null,
     minWidth: value.backdropMinWidth ?? null,
+    minVotes: value.backdropMinVotes ?? null,
     size: value.backdropSize ?? null,
   };
   const logo: ArtRuleValue = {
     languages: value.logoLanguages ?? null,
     minWidth: value.logoMinWidth ?? null,
+    minVotes: null,
     size: value.logoSize ?? null,
   };
   const season: ArtRuleValue = {
     languages: value.seasonLanguages ?? null,
     minWidth: value.seasonMinWidth ?? null,
+    minVotes: null,
     size: value.seasonSize ?? null,
   };
   const fanart = data.fanartConfigured === true;
@@ -166,6 +176,8 @@ function ScrapeSettingsInner() {
               hint={t('admin.posterRuleHint')}
               value={poster}
               languages={languages}
+              widthOptions={[300, 500, 780, 1000]}
+              voteOptions={[10, 50, 100, 500]}
               sources={sourceProps(value.posterSources, ['tmdb', 'fanart'], 'posterSources')}
               onChange={(patch) =>
                 save({
@@ -173,6 +185,8 @@ function ScrapeSettingsInner() {
                     patch.languages !== undefined ? patch.languages : value.posterLanguages,
                   posterMinWidth:
                     patch.minWidth !== undefined ? patch.minWidth : value.posterMinWidth,
+                  posterMinVotes:
+                    patch.minVotes !== undefined ? patch.minVotes : value.posterMinVotes,
                   posterSize: patch.size !== undefined ? patch.size : value.posterSize,
                 })
               }
@@ -182,7 +196,8 @@ function ScrapeSettingsInner() {
               hint={t('admin.backdropRuleHint')}
               value={backdrop}
               languages={languages}
-              minWidthPlaceholder="1920"
+              widthOptions={[1280, 1920, 2560]}
+              voteOptions={[10, 50, 100, 500]}
               sources={sourceProps(
                 value.backdropSources,
                 ['tmdb', 'fanart'],
@@ -194,6 +209,8 @@ function ScrapeSettingsInner() {
                     patch.languages !== undefined ? patch.languages : value.backdropLanguages,
                   backdropMinWidth:
                     patch.minWidth !== undefined ? patch.minWidth : value.backdropMinWidth,
+                  backdropMinVotes:
+                    patch.minVotes !== undefined ? patch.minVotes : value.backdropMinVotes,
                   backdropSize:
                     patch.size !== undefined ? patch.size : value.backdropSize,
                 })
@@ -204,7 +221,7 @@ function ScrapeSettingsInner() {
               hint={t('admin.logoRuleHint')}
               value={logo}
               languages={languages}
-              minWidthPlaceholder="200"
+              widthOptions={[200, 300, 500]}
               sources={sourceProps(value.logoSources, ['fanart', 'tmdb'], 'logoSources')}
               onChange={(patch) =>
                 save({
@@ -221,7 +238,7 @@ function ScrapeSettingsInner() {
               hint={t('admin.seasonRuleHint')}
               value={season}
               languages={languages}
-              minWidthPlaceholder="500"
+              widthOptions={[300, 500, 780]}
               sources={sourceProps(
                 value.seasonSources,
                 ['fanart', 'tmdb'],

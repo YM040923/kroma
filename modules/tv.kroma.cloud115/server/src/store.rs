@@ -49,6 +49,25 @@ pub struct HistoryEntry {
     pub truncated: bool,
 }
 
+/// One share-link transfer, kept for the task history and the log page.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TransferEntry {
+    pub at: i64,
+    pub code: String,
+    pub title: String,
+    pub files: u64,
+    pub ok: bool,
+    pub message: String,
+}
+
+pub fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
 /// What the module remembers between runs.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -74,6 +93,8 @@ pub struct Stored {
     pub sign_count: u64,
     /// The last few mirror runs, newest last.
     pub history: Vec<HistoryEntry>,
+    /// The last share transfers, newest last.
+    pub transfers: Vec<TransferEntry>,
 }
 
 fn path() -> PathBuf {

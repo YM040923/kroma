@@ -2,6 +2,7 @@
 // derives from its id; `moduleApiHook` binds it, so the id is never repeated here.
 
 import { moduleApiHook } from '@kromatv/module-sdk';
+import { z } from 'zod';
 import {
   BrowseView,
   CloudAccount,
@@ -16,6 +17,9 @@ import {
   UploadPartView,
   UploadStarted,
   StartedView,
+  ShareView,
+  ReceiveReport,
+  ReplaceReport,
   type CloudLibrary,
   type CloudOptions,
 } from './schemas';
@@ -49,4 +53,15 @@ export const useCloud115Api = moduleApiHook((api) => ({
   uploadPart: (upload: string, index: number) =>
     api.post('/upload/part', { upload, index }, UploadPartView),
   uploadFinish: (upload: string) => api.post('/upload/finish', { upload }, UploadFinished),
+  transferPreview: (text: string) =>
+    api.post('/transfer/preview', { text }, z.array(ShareView)),
+  transferReceive: (body: {
+    code: string;
+    password: string;
+    title: string;
+    cid: string;
+    entries: { id: string; isDir: boolean }[];
+  }) => api.post('/transfer/receive', body, ReceiveReport),
+  replacePreview: () => api.post('/replace/preview', {}, ReplaceReport),
+  replaceRun: () => api.post('/replace/run', {}, ReplaceReport),
 }));

@@ -37,9 +37,11 @@ interface ScrapeDraft {
   nfo: boolean;
   posterLanguages: string[] | null;
   posterMinWidth: number | null;
+  posterMinVotes: number | null;
   posterSize: string | null;
   backdropLanguages: string[] | null;
   backdropMinWidth: number | null;
+  backdropMinVotes: number | null;
   backdropSize: string | null;
   logoLanguages: string[] | null;
   logoMinWidth: number | null;
@@ -133,9 +135,11 @@ function LibraryDetail({
     nfo: lib.scrape.nfo,
     posterLanguages: lib.scrape.posterLanguages ?? null,
     posterMinWidth: lib.scrape.posterMinWidth ?? null,
+    posterMinVotes: lib.scrape.posterMinVotes ?? null,
     posterSize: lib.scrape.posterSize ?? null,
     backdropLanguages: lib.scrape.backdropLanguages ?? null,
     backdropMinWidth: lib.scrape.backdropMinWidth ?? null,
+    backdropMinVotes: lib.scrape.backdropMinVotes ?? null,
     backdropSize: lib.scrape.backdropSize ?? null,
     logoLanguages: lib.scrape.logoLanguages ?? null,
     logoMinWidth: lib.scrape.logoMinWidth ?? null,
@@ -178,9 +182,11 @@ function LibraryDetail({
           nfo: next.nfo,
           posterLanguages: next.posterLanguages,
           posterMinWidth: next.posterMinWidth,
+          posterMinVotes: next.posterMinVotes,
           posterSize: next.posterSize,
           backdropLanguages: next.backdropLanguages,
           backdropMinWidth: next.backdropMinWidth,
+          backdropMinVotes: next.backdropMinVotes,
           backdropSize: next.backdropSize,
           logoLanguages: next.logoLanguages,
           logoMinWidth: next.logoMinWidth,
@@ -211,29 +217,35 @@ function LibraryDetail({
   const poster: ArtRuleValue = {
     languages: draft.posterLanguages ?? defaults.posterLanguages ?? null,
     minWidth: draft.posterMinWidth ?? defaults.posterMinWidth ?? null,
+    minVotes: draft.posterMinVotes ?? defaults.posterMinVotes ?? null,
     size: draft.posterSize ?? defaults.posterSize ?? null,
   };
   const backdrop: ArtRuleValue = {
     languages: draft.backdropLanguages ?? defaults.backdropLanguages ?? null,
     minWidth: draft.backdropMinWidth ?? defaults.backdropMinWidth ?? null,
+    minVotes: draft.backdropMinVotes ?? defaults.backdropMinVotes ?? null,
     size: draft.backdropSize ?? defaults.backdropSize ?? null,
   };
   const posterOverridden =
     draft.posterLanguages !== null ||
     draft.posterMinWidth !== null ||
+    draft.posterMinVotes !== null ||
     draft.posterSize !== null;
   const logo: ArtRuleValue = {
     languages: draft.logoLanguages ?? defaults.logoLanguages ?? null,
     minWidth: draft.logoMinWidth ?? defaults.logoMinWidth ?? null,
+    minVotes: null,
     size: draft.logoSize ?? defaults.logoSize ?? null,
   };
   const backdropOverridden =
     draft.backdropLanguages !== null ||
     draft.backdropMinWidth !== null ||
+    draft.backdropMinVotes !== null ||
     draft.backdropSize !== null;
   const season: ArtRuleValue = {
     languages: draft.seasonLanguages ?? defaults.seasonLanguages ?? null,
     minWidth: draft.seasonMinWidth ?? defaults.seasonMinWidth ?? null,
+    minVotes: null,
     size: draft.seasonSize ?? defaults.seasonSize ?? null,
   };
   const logoOverridden =
@@ -440,12 +452,15 @@ function LibraryDetail({
               hint={t('admin.posterRuleHint')}
               value={poster}
               languages={languages}
+              widthOptions={[300, 500, 780, 1000]}
+              voteOptions={[10, 50, 100, 500]}
               overridden={posterOverridden}
               onFollow={() =>
                 void persistScrape({
                   ...draft,
                   posterLanguages: null,
                   posterMinWidth: null,
+                  posterMinVotes: null,
                   posterSize: null,
                 })
               }
@@ -458,6 +473,8 @@ function LibraryDetail({
                       : draft.posterLanguages,
                   posterMinWidth:
                     patch.minWidth !== undefined ? patch.minWidth : draft.posterMinWidth,
+                  posterMinVotes:
+                    patch.minVotes !== undefined ? patch.minVotes : draft.posterMinVotes,
                   posterSize:
                     patch.size !== undefined ? patch.size : draft.posterSize,
                 })
@@ -469,13 +486,15 @@ function LibraryDetail({
               hint={t('admin.backdropRuleHint')}
               value={backdrop}
               languages={languages}
-              minWidthPlaceholder="1920"
+              widthOptions={[1280, 1920, 2560]}
+              voteOptions={[10, 50, 100, 500]}
               overridden={backdropOverridden}
               onFollow={() =>
                 void persistScrape({
                   ...draft,
                   backdropLanguages: null,
                   backdropMinWidth: null,
+                  backdropMinVotes: null,
                   backdropSize: null,
                 })
               }
@@ -490,6 +509,10 @@ function LibraryDetail({
                     patch.minWidth !== undefined
                       ? patch.minWidth
                       : draft.backdropMinWidth,
+                  backdropMinVotes:
+                    patch.minVotes !== undefined
+                      ? patch.minVotes
+                      : draft.backdropMinVotes,
                   backdropSize:
                     patch.size !== undefined ? patch.size : draft.backdropSize,
                 })
@@ -501,7 +524,7 @@ function LibraryDetail({
               hint={t('admin.logoRuleHint')}
               value={logo}
               languages={languages}
-              minWidthPlaceholder="200"
+              widthOptions={[200, 300, 500]}
               overridden={logoOverridden}
               onFollow={() =>
                 void persistScrape({
@@ -531,6 +554,7 @@ function LibraryDetail({
                 hint={t('admin.seasonRuleHint')}
                 value={season}
                 languages={languages}
+                widthOptions={[300, 500, 780]}
                 overridden={seasonOverridden}
                 onFollow={() =>
                   void persistScrape({

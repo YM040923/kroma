@@ -179,13 +179,23 @@ fn try_direct(
     }
     let dir = dirs.get(&event.parent_cid)?;
     let dir = Path::new(dir);
-    let stem = sync::safe_name(sync::strip_extension(&event.name));
+    let stem = if config.options.keep_suffix {
+        sync::safe_name(&event.name)
+    } else {
+        sync::safe_name(sync::strip_extension(&event.name))
+    };
+    if config.options.min_video_size_mb > 0
+        && (event.size.max(0) as u64) < config.options.min_video_size_mb * 1024 * 1024
+    {
+        return None;
+    }
     match sync::write_entry(
         config,
         dir,
         &stem,
         &event.pick_code,
         event.size,
+        config.options.overwrite_strm,
         &mut HashSet::new(),
         report,
     ) {
@@ -284,7 +294,10 @@ async fn rescan(
                 .unwrap_or("")
                 .to_ascii_lowercase();
             if !sync::is_video_ext(&ext) {
-                if sync::is_asset_ext(&ext) && assets_left > 0 {
+                if sync::is_asset_ext(&ext)
+                    && sync::asset_allowed(config, &ext)
+                    && assets_left > 0
+                {
                     match sync::download_asset(config, &entry.pick_code, &entry.name, entry.size, &dir).await {
                         Ok(true) => {
                             report.assets += 1;
@@ -299,16 +312,27 @@ async fn rescan(
             if ext == "iso" && config.options.skip_iso {
                 continue;
             }
+            if config.options.min_video_size_mb > 0
+                && (entry.size.max(0) as u64)
+                    < config.options.min_video_size_mb * 1024 * 1024
+            {
+                continue;
+            }
             if entry.pick_code.is_empty() {
                 continue;
             }
-            let stem = sync::safe_name(sync::strip_extension(&entry.name));
+            let stem = if config.options.keep_suffix {
+                sync::safe_name(&entry.name)
+            } else {
+                sync::safe_name(sync::strip_extension(&entry.name))
+            };
             if let Err(error) = sync::write_entry(
                 config,
                 &dir,
                 &stem,
                 &entry.pick_code,
                 entry.size,
+                config.options.overwrite_strm,
                 &mut seen,
                 report,
             ) {

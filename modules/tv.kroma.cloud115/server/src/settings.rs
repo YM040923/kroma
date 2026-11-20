@@ -52,6 +52,18 @@ pub struct Options {
     /// Leave ISO/Blu-ray images out of the mirror: a browser cannot decode one,
     /// and this server cannot remux a URL.
     pub skip_iso: bool,
+    /// Keep the source suffix: `movie.mkv` becomes `movie.mkv.strm` instead of
+    /// `movie.strm`.
+    pub keep_suffix: bool,
+    /// Replace a `.strm` whose content differs. Off keeps an existing file,
+    /// which is the safe default; an address change uses the replace tool.
+    pub overwrite_strm: bool,
+    /// Videos smaller than this are not mirrored; 0 disables the floor.
+    pub min_video_size_mb: u64,
+    /// Companion files copied beside each `.strm`.
+    pub sync_images: bool,
+    pub sync_nfo: bool,
+    pub sync_subtitles: bool,
 }
 
 impl Default for Options {
@@ -68,6 +80,12 @@ impl Default for Options {
             watch_enabled: true,
             watch_interval_secs: 60,
             skip_iso: true,
+            keep_suffix: false,
+            overwrite_strm: false,
+            min_video_size_mb: 0,
+            sync_images: true,
+            sync_nfo: true,
+            sync_subtitles: true,
         }
     }
 }
@@ -84,6 +102,7 @@ impl Options {
         self.max_entries_per_folder = self.max_entries_per_folder.clamp(200, 20_000);
         self.write_pause_ms = self.write_pause_ms.clamp(1000, 60_000);
         self.watch_interval_secs = self.watch_interval_secs.clamp(30, 3600);
+        self.min_video_size_mb = self.min_video_size_mb.min(1_048_576);
         self
     }
 }

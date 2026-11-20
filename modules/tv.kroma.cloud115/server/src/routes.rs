@@ -20,6 +20,7 @@ use crate::client;
 use crate::login;
 use crate::play::links;
 use crate::settings::{Config, Library, Options};
+use crate::transfer::{self, SelectedEntry, ShareView};
 
 pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
     Router::new()
@@ -38,6 +39,10 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/upload/start", post(crate::upload::start::<S>))
         .route("/upload/part", post(crate::upload::part::<S>))
         .route("/upload/finish", post(crate::upload::finish::<S>))
+        .route("/transfer/preview", post(transfer_preview::<S>))
+        .route("/transfer/receive", post(transfer_receive::<S>))
+        .route("/replace/preview", post(replace_preview::<S>))
+        .route("/replace/run", post(replace_run::<S>))
 }
 
 // ---------------------------------------------------------------------------
@@ -480,6 +485,7 @@ struct StatusView {
     play_count: u64,
     sign_count: u64,
     history: Vec<crate::store::HistoryEntry>,
+    transfers: Vec<crate::store::TransferEntry>,
 }
 
 async fn status<S: HostCtx + Clone + Send + Sync + 'static>(State(_host): State<S>) -> Json<StatusView> {
@@ -512,6 +518,7 @@ async fn status<S: HostCtx + Clone + Send + Sync + 'static>(State(_host): State<
         play_count: stored.play_count,
         sign_count: stored.sign_count,
         history: stored.history,
+        transfers: stored.transfers,
     })
 }
 
@@ -537,6 +544,125 @@ async fn sync<S: HostCtx + Clone + Send + Sync + 'static>(
         Ok(()) => Ok(Json(Started { started: true })),
         Err(reason) => Err(json_error(StatusCode::CONFLICT, &reason)),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Share transfer
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransferPreviewBody {
+    text: String,
+}
+
+async fn transfer_preview<S: HostCtx + Clone + Send + Sync + 'static>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+    Json(body): Json<TransferPreviewBody>,
+) -> Result<Json<Vec<ShareView>>, Response> {
+    require_settings(&host, &user)?;
+    let config = Config::load();
+    if config.cookie.is_empty() {
+        return Err(json_error(StatusCode::CONFLICT, "请先登录 115 账号"));
+    }
+    transfer::preview(&config.cookie, client::MODULE_UA, &body.text)
+        .await
+        .map(Json)
+        .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransferReceiveBody {
+    code: String,
+    #[serde(default)]
+    password: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    cid: String,
+    entries: Vec<SelectedEntry>,
+}
+
+fn record_transfer(entry: crate::store::TransferEntry) {
+    let _ = crate::store::patch(|stored| {
+        stored.transfers.push(entry);
+        let overflow = stored.transfers.len().saturating_sub(50);
+        if overflow > 0 {
+            stored.transfers.drain(0..overflow);
+        }
+    });
+}
+
+async fn transfer_receive<S: HostCtx + Clone + Send + Sync + 'static>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+    Json(body): Json<TransferReceiveBody>,
+) -> Result<Json<transfer::ReceiveReport>, Response> {
+    require_settings(&host, &user)?;
+    let config = Config::load();
+    if config.cookie.is_empty() {
+        return Err(json_error(StatusCode::CONFLICT, "请先登录 115 账号"));
+    }
+    let cid = if body.cid.trim().is_empty() {
+        "0"
+    } else {
+        body.cid.trim()
+    };
+    match transfer::receive(
+        &config.cookie,
+        client::MODULE_UA,
+        &body.code,
+        &body.password,
+        cid,
+        &body.entries,
+    )
+    .await
+    {
+        Ok(report) => {
+            record_transfer(crate::store::TransferEntry {
+                at: crate::store::now_ms(),
+                code: body.code,
+                title: body.title,
+                files: report.files as u64,
+                ok: true,
+                message: report.message.clone(),
+            });
+            Ok(Json(report))
+        }
+        Err(error) => {
+            record_transfer(crate::store::TransferEntry {
+                at: crate::store::now_ms(),
+                code: body.code,
+                title: body.title,
+                files: 0,
+                ok: false,
+                message: error.clone(),
+            });
+            Err(json_error(StatusCode::BAD_GATEWAY, &error))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Rewriting the base address inside generated STRM files
+
+async fn replace_preview<S: HostCtx + Clone + Send + Sync + 'static>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<crate::replace::ReplaceReport>, Response> {
+    require_settings(&host, &user)?;
+    Ok(Json(crate::replace::preview(&Config::load())))
+}
+
+async fn replace_run<S: HostCtx + Clone + Send + Sync + 'static>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<crate::replace::ReplaceReport>, Response> {
+    require_settings(&host, &user)?;
+    crate::replace::run(&Config::load())
+        .map(Json)
+        .map_err(|error| json_error(StatusCode::CONFLICT, &error))
 }
 
 // ---------------------------------------------------------------------------

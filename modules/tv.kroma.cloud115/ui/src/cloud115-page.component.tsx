@@ -1,25 +1,39 @@
-// Admin "115 Cloud" page: the account, the folder mappings and the mirror's
-// progress. Backed by this module's `/settings`, `/status` and `/sync` routes.
+// Admin "115 Cloud" page, in five tabs over ONE settings store: the account and
+// its pacing, ingest (share transfer + upload), STRM mappings, the watcher and
+// its sync board, and the logs. Backed by this module's `/settings`, `/status`,
+// `/sync`, `/transfer/*` and `/browse` routes.
 //
 // The page never sees the stored cookie: it is told only whether one is set. A
 // blank field keeps it, and clearing takes an explicit button, so autofill or a
 // stray save cannot sign the module out of the account.
+//
+// The five tabs share the state above them, so the save bar is one bar with one
+// dirty flag rather than a copy per tab, and switching tabs never discards an
+// edit.
 import { Denied, ModuleFailed, ModuleLoading, useCap, useT } from '@kromatv/module-sdk';
 import {
   Badge,
   Box,
   Button,
+  Callout,
+  ChoiceList,
+  Dialog,
   Field,
   Icon,
+  NumberField,
   PageHeader,
   Progress,
   Row,
-  Section,
+  SegmentGroup,
+  Select,
   Surface,
   Switch,
+  styles,
   Text,
+  useBreakpoint,
+  useStyles,
 } from '@kromatv/ui/kit';
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useCloud115Api } from './api.hook';
 import type {
   BrowseEntry,
@@ -30,138 +44,68 @@ import type {
   CloudStatusView,
   LoginStarted,
   LoginState,
+  ShareView,
   SyncReport,
+  TransferEntryView,
 } from './schemas';
 
+// The clients a 115 login can be made from. Each is a distinct session, so the
+// operator picks one neither they nor another tool is holding.
 const LOGIN_APPS = [
-  { value: 'alipaymini', label: '支付宝小程序' },
-  { value: 'wechatmini', label: '微信小程序' },
-  { value: 'tv', label: '电视端' },
-  { value: 'apple_tv', label: 'Apple TV 端' },
-  { value: 'harmony', label: '鸿蒙端' },
-  { value: 'os_linux', label: 'Linux 客户端' },
-  { value: 'os_mac', label: 'Mac 客户端' },
-  { value: 'os_windows', label: 'Windows 客户端' },
-  { value: 'web', label: '网页端' },
+  { value: 'alipaymini', label: 'cloud115.loginApp.alipaymini' },
+  { value: 'wechatmini', label: 'cloud115.loginApp.wechatmini' },
+  { value: 'tv', label: 'cloud115.loginApp.tv' },
+  { value: 'apple_tv', label: 'cloud115.loginApp.apple_tv' },
+  { value: 'harmony', label: 'cloud115.loginApp.harmony' },
+  { value: 'os_linux', label: 'cloud115.loginApp.os_linux' },
+  { value: 'os_mac', label: 'cloud115.loginApp.os_mac' },
+  { value: 'os_windows', label: 'cloud115.loginApp.os_windows' },
+  { value: 'web', label: 'cloud115.loginApp.web' },
 ] as const;
 
-const APP_SELECT: CSSProperties = {
-  background: 'var(--kroma-surface-1)',
-  border: '1px solid var(--kroma-border)',
-  borderRadius: 'var(--radius-md)',
-  padding: '10px 12px',
-  color: 'var(--kroma-text)',
-  font: 'var(--type-body)',
-  minWidth: 180,
+const TABS = ['account', 'ingest', 'strm', 'sync', 'logs'] as const;
+type Tab = (typeof TABS)[number];
+
+const TAB_LABEL: Record<Tab, string> = {
+  account: 'cloud115.tabAccount',
+  ingest: 'cloud115.tabIngest',
+  strm: 'cloud115.tabStrm',
+  sync: 'cloud115.tabSync',
+  logs: 'cloud115.tabLogs',
 };
 
 const ERRORS_PANE: CSSProperties = {
   margin: 0,
-  marginTop: 12,
   maxHeight: 220,
   overflow: 'auto',
   padding: 12,
   borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--kroma-border)',
-  background: 'var(--kroma-bg)',
+  background: 'var(--kroma-surface-2)',
   font: 'var(--type-meta)',
   fontFamily: 'var(--font-mono)',
   color: 'var(--kroma-text-muted)',
   whiteSpace: 'pre-wrap',
 };
 
-const GRID_ROW: CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 12,
-  alignItems: 'flex-end',
-  marginBottom: 12,
-};
-
-const CELL: CSSProperties = { flex: '1 1 180px', minWidth: 160 };
-const SUMMARY_GRID: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'minmax(220px, 1.2fr) repeat(3, minmax(140px, 1fr))',
-  gap: 22,
-  alignItems: 'start',
-};
-const MAPPING_CARD: CSSProperties = {
-  border: '1px solid var(--kroma-border)',
-  borderRadius: 'var(--radius-md)',
-  padding: '16px 18px',
-  background: 'var(--kroma-surface-2)',
-};
-
-const MAPPING_GRID: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-  gap: 18,
-  alignItems: 'start',
-};
-
-const READONLY_VALUE: CSSProperties = {
-  border: '1px solid var(--kroma-border)',
-  borderRadius: 'var(--radius-md)',
-  padding: '10px 12px',
-  background: 'var(--kroma-surface-1)',
-  minHeight: 40,
-  display: 'flex',
-  alignItems: 'center',
-  marginTop: 6,
-  overflow: 'hidden',
-};
-
-const READONLY_TEXT: CSSProperties = {
-  minWidth: 0,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  font: 'var(--type-body)',
-  color: 'var(--kroma-text)',
-};
-
-const LINK_TEXT: CSSProperties = {
-  marginTop: 6,
-  font: 'var(--type-meta)',
-  fontFamily: 'var(--font-mono)',
-  color: 'var(--kroma-text-muted)',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
-
-const DETAILS: CSSProperties = {
-  marginTop: 16,
-  borderTop: '1px solid var(--kroma-border)',
-  paddingTop: 12,
-};
-
-const SUMMARY: CSSProperties = {
-  cursor: 'pointer',
-  font: 'var(--type-meta)',
-  color: 'var(--kroma-text-muted)',
-  listStyle: 'none',
-};
-
-const SAVE_BAR: CSSProperties = {
-  position: 'sticky',
-  bottom: 0,
-  zIndex: 5,
-  display: 'flex',
-  flexWrap: 'wrap',
-  alignItems: 'center',
-  gap: 12,
-  marginTop: 26,
-  padding: '14px 0',
-  borderTop: '1px solid var(--kroma-border)',
-  background: 'var(--kroma-bg)',
-};
+// The save bar rides the bottom of the viewport: a settings tab can be long,
+// and the unsaved state must stay visible while the form is scrolled.
+const sDefinition = styles({
+  sticky: { position: 'sticky', bottom: 0, zIndex: 5 },
+});
 
 const EMPTY_LIBRARY: CloudLibrary = { remote: '', local: '' };
 
-/** The account, the mappings, the pacing and the run controls. Contributed both
- *  as this module's settings panel (inside its card on the modules page) and as
- *  the top half of its own page, so the same controls are never built twice. */
+// The backend's own fallback when a share carries no title; rendering it would
+// print Chinese in every other language, so it is replaced at the edge.
+const UNTITLED_SHARE = '115 分享';
+
+type Target = { cid: string; name: string };
+
+function errorText(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
+/** The five tabs share one loaded settings view and one dirty flag. */
 export function Cloud115Settings() {
   const t = useT();
   const api = useCloud115Api();
@@ -180,8 +124,12 @@ export function Cloud115Settings() {
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [dirty, setDirty] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const loaded = useRef(false);
+  // What the server held when this page loaded: a save is allowed to carry zero
+  // mappings only when there were none to begin with.
+  const savedMappings = useRef(0);
   const [picker, setPicker] = useState<{ at: number; mode: 'remote' | 'local' } | null>(null);
   const [loginApp, setLoginApp] = useState<string>('alipaymini');
   const [login, setLogin] = useState<LoginStarted | null>(null);
@@ -191,6 +139,23 @@ export function Cloud115Settings() {
   const [uploadPath, setUploadPath] = useState('');
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [tab, setTab] = useState<Tab>('account');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  // Share transfer: the pasted text, the preview it produced, the entries
+  // ticked per share, the destination folder and the last receipt.
+  const [shareText, setShareText] = useState('');
+  const [shares, setShares] = useState<ShareView[]>([]);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Record<string, string[]>>({});
+  const [target, setTarget] = useState<Target>({ cid: '0', name: '' });
+  const [targetOpen, setTargetOpen] = useState(false);
+  const [replaceBusy, setReplaceBusy] = useState(false);
+  const [replaceCount, setReplaceCount] = useState<number | null>(null);
+  const [replaceMsg, setReplaceMsg] = useState<string | null>(null);
+  const [receiveBusy, setReceiveBusy] = useState(false);
+  const [receiveFiles, setReceiveFiles] = useState<number | null>(null);
+  const [receiveErrors, setReceiveErrors] = useState<string[]>([]);
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
   const baseMismatch = Boolean(baseUrl) && baseUrl.replace(/\/$/, '') !== origin;
 
@@ -202,6 +167,9 @@ export function Cloud115Settings() {
           return;
         }
         loaded.current = true;
+        savedMappings.current = view.libraries.filter(
+          (library) => library.remote.trim() || library.local.trim(),
+        ).length;
         setBaseUrl(view.baseUrl);
         setHasCookie(view.hasCookie);
         setLibraries(view.libraries.length ? view.libraries : [{ ...EMPTY_LIBRARY }]);
@@ -244,8 +212,14 @@ export function Cloud115Settings() {
             setHasCookie(true);
             setSaved(false);
             setDirty(false);
-            api.settings().then((settings) => setResolved(settings.resolvedLocal)).catch(() => undefined);
-            api.account().then(setAccount).catch(() => undefined);
+            api
+              .settings()
+              .then((settings) => setResolved(settings.resolvedLocal))
+              .catch(() => undefined);
+            api
+              .account()
+              .then(setAccount)
+              .catch(() => undefined);
           } else if (view.status === 'expired' || view.status === 'failed') {
             setLogin(null);
           }
@@ -261,7 +235,7 @@ export function Cloud115Settings() {
     api
       .loginStart(loginApp)
       .then(setLogin)
-      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+      .catch((reason) => setError(errorText(reason)))
       .finally(() => setLoginBusy(false));
   };
 
@@ -289,7 +263,7 @@ export function Cloud115Settings() {
           : t('cloud115.uploadRejected', { status: result.status }),
       );
     } catch (reason) {
-      setUploadMsg(reason instanceof Error ? reason.message : String(reason));
+      setUploadMsg(errorText(reason));
     } finally {
       setUploadBusy(false);
     }
@@ -327,9 +301,102 @@ export function Cloud115Settings() {
       const done = await api.uploadFinish(started.upload);
       setUploadMsg(t('cloud115.uploadDone', { pickcode: done.pickcode }));
     } catch (reason) {
-      setUploadMsg(reason instanceof Error ? reason.message : String(reason));
+      setUploadMsg(errorText(reason));
     } finally {
       setUploadBusy(false);
+    }
+  };
+
+  const previewShares = async () => {
+    const text = shareText.trim();
+    if (!text) {
+      setShareError(t('cloud115.transferMissing'));
+      return;
+    }
+    setShareBusy(true);
+    setShareError(null);
+    setReceiveFiles(null);
+    setReceiveErrors([]);
+    try {
+      const list = await api.transferPreview(text);
+      if (list.length === 0) {
+        setShares([]);
+        setPicked({});
+        setShareError(t('cloud115.transferEmpty'));
+        return;
+      }
+      setShares(list);
+      // Everything is ticked on arrival; unticking is the narrower gesture.
+      setPicked(
+        Object.fromEntries(
+          list.map((share) => [share.code, share.entries.map((entry) => entry.id)]),
+        ),
+      );
+    } catch (reason) {
+      setShares([]);
+      setPicked({});
+      setShareError(errorText(reason));
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const receiveSelected = async () => {
+    const jobs = shares
+      .map((share) => ({
+        share,
+        entries: share.entries.filter((entry) => (picked[share.code] ?? []).includes(entry.id)),
+      }))
+      .filter((job) => job.entries.length > 0);
+    if (jobs.length === 0) {
+      setReceiveErrors([t('cloud115.transferPickNone')]);
+      return;
+    }
+    setReceiveBusy(true);
+    setReceiveFiles(null);
+    setReceiveErrors([]);
+    const failures: string[] = [];
+    const done: string[] = [];
+    let files = 0;
+    try {
+      // One call per share: the API takes one code, and a batch can hold several.
+      for (const job of jobs) {
+        try {
+          const report = await api.transferReceive({
+            code: job.share.code,
+            password: job.share.password,
+            title: shareTitle(job.share),
+            cid: target.cid,
+            entries: job.entries.map((entry) => ({ id: entry.id, isDir: entry.isDir })),
+          });
+          files += report.files;
+          done.push(job.share.code);
+        } catch (reason) {
+          failures.push(`${shareTitle(job.share)} · ${errorText(reason)}`);
+        }
+      }
+      setReceiveFiles(done.length > 0 ? files : null);
+      setReceiveErrors(failures);
+      if (done.length > 0) {
+        // Succeeded shares drop their ticks; a failed one keeps what to retry.
+        setPicked((current) => {
+          const next = { ...current };
+          for (const code of done) {
+            next[code] = [];
+          }
+          return next;
+        });
+        // Pull the new receipt immediately instead of waiting for the poll.
+        api
+          .status()
+          .then((view) => {
+            setStatus(view);
+            setHasCookie(view.cookieSet);
+          })
+          .catch(() => undefined);
+      }
+    } finally {
+      setReceiveBusy(false);
     }
   };
 
@@ -356,9 +423,10 @@ export function Cloud115Settings() {
     setError(null);
     try {
       const kept = libraries.filter((l) => l.remote.trim() || l.local.trim());
-      if (kept.length === 0) {
+      if (kept.length === 0 && savedMappings.current > 0) {
         // Never let a save erase every mapping: an empty list is what a page
-        // that lost its rows submits by accident.
+        // that lost its rows submits by accident. A fresh install saving only
+        // the account settings has nothing to erase, so it is allowed through.
         setError(t('cloud115.cannotClearMappings'));
         return;
       }
@@ -373,18 +441,44 @@ export function Cloud115Settings() {
       setDirty(false);
       setSaved(true);
       setSavedAt(new Date());
+      savedMappings.current = kept.length;
       // The save also creates each mapping's folder; a path outside the storage
       // roots fails here, and that must be said now rather than at the next sync.
       const view = await api.settings();
       setResolved(view.resolvedLocal);
       if (result.errors.length) {
         setSaved(false);
-        setError(result.errors.join('；'));
+        setError(result.errors.join(' · '));
       } else if (view.resolvedLocal.some((path) => !path)) {
         setError(t('cloud115.unresolved'));
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Discard re-reads the server instead of remembering a snapshot: the stored
+  // settings are the only truth, and a poll may have moved underneath.
+  const discardChanges = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const view = await api.settings();
+      savedMappings.current = view.libraries.filter(
+        (library) => library.remote.trim() || library.local.trim(),
+      ).length;
+      setBaseUrl(view.baseUrl);
+      setHasCookie(view.hasCookie);
+      setLibraries(view.libraries.length ? view.libraries : [{ ...EMPTY_LIBRARY }]);
+      setOptions(view.options);
+      setResolved(view.resolvedLocal);
+      setCookie('');
+      setDirty(false);
+      setSaved(false);
+    } catch (reason) {
+      setError(errorText(reason));
     } finally {
       setBusy(false);
     }
@@ -404,7 +498,7 @@ export function Cloud115Settings() {
         setError(result.message);
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(errorText(reason));
     } finally {
       setBusy(false);
     }
@@ -420,7 +514,7 @@ export function Cloud115Settings() {
       setSaved(true);
       setSavedAt(new Date());
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(errorText(reason));
     } finally {
       setBusy(false);
     }
@@ -438,562 +532,989 @@ export function Cloud115Settings() {
         .then(setAccount)
         .catch(() => undefined);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(errorText(reason));
     } finally {
       setBusy(false);
     }
   };
 
+  const replaceAddresses = async (preview: boolean) => {
+    setReplaceBusy(true);
+    setReplaceMsg(null);
+    try {
+      const result = preview ? await api.replacePreview() : await api.replaceRun();
+      setReplaceCount(result.count);
+      setReplaceMsg(
+        preview
+          ? t('cloud115.replacePreviewResult', { count: result.count })
+          : t('cloud115.replaceRunResult', { count: result.count }),
+      );
+      if (!preview) {
+        api.sync(window.location.origin).catch(() => undefined);
+      }
+    } catch (reason) {
+      setReplaceMsg(errorText(reason));
+    } finally {
+      setReplaceBusy(false);
+    }
+  };
+
   const report = status.report;
+  const usedText = account ? account.usedText || formatSize(account.used) || '0' : '—';
+  const totalText = account ? account.totalText || formatSize(account.total) || '0' : '—';
+  const capacity = account && account.total > 0 ? account.used / account.total : 0;
+  const shareTitle = (share: ShareView) =>
+    share.title && share.title !== UNTITLED_SHARE ? share.title : t('cloud115.transferUntitled');
+  const selectedCount = shares.reduce(
+    (total, share) => total + (picked[share.code]?.length ?? 0),
+    0,
+  );
+  // Only the settings tabs carry the bar; STRM and Sync wait for an account,
+  // while Account also owns the pacing and so always shows it.
+  const showSaveBar = tab === 'account' || (hasCookie && (tab === 'strm' || tab === 'sync'));
 
   return (
     <>
-      {status.pausedSecs ? (
-        <Surface elevated border="border" pad="none" px={22} py={16} mt={20}>
-          <Text variant="meta" color="accentText">
-            {t('cloud115.paused', { seconds: status.pausedSecs })}
-          </Text>
-        </Surface>
-      ) : null}
+      <Box gap={20} mt={24}>
+        {status.pausedSecs ? (
+          <Callout.Root tone="accent" icon="clock">
+            <Callout.Title>{t('cloud115.paused', { seconds: status.pausedSecs })}</Callout.Title>
+          </Callout.Root>
+        ) : null}
 
-      <Section.Root mt={26}>
-        <Section.Header>
-          <Section.Title>{t('cloud115.account')}</Section.Title>
-        </Section.Header>
-        <Surface elevated border="border" pad="none" px={22} py={20}>
-          <div style={SUMMARY_GRID}>
-            <Box>
-              <Row gap={8} center>
-                <Icon name="cloud" size={22} thickness={1.7} color="accentText" />
-                <Text variant="h2">115 Cloud</Text>
-                <Badge tone={hasCookie ? 'success' : 'warning'}>
-                  {hasCookie ? t('cloud115.cookieSet') : t('cloud115.cookieMissing')}
-                </Badge>
-              </Row>
-              <Text variant="meta" color="textDim" mt={6}>
-                {baseUrl || origin || '—'}
-              </Text>
-            </Box>
-            <SummaryStat label={t('cloud115.mappings')} value={String(libraries.filter((l) => l.remote && l.local).length)} />
-            <SummaryStat label={t('cloud115.indexedDirs')} value={String(status.indexedDirs)} />
-            <SummaryStat label={t('cloud115.statLinks')} value={String(status.linkCache)} />
-          </div>
-          {account ? (
-            <Row wrap gapX={32} gapY={8} mt={18}>
-              <Stat label={t('cloud115.spaceTotal')} value={account.totalText} />
-              <Stat label={t('cloud115.spaceUsed')} value={account.usedText} />
-              <Stat label={t('cloud115.spaceRemain')} value={account.remainText} />
-            </Row>
-          ) : null}
-          <Row wrap gap={10} mt={24} center>
-            <select
-              value={loginApp}
-              onChange={(event) => setLoginApp(event.target.value)}
-              style={APP_SELECT}
-              aria-label={t('cloud115.qrApp')}
-            >
-              {LOGIN_APPS.map((app) => (
-                <option key={app.value} value={app.value}>
-                  {app.label}
-                </option>
-              ))}
-            </select>
-            <Button
-              label={t('cloud115.qrLogin')}
-              icon="qrcode"
-              variant="glass"
-              size="sm"
-              onPress={startLogin}
-              disabled={loginBusy || login !== null}
-            />
-            <Text variant="meta" color="textDim">
-              {t('cloud115.qrHint')}
-            </Text>
-          </Row>
-          <details style={DETAILS}>
-            <summary style={SUMMARY}>{t('cloud115.advanced')}</summary>
-            <div style={{ ...GRID_ROW, marginTop: 12, marginBottom: 0 }}>
-              <div style={CELL}>
-                <Field.Root label={t('cloud115.cookie')} value={cookie} onValueChange={(value) => { setDirty(true); setCookie(value); }}>
-                  <Field.Input
-                    type="password"
-                    placeholder={hasCookie ? t('cloud115.cookieKeep') : 'UID=…; CID=…; SEID=…'}
+        <TabPicker tab={tab} onPick={setTab} />
+
+        {tab === 'account' ? (
+          <>
+            <Surface elevated border="border" pad="none" px={22} py={20}>
+              <Row wrap gap={24} align="center">
+                <Row gap={14} center flex minW={240}>
+                  <Box w={48} h={48} radius="xl" bg="accentSoft" center shrink={0}>
+                    <Icon name="cloud" size={24} thickness={1.7} color="accentText" />
+                  </Box>
+                  <Box shrink={1} minW={0} gap={4}>
+                    <Row wrap gap={8} center>
+                      <Text variant="title">115 Cloud</Text>
+                      <Badge tone={hasCookie ? 'success' : 'warning'}>
+                        {hasCookie ? t('cloud115.cookieSet') : t('cloud115.cookieMissing')}
+                      </Badge>
+                    </Row>
+                    <Text variant="meta" color="textDim">
+                      {t('cloud115.accountHint')}
+                    </Text>
+                  </Box>
+                </Row>
+
+                <Box flex minW={220} maxW={360} gap={6}>
+                  <Row between gap={12} center>
+                    <Text variant="meta" color="textDim">
+                      {t('cloud115.capacity')}
+                    </Text>
+                    <Text variant="meta">
+                      {usedText} / {totalText}
+                    </Text>
+                  </Row>
+                  <Progress
+                    value={capacity}
+                    thickness={6}
+                    color="textMuted"
+                    trackColor="tint/12"
+                    label={t('cloud115.capacity')}
                   />
-                  <Field.Hint>{t('cloud115.cookieHint')}</Field.Hint>
+                  {account?.remainText ? (
+                    <Text variant="meta" color="textDim">
+                      {t('cloud115.spaceRemain')} {account.remainText}
+                    </Text>
+                  ) : null}
+                </Box>
+              </Row>
+
+              <Row wrap gap={12} center mt={20}>
+                <Text variant="meta" color="textDim">
+                  {t('cloud115.qrApp')}
+                </Text>
+                <Select.Root
+                  value={loginApp}
+                  onValueChange={setLoginApp}
+                  label={t('cloud115.qrApp')}
+                >
+                  <Select.Trigger size="sm" />
+                  {LOGIN_APPS.map((app) => (
+                    <Select.Item key={app.value} value={app.value} label={t(app.label)} />
+                  ))}
+                </Select.Root>
+                <Button
+                  label={t('cloud115.qrLogin')}
+                  icon="qrcode"
+                  variant="glass"
+                  size="sm"
+                  onPress={startLogin}
+                  disabled={loginBusy || login !== null}
+                />
+                <Text variant="meta" color="textDim">
+                  {t('cloud115.qrHint')}
+                </Text>
+              </Row>
+
+              {login ? (
+                <Row wrap gap={20} mt={16} align="flex-start">
+                  <Box w={220} h={220} p={8} bg="surface2" radius="lg" shrink={0} overflow="hidden">
+                    <img
+                      src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(login.svg)}`}
+                      alt={t('cloud115.qrLogin')}
+                      style={{ width: '100%', height: '100%', display: 'block' }}
+                    />
+                  </Box>
+                  <Box gap={8} maxW={360}>
+                    <Text variant="meta" color="textDim">
+                      {loginState?.message ?? t('cloud115.qrWaiting')}
+                    </Text>
+                    <Row gap={8}>
+                      <Button
+                        label={t('cloud115.qrCancel')}
+                        variant="ghost"
+                        size="sm"
+                        onPress={cancelLogin}
+                      />
+                    </Row>
+                    <Text variant="meta" color="textDim" font="mono" lines={1}>
+                      {login.qr}
+                    </Text>
+                  </Box>
+                </Row>
+              ) : null}
+
+              <Row mt={16}>
+                <Button
+                  label={t('cloud115.advanced')}
+                  icon={showAdvanced ? 'chevron-up' : 'chevron-down'}
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setShowAdvanced((open) => !open)}
+                />
+              </Row>
+
+              {showAdvanced ? (
+                <Box gap={16} mt={12} p={16} bg="surface2" radius="lg">
+                  <Box row wrap gap={16}>
+                    <Box flex minW={240}>
+                      <Field.Root
+                        label={t('cloud115.cookie')}
+                        value={cookie}
+                        onValueChange={(value) => {
+                          setDirty(true);
+                          setCookie(value);
+                        }}
+                      >
+                        <Field.Input
+                          type="password"
+                          placeholder={
+                            hasCookie ? t('cloud115.cookieKeep') : 'UID=…; CID=…; SEID=…'
+                          }
+                        />
+                        <Field.Hint>{t('cloud115.cookieHint')}</Field.Hint>
+                      </Field.Root>
+                    </Box>
+                    <Box flex minW={240}>
+                      <Field.Root
+                        label={t('cloud115.baseUrl')}
+                        value={baseUrl}
+                        onValueChange={(value) => {
+                          setDirty(true);
+                          setBaseUrl(value);
+                        }}
+                      >
+                        <Field.Input placeholder="http://192.168.1.10:4040" />
+                        <Field.Hint>{t('cloud115.baseUrlHint')}</Field.Hint>
+                      </Field.Root>
+                    </Box>
+                  </Box>
+                  <Row wrap gap={8} center>
+                    {cookie.trim() ? (
+                      <Button
+                        label={t('cloud115.cookieImport')}
+                        variant="glass"
+                        size="sm"
+                        onPress={() => void importCookie()}
+                        disabled={busy}
+                      />
+                    ) : null}
+                    {hasCookie ? (
+                      <Button
+                        label={t('cloud115.clearCookie')}
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => void clearCookie()}
+                      />
+                    ) : null}
+                    {baseMismatch ? (
+                      <>
+                        <Text variant="meta" color="accentText">
+                          {t('cloud115.baseMismatch')}
+                        </Text>
+                        <Button
+                          label={t('cloud115.useCurrent')}
+                          variant="ghost"
+                          size="sm"
+                          onPress={() => setBaseUrl(origin)}
+                        />
+                      </>
+                    ) : null}
+                  </Row>
+                </Box>
+              ) : null}
+            </Surface>
+
+            <Panel title={t('cloud115.pacing')} hint={t('cloud115.pacingHint')}>
+              <Box gap={18}>
+                <SettingRow label={t('cloud115.interval')} hint={t('cloud115.intervalHint')}>
+                  <NumberField
+                    label={t('cloud115.interval')}
+                    value={options.intervalMs}
+                    min={500}
+                    max={60000}
+                    step={100}
+                    w={140}
+                    onValueChange={(intervalMs) => patchOptions({ intervalMs })}
+                  />
+                </SettingRow>
+                <SettingRow label={t('cloud115.budget')} hint={t('cloud115.budgetHint')}>
+                  <NumberField
+                    label={t('cloud115.budget')}
+                    value={options.maxCallsPerRun}
+                    min={50}
+                    max={20000}
+                    step={50}
+                    w={140}
+                    onValueChange={(maxCallsPerRun) => patchOptions({ maxCallsPerRun })}
+                  />
+                </SettingRow>
+                <SettingRow label={t('cloud115.folderCap')} hint={t('cloud115.folderCapHint')}>
+                  <NumberField
+                    label={t('cloud115.folderCap')}
+                    value={options.maxEntriesPerFolder}
+                    min={200}
+                    max={20000}
+                    step={100}
+                    w={140}
+                    onValueChange={(maxEntriesPerFolder) => patchOptions({ maxEntriesPerFolder })}
+                  />
+                </SettingRow>
+                <SettingRow label={t('cloud115.linkTtl')} hint={t('cloud115.linkTtlHint')}>
+                  <NumberField
+                    label={t('cloud115.linkTtl')}
+                    value={options.linkTtlSecs}
+                    min={60}
+                    max={14400}
+                    step={60}
+                    w={140}
+                    onValueChange={(linkTtlSecs) => patchOptions({ linkTtlSecs })}
+                  />
+                </SettingRow>
+                <SettingRow label={t('cloud115.pageSize')} hint={t('cloud115.pageSizeHint')}>
+                  <NumberField
+                    label={t('cloud115.pageSize')}
+                    value={options.pageSize}
+                    min={100}
+                    max={1150}
+                    step={50}
+                    w={140}
+                    onValueChange={(pageSize) => patchOptions({ pageSize })}
+                  />
+                </SettingRow>
+              </Box>
+            </Panel>
+          </>
+        ) : !hasCookie ? (
+          <LoginPrompt onGoAccount={() => setTab('account')} />
+        ) : tab === 'ingest' ? (
+          <>
+            <Panel title={t('cloud115.transferTitle')} hint={t('cloud115.transferHint')}>
+              <Box gap={14}>
+                <Field.Root
+                  label={t('cloud115.transferLinks')}
+                  value={shareText}
+                  onValueChange={setShareText}
+                >
+                  <Field.Textarea
+                    rows={4}
+                    maxRows={8}
+                    placeholder={t('cloud115.transferPlaceholder')}
+                  />
                 </Field.Root>
-              </div>
-              <div style={CELL}>
-                <Field.Root label={t('cloud115.baseUrl')} value={baseUrl} onValueChange={(value) => { setDirty(true); setBaseUrl(value); }}>
-                  <Field.Input placeholder="http://192.168.1.10:4040" />
-                  <Field.Hint>{t('cloud115.baseUrlHint')}</Field.Hint>
-                </Field.Root>
-              </div>
-              <Row gap={8}>
-                {cookie.trim() ? (
+                <Row wrap gap={10} center>
                   <Button
-                    label={t('cloud115.cookieImport')}
+                    label={
+                      shareBusy ? t('cloud115.transferPreviewing') : t('cloud115.transferPreview')
+                    }
+                    icon="eye"
                     variant="glass"
                     size="sm"
-                    onPress={() => void importCookie()}
-                    disabled={busy}
+                    loading={shareBusy}
+                    disabled={shareBusy}
+                    onPress={() => void previewShares()}
                   />
+                </Row>
+
+                {shareError ? (
+                  <Callout.Root tone="danger" icon="alert-triangle">
+                    <Callout.Title>{t('cloud115.transferPreviewFailed')}</Callout.Title>
+                    <Callout.Detail>{shareError}</Callout.Detail>
+                  </Callout.Root>
                 ) : null}
-                {hasCookie ? (
-                  <Button label={t('cloud115.clearCookie')} variant="ghost" size="sm" onPress={() => void clearCookie()} />
+
+                {shares.length ? (
+                  <Box gap={12}>
+                    {shares.map((share) => {
+                      const chosen = picked[share.code] ?? [];
+                      const allChosen =
+                        share.entries.length > 0 && chosen.length === share.entries.length;
+                      return (
+                        <Box key={share.code} gap={10} p={16} bg="surface2" radius="lg">
+                          <Row between wrap gap={10} center>
+                            <Box shrink={1} minW={0} gap={2}>
+                              <Text variant="label" lines={1}>
+                                {shareTitle(share)}
+                              </Text>
+                              <Text variant="meta" color="textDim">
+                                {t('cloud115.transferEntryCount', {
+                                  count: share.entries.length,
+                                })}
+                                {share.totalSize ? ` · ${formatSize(share.totalSize)}` : ''}
+                                {` · ${share.code}`}
+                              </Text>
+                            </Box>
+                            {share.entries.length ? (
+                              <Button
+                                label={
+                                  allChosen
+                                    ? t('cloud115.transferClearAll')
+                                    : t('cloud115.transferSelectAll')
+                                }
+                                variant="ghost"
+                                size="sm"
+                                onPress={() =>
+                                  setPicked((current) => ({
+                                    ...current,
+                                    [share.code]: allChosen
+                                      ? []
+                                      : share.entries.map((entry) => entry.id),
+                                  }))
+                                }
+                              />
+                            ) : null}
+                          </Row>
+                          {share.entries.length ? (
+                            <Box maxH={320} overflow="scroll" pr={4}>
+                              <ChoiceList.Root
+                                mode="multiple"
+                                label={shareTitle(share)}
+                                value={chosen}
+                                onValueChange={(next) =>
+                                  setPicked((current) => ({ ...current, [share.code]: next }))
+                                }
+                              >
+                                {share.entries.map((entry) => (
+                                  <ChoiceList.Item
+                                    key={entry.id}
+                                    value={entry.id}
+                                    actions={
+                                      !entry.isDir && entry.size > 0 ? (
+                                        <Text variant="meta" color="textDim">
+                                          {formatSize(entry.size)}
+                                        </Text>
+                                      ) : undefined
+                                    }
+                                  >
+                                    <Row gap={8} center>
+                                      <Icon
+                                        name={entry.isDir ? 'folder' : 'file'}
+                                        size={15}
+                                        color={entry.isDir ? 'accentText' : 'textDim'}
+                                      />
+                                      <ChoiceList.Label>{entry.name}</ChoiceList.Label>
+                                    </Row>
+                                  </ChoiceList.Item>
+                                ))}
+                              </ChoiceList.Root>
+                            </Box>
+                          ) : (
+                            <Text variant="meta" color="textDim">
+                              {t('cloud115.transferNoEntries')}
+                            </Text>
+                          )}
+                        </Box>
+                      );
+                    })}
+
+                    <Row between wrap gap={16} align="center" mt={4}>
+                      <Row gap={10} center shrink={1} minW={240}>
+                        <Icon name="folder" size={17} color="accentText" />
+                        <Box shrink={1} minW={0}>
+                          <Text variant="meta" color="textDim">
+                            {t('cloud115.transferTarget')}
+                          </Text>
+                          <Text variant="label" lines={1}>
+                            {target.name ? `/${target.name}` : t('cloud115.root')}
+                          </Text>
+                          <Text variant="meta" color="textDim">
+                            {t('cloud115.transferTargetHint')}
+                          </Text>
+                        </Box>
+                        <Button
+                          label={t('cloud115.transferPickTarget')}
+                          variant="ghost"
+                          size="sm"
+                          onPress={() => setTargetOpen(true)}
+                        />
+                      </Row>
+                      <Row gap={10} center>
+                        <Text variant="meta" color="textDim">
+                          {t('cloud115.transferSelected', { count: selectedCount })}
+                        </Text>
+                        <Button
+                          label={
+                            receiveBusy
+                              ? t('cloud115.transferReceiving')
+                              : t('cloud115.transferReceive')
+                          }
+                          icon="download"
+                          variant="primary"
+                          size="sm"
+                          loading={receiveBusy}
+                          disabled={receiveBusy || selectedCount === 0}
+                          onPress={() => void receiveSelected()}
+                        />
+                      </Row>
+                    </Row>
+
+                    {receiveErrors.length ? (
+                      <Callout.Root tone="danger" icon="alert-triangle">
+                        <Callout.Title>{t('cloud115.transferFailed')}</Callout.Title>
+                        <Callout.Detail>{receiveErrors.join(' · ')}</Callout.Detail>
+                      </Callout.Root>
+                    ) : null}
+                    {receiveFiles !== null ? (
+                      <Callout.Root tone="success" icon="check">
+                        <Callout.Title>
+                          {t('cloud115.transferDone', { files: receiveFiles })}
+                        </Callout.Title>
+                      </Callout.Root>
+                    ) : null}
+                  </Box>
                 ) : null}
-              </Row>
-            </div>
-          </details>
-          {login ? (
-            <Row wrap gap={20} mt={14} align="flex-start">
-              <img
-                src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(login.svg)}`}
-                alt={t('cloud115.qrLogin')}
-                style={{ width: 220, height: 220, background: '#fff', padding: 8, borderRadius: 12 }}
-              />
-              <Box gap={8}>
-                <Text variant="meta" color="textDim">
-                  {loginState?.message ?? t('cloud115.qrWaiting')}
-                </Text>
-                <Row gap={8}>
+              </Box>
+            </Panel>
+
+            <Panel title={t('cloud115.upload')} hint={t('cloud115.uploadHint')}>
+              <Box gap={12}>
+                <Box row wrap gap={16} align="flex-end">
+                  <Box flex minW={220}>
+                    <Field.Root
+                      label={t('cloud115.uploadRemote')}
+                      value={uploadRemote}
+                      onValueChange={setUploadRemote}
+                    >
+                      <Field.Input placeholder={t('cloud115.uploadRemotePlaceholder')} />
+                      <Field.Hint>{t('cloud115.uploadRemoteHint')}</Field.Hint>
+                    </Field.Root>
+                  </Box>
+                  <Box flex minW={220}>
+                    <Field.Root
+                      label={t('cloud115.uploadPath')}
+                      value={uploadPath}
+                      onValueChange={setUploadPath}
+                    >
+                      <Field.Input placeholder={t('cloud115.uploadPathPlaceholder')} />
+                      <Field.Hint>{t('cloud115.uploadPathHint')}</Field.Hint>
+                    </Field.Root>
+                  </Box>
+                </Box>
+                <Row wrap gap={8} center>
                   <Button
-                    label={t('cloud115.qrCancel')}
+                    label={t('cloud115.uploadRapid')}
                     variant="ghost"
                     size="sm"
-                    onPress={cancelLogin}
+                    onPress={() => void rapidCheck()}
+                    disabled={uploadBusy}
+                  />
+                  <Button
+                    label={t('cloud115.uploadFile')}
+                    icon="upload"
+                    variant="glass"
+                    size="sm"
+                    onPress={() => void uploadFile()}
+                    disabled={uploadBusy}
+                  />
+                  {uploadMsg ? (
+                    <Text variant="meta" color="textDim">
+                      {uploadMsg}
+                    </Text>
+                  ) : null}
+                </Row>
+              </Box>
+            </Panel>
+
+            <Panel title={t('cloud115.transferHistory')} hint={t('cloud115.transferHistoryHint')}>
+              <TransferHistory entries={status.transfers} />
+            </Panel>
+          </>
+        ) : tab === 'strm' ? (
+          <>
+            <Panel title={t('cloud115.mappings')} hint={t('cloud115.mappingsHint')}>
+              <Box gap={12}>
+                {libraries.map((library, i) => (
+                  <Box key={i} gap={12} p={16} bg="surface2" radius="lg">
+                    <Box row wrap gap={18} align="flex-start">
+                      <Box flex minW={240} gap={6}>
+                        <Text variant="meta" color="textDim">
+                          {t('cloud115.remote')}
+                        </Text>
+                        <Box minH={40} px={12} py={10} bg="surface1" radius="md" border="border">
+                          <Text variant="body" lines={1}>
+                            {library.remote || '—'}
+                          </Text>
+                        </Box>
+                        <Row>
+                          <Button
+                            label={t('cloud115.browseDrive')}
+                            icon="folder"
+                            variant="glass"
+                            size="sm"
+                            onPress={() => setPicker({ at: i, mode: 'remote' })}
+                            disabled={busy}
+                          />
+                        </Row>
+                      </Box>
+                      <Box flex minW={240}>
+                        <Field.Root
+                          label={t('cloud115.local')}
+                          value={library.local}
+                          onValueChange={(value) => updateLibrary(i, { local: value })}
+                        >
+                          <Field.Input placeholder={t('cloud115.localPlaceholder')} />
+                          <Field.Hint>{t('cloud115.localHint')}</Field.Hint>
+                        </Field.Root>
+                        <Row mt={8}>
+                          <Button
+                            label={t('cloud115.browseLocal')}
+                            icon="folder"
+                            variant="ghost"
+                            size="sm"
+                            onPress={() => setPicker({ at: i, mode: 'local' })}
+                            disabled={busy}
+                          />
+                        </Row>
+                        {!library.remote.trim() || !library.local.trim() ? null : i <
+                          resolved.length ? (
+                          resolved[i] ? (
+                            <Text variant="meta" color="textDim" mt={6}>
+                              {t('cloud115.resolved', { path: resolved[i] as string })}
+                            </Text>
+                          ) : (
+                            <Text variant="meta" color="accentText" mt={6}>
+                              {t('cloud115.unresolved')}
+                            </Text>
+                          )
+                        ) : (
+                          <Text variant="meta" color="textDim" mt={6}>
+                            {t('cloud115.willCreate')}
+                          </Text>
+                        )}
+                      </Box>
+                    </Box>
+                    <Row justify="flex-end">
+                      <Button
+                        label={t('cloud115.remove')}
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => {
+                          setDirty(true);
+                          setLibraries((current) => current.filter((_, at) => at !== i));
+                        }}
+                      />
+                    </Row>
+                  </Box>
+                ))}
+                <Row>
+                  <Button
+                    label={t('cloud115.addMapping')}
+                    icon="plus"
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => {
+                      setDirty(true);
+                      setLibraries((current) => [...current, { ...EMPTY_LIBRARY }]);
+                    }}
+                    disabled={busy}
                   />
                 </Row>
-                <div style={{ maxWidth: 320, wordBreak: 'break-all' }}>
-                  <Text variant="meta" color="textDim">
-                    {login.qr}
+              </Box>
+            </Panel>
+
+            <Panel title={t('cloud115.strmOptions')} hint={t('cloud115.strmOptionsHint')}>
+              <Box gap={18}>
+                <SettingRow label={t('cloud115.skipIso')} hint={t('cloud115.skipIsoHint')}>
+                  <Switch
+                    checked={options.skipIso}
+                    onCheckedChange={(skipIso) => patchOptions({ skipIso })}
+                    label={t('cloud115.skipIso')}
+                  />
+                </SettingRow>
+                <SettingRow label={t('cloud115.probe')} hint={t('cloud115.probeHint')}>
+                  <Switch
+                    checked={options.probeEnabled}
+                    onCheckedChange={(probeEnabled) => patchOptions({ probeEnabled })}
+                    label={t('cloud115.probe')}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label={t('cloud115.keepSuffix')}
+                  hint={t('cloud115.keepSuffixHint')}
+                >
+                  <Switch
+                    checked={options.keepSuffix}
+                    onCheckedChange={(keepSuffix) => patchOptions({ keepSuffix })}
+                    label={t('cloud115.keepSuffix')}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label={t('cloud115.overwriteStrm')}
+                  hint={t('cloud115.overwriteStrmHint')}
+                >
+                  <Switch
+                    checked={options.overwriteStrm}
+                    onCheckedChange={(overwriteStrm) => patchOptions({ overwriteStrm })}
+                    label={t('cloud115.overwriteStrm')}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label={t('cloud115.minVideoSize')}
+                  hint={t('cloud115.minVideoSizeHint')}
+                >
+                  <NumberField
+                    label={t('cloud115.minVideoSize')}
+                    value={options.minVideoSizeMb}
+                    min={0}
+                    max={1_048_576}
+                    step={100}
+                    w={140}
+                    onValueChange={(minVideoSizeMb) => patchOptions({ minVideoSizeMb })}
+                  />
+                </SettingRow>
+              </Box>
+            </Panel>
+
+            <Panel title={t('cloud115.assetsTitle')} hint={t('cloud115.assetsHint')}>
+              <Box gap={18}>
+                <SettingRow
+                  label={t('cloud115.syncImages')}
+                  hint={t('cloud115.syncImagesHint')}
+                >
+                  <Switch
+                    checked={options.syncImages}
+                    onCheckedChange={(syncImages) => patchOptions({ syncImages })}
+                    label={t('cloud115.syncImages')}
+                  />
+                </SettingRow>
+                <SettingRow label={t('cloud115.syncNfo')} hint={t('cloud115.syncNfoHint')}>
+                  <Switch
+                    checked={options.syncNfo}
+                    onCheckedChange={(syncNfo) => patchOptions({ syncNfo })}
+                    label={t('cloud115.syncNfo')}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label={t('cloud115.syncSubtitles')}
+                  hint={t('cloud115.syncSubtitlesHint')}
+                >
+                  <Switch
+                    checked={options.syncSubtitles}
+                    onCheckedChange={(syncSubtitles) => patchOptions({ syncSubtitles })}
+                    label={t('cloud115.syncSubtitles')}
+                  />
+                </SettingRow>
+              </Box>
+            </Panel>
+
+            <Panel title={t('cloud115.replaceTitle')} hint={t('cloud115.replaceHint')}>
+              <Box gap={12}>
+                <Row between wrap gap={12} center>
+                  <Text variant="meta" color="textDim" lines={1}>
+                    {baseUrl || origin || '—'}
                   </Text>
-                </div>
-              </Box>
-            </Row>
-          ) : null}
-          {baseMismatch ? (
-            <Row wrap gap={10} mt={10} center>
-              <Text variant="meta" color="accentText">{t('cloud115.baseMismatch')}</Text>
-              <Button label={t('cloud115.useCurrent')} variant="ghost" size="sm" onPress={() => setBaseUrl(origin)} />
-            </Row>
-          ) : null}
-        </Surface>
-      </Section.Root>
-
-      <Section.Root mt={28}>
-        <Section.Header>
-          <Section.Title>{t('cloud115.mappings')}</Section.Title>
-        </Section.Header>
-        <Text variant="meta" color="textDim" mt={-8} mb={16}>
-          {t('cloud115.mappingsHint')}
-        </Text>
-        <Surface elevated border="border" pad="none" px={22} py={16}>
-          <Box gap={12}>
-            {libraries.map((library, i) => (
-              <div style={MAPPING_CARD} key={i}>
-                <div style={MAPPING_GRID}>
-                  <div style={{ minWidth: 0 }}>
-                    <Text variant="meta" color="textDim">{t('cloud115.remote')}</Text>
-                    <div style={READONLY_VALUE} title={library.remote || '—'}>
-                      <span style={READONLY_TEXT}>{library.remote || '—'}</span>
-                    </div>
-                    <Row mt={8}>
-                      <Button label={t('cloud115.browseDrive')} icon="folder" variant="glass" size="sm" onPress={() => setPicker({ at: i, mode: 'remote' })} disabled={busy} />
-                    </Row>
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <Field.Root label={t('cloud115.local')} value={library.local} onValueChange={(value) => updateLibrary(i, { local: value })}>
-                      <Field.Input placeholder="/media/115/电影" />
-                      <Field.Hint>{t('cloud115.localHint')}</Field.Hint>
-                    </Field.Root>
-                    <Row mt={8}>
-                      <Button label={t('cloud115.browseLocal')} icon="folder" variant="ghost" size="sm" onPress={() => setPicker({ at: i, mode: 'local' })} disabled={busy} />
-                    </Row>
-                    {!library.remote.trim() || !library.local.trim() ? null : i < resolved.length ? (
-                      resolved[i] ? <Text variant="meta" color="textDim" mt={6}>{t('cloud115.resolved', { path: resolved[i] as string })}</Text> : <Text variant="meta" color="accentText" mt={6}>{t('cloud115.unresolved')}</Text>
-                    ) : <Text variant="meta" color="textDim" mt={6}>{t('cloud115.willCreate')}</Text>}
-                  </div>
-                </div>
-                <Row justify="flex-end" mt={10}>
-                  <Button label={t('cloud115.remove')} variant="ghost" size="sm" onPress={() => { setDirty(true); setLibraries((current) => current.filter((_, at) => at !== i)); }} />
+                  <Row gap={8}>
+                    <Button
+                      label={t('cloud115.replacePreview')}
+                      icon="eye"
+                      variant="ghost"
+                      size="sm"
+                      loading={replaceBusy}
+                      onPress={() => void replaceAddresses(true)}
+                    />
+                    <Button
+                      label={t('cloud115.replaceRun')}
+                      icon="refresh"
+                      variant="glass"
+                      size="sm"
+                      disabled={replaceBusy || !replaceCount}
+                      onPress={() => void replaceAddresses(false)}
+                    />
+                  </Row>
                 </Row>
-              </div>
-            ))}
-            <Row mt={4}>
-              <Button label={t('cloud115.addMapping')} icon="plus" variant="ghost" size="sm" onPress={() => { setDirty(true); setLibraries((current) => [...current, { ...EMPTY_LIBRARY }]); }} disabled={busy} />
-            </Row>
-          </Box>
-        </Surface>
-      </Section.Root>
-
-      <Section.Root mt={28}>
-        <Section.Header>
-          <Section.Title>{t('cloud115.upload')}</Section.Title>
-        </Section.Header>
-        <Text variant="meta" color="textDim" mt={-8} mb={16}>
-          {t('cloud115.uploadHint')}
-        </Text>
-        <Surface elevated border="border" pad="none" px={22} py={20}>
-          <div style={GRID_ROW}>
-            <div style={CELL}>
-              <Field.Root
-                label={t('cloud115.uploadRemote')}
-                value={uploadRemote}
-                onValueChange={setUploadRemote}
-              >
-                <Field.Input placeholder="/电影" />
-                <Field.Hint>{t('cloud115.uploadRemoteHint')}</Field.Hint>
-              </Field.Root>
-            </div>
-            <div style={CELL}>
-              <Field.Root
-                label={t('cloud115.uploadPath')}
-                value={uploadPath}
-                onValueChange={setUploadPath}
-              >
-                <Field.Input placeholder="/media/电影/xxx.mkv" />
-                <Field.Hint>{t('cloud115.uploadPathHint')}</Field.Hint>
-              </Field.Root>
-            </div>
-          </div>
-          <Row wrap gap={8} mt={10} center>
-            <Button
-              label={t('cloud115.uploadRapid')}
-              variant="ghost"
-              size="sm"
-              onPress={() => void rapidCheck()}
-              disabled={uploadBusy}
-            />
-            <Button
-              label={t('cloud115.uploadFile')}
-              icon="upload"
-              variant="glass"
-              size="sm"
-              onPress={() => void uploadFile()}
-              disabled={uploadBusy}
-            />
-            {uploadMsg ? (
-              <Text variant="meta" color="textDim">
-                {uploadMsg}
-              </Text>
-            ) : null}
-          </Row>
-        </Surface>
-      </Section.Root>
-
-      <Section.Root mt={28}>
-        <Section.Header>
-          <Section.Title>{t('cloud115.watch')}</Section.Title>
-        </Section.Header>
-        <Text variant="meta" color="textDim" mt={-8} mb={16}>
-          {t('cloud115.watchHint')}
-        </Text>
-        <Surface elevated border="border" pad="none" px={22} py={20}>
-          <Row between gap={16} mb={16}>
-            <Text variant="cardTitle">{t('cloud115.watch')}</Text>
-            <Switch
-              checked={options.watchEnabled}
-              onCheckedChange={(watchEnabled) => patchOptions({ watchEnabled })}
-              label={t('cloud115.watch')}
-            />
-          </Row>
-          <div style={CELL}>
-            <NumberField
-              label={t('cloud115.watchInterval')}
-              value={options.watchIntervalSecs}
-              onChange={(watchIntervalSecs) => patchOptions({ watchIntervalSecs })}
-            />
-          </div>
-          <Text variant="meta" color={status.gateOk === false ? 'danger' : 'textDim'} mt={10}>
-            {status.lastPollAt
-              ? t('cloud115.lastPoll', {
-                  time: new Date(status.lastPollAt * 1000).toLocaleTimeString(),
-                })
-              : t('cloud115.neverPolled')}
-            {status.gateOk === false ? ` · ${t('cloud115.gateOff')}` : ''}
-          </Text>
-          {status.watchEnabled && status.indexedDirs === 0 ? (
-            <Text variant="meta" color="accentText" mt={6}>
-              {t('cloud115.indexNotReady')}
-            </Text>
-          ) : null}
-        </Surface>
-      </Section.Root>
-
-      <Section.Root mt={28}>
-        <Section.Header>
-          <Section.Title>{t('cloud115.pacing')}</Section.Title>
-        </Section.Header>
-        <Text variant="meta" color="textDim" mt={-8} mb={16}>
-          {t('cloud115.pacingHint')}
-        </Text>
-        <Surface elevated border="border" pad="none" px={22} py={20}>
-          <div style={GRID_ROW}>
-            <div style={CELL}>
-              <NumberField
-                label={t('cloud115.interval')}
-                value={options.intervalMs}
-                onChange={(intervalMs) => patchOptions({ intervalMs })}
-              />
-            </div>
-            <div style={CELL}>
-              <NumberField
-                label={t('cloud115.budget')}
-                value={options.maxCallsPerRun}
-                onChange={(maxCallsPerRun) => patchOptions({ maxCallsPerRun })}
-              />
-            </div>
-            <div style={CELL}>
-              <NumberField
-                label={t('cloud115.folderCap')}
-                value={options.maxEntriesPerFolder}
-                onChange={(maxEntriesPerFolder) => patchOptions({ maxEntriesPerFolder })}
-              />
-            </div>
-            <div style={CELL}>
-              <NumberField
-                label={t('cloud115.linkTtl')}
-                value={options.linkTtlSecs}
-                onChange={(linkTtlSecs) => patchOptions({ linkTtlSecs })}
-              />
-            </div>
-            <div style={CELL}>
-              <NumberField
-                label={t('cloud115.pageSize')}
-                value={options.pageSize}
-                onChange={(pageSize) => patchOptions({ pageSize })}
-              />
-            </div>
-          </div>
-          <Row between gap={16} mt={14}>
-            <Box shrink={1} minW={0}>
-              <Text variant="cardTitle">{t('cloud115.skipIso')}</Text>
-              <Text variant="meta" color="textDim" mt={2}>
-                {t('cloud115.skipIsoHint')}
-              </Text>
-            </Box>
-            <Switch
-              checked={options.skipIso}
-              onCheckedChange={(skipIso) => patchOptions({ skipIso })}
-              label={t('cloud115.skipIso')}
-            />
-          </Row>
-          <Row between gap={16} mt={14}>
-            <Box shrink={1} minW={0}>
-              <Text variant="cardTitle">{t('cloud115.probe')}</Text>
-              <Text variant="meta" color="textDim" mt={2}>
-                {t('cloud115.probeHint')}
-              </Text>
-            </Box>
-            <Switch
-              checked={options.probeEnabled}
-              onCheckedChange={(probeEnabled) => patchOptions({ probeEnabled })}
-              label={t('cloud115.probe')}
-            />
-          </Row>
-        </Surface>
-      </Section.Root>
-
-      <div style={SAVE_BAR}>
-        <Button
-          label={busy ? t('cloud115.saving') : t('cloud115.save')}
-          icon="device-floppy"
-          variant="primary"
-          size="sm"
-          onPress={() => void save()}
-          disabled={busy || !dirty}
-        />
-        <Button
-          label={t('cloud115.syncNow')}
-          icon="refresh"
-          variant="glass"
-          size="sm"
-          onPress={() => void syncNow()}
-          disabled={busy || status.running}
-        />
-        {dirty ? (
-          <Text variant="meta" color="accentText">
-            {t('cloud115.unsaved')}
-          </Text>
-        ) : null}
-        {!dirty && saved ? (
-          <Text variant="meta" color="success">
-            {t('cloud115.saved')}
-            {savedAt ? ` · ${savedAt.toLocaleTimeString()}` : ''}
-          </Text>
-        ) : null}
-        {error ? (
-          <Text variant="meta" color="danger">
-            {error}
-          </Text>
-        ) : null}
-      </div>
-
-      <Section.Root mt={28}>
-        <Section.Header>
-          <Section.Title>
-            {status.running ? t('cloud115.syncProgress') : t('cloud115.lastRun')}
-          </Section.Title>
-        </Section.Header>
-        <Surface elevated border="border" pad="none" px={22} py={20}>
-          {status.running ? (
-            <Row wrap gapX={18} gapY={4} mb={10}>
-              <Text variant="meta" color="accentText">
-                {t('cloud115.syncProgress')}
-              </Text>
-              {report.current ? (
-                <Text variant="meta" color="textDim">
-                  {t('cloud115.currentDir', { dir: report.current })}
-                </Text>
-              ) : null}
-              {report.startedAt ? (
-                <Text variant="meta" color="textDim">
-                  {t('cloud115.elapsed', {
-                    seconds: Math.max(0, Math.floor(Date.now() / 1000) - report.startedAt),
-                  })}
-                </Text>
-              ) : null}
-            </Row>
-          ) : null}
-          {status.running && report.callsTotal > 0 ? (
-            <Box mb={10}>
-              <Progress
-                value={report.callsTotal > 0 ? report.calls / report.callsTotal : 0}
-                label={t('cloud115.budgetProgress')}
-              />
-              <Row between mt={4}>
-                <Text variant="meta" color="textDim">
-                  {t('cloud115.budgetLine', {
-                    calls: report.calls,
-                    total: report.callsTotal,
-                  })}
-                </Text>
-                <Text variant="meta" color="textDim">
-                  {t('cloud115.statFilesRate', {
-                    rate: (
-                      report.startedAt
-                        ? report.files / Math.max(1, Date.now() / 1000 - report.startedAt)
-                        : 0
-                    ).toFixed(1),
-                  })}
-                </Text>
-              </Row>
-            </Box>
-          ) : null}
-          <Row wrap gapX={24} gapY={6}>
-            <Stat label={t('cloud115.statDirs')} value={report.dirs} />
-            <Stat label={t('cloud115.statFiles')} value={report.files} />
-            <Stat label={t('cloud115.statWritten')} value={report.written} />
-            <Stat label={t('cloud115.statKept')} value={report.kept} />
-            <Stat label={t('cloud115.statPruned')} value={report.pruned} />
-            <Stat label={t('cloud115.statProbed')} value={report.probed} />
-            <Stat label={t('cloud115.statPendingProbe')} value={report.pendingProbe} />
-            <Stat label={t('cloud115.statAssets')} value={report.assets} />
-            <Stat label={t('cloud115.statCalls')} value={report.calls} />
-            <Stat label={t('cloud115.statLinks')} value={status.linkCache} />
-          </Row>
-          {status.history.length ? (
-            <>
-              <Text variant="cardTitle" mt={18}>
-                {t('cloud115.history')}
-              </Text>
-              <Box gap={6} mt={8}>
-                {[...status.history]
-                  .reverse()
-                  .slice(0, 10)
-                  .map((entry) => (
-                    <Row between wrap gap={12} key={entry.at}>
-                      <Text variant="meta" color="textDim">
-                        {new Date(entry.at * 1000).toLocaleString()}
-                      </Text>
-                      <Text variant="meta" color={entry.errors ? 'warning' : 'textDim'}>
-                        {t('cloud115.historyLine', {
-                          dirs: entry.dirs,
-                          files: entry.files,
-                          written: entry.written,
-                          pruned: entry.pruned,
-                          errors: entry.errors,
-                        })}
-                      </Text>
-                    </Row>
-                  ))}
+                {replaceMsg ? (
+                  <Text variant="meta" color="textMuted">
+                    {replaceMsg}
+                  </Text>
+                ) : null}
               </Box>
-            </>
-          ) : null}
-          {report.truncated ? (
-            <Text variant="meta" color="warning" mt={8}>
-              {t('cloud115.truncated')}
-            </Text>
-          ) : null}
-          {status.lastPlayError ? (
-            <Text variant="meta" color="danger" mt={8}>
-              {t('cloud115.lastPlayError')}：{status.lastPlayError}
-            </Text>
-          ) : null}
-          {report.errors.length ? (
-            <pre style={ERRORS_PANE}>{report.errors.join('\n')}</pre>
-          ) : (
-            <Text variant="meta" color="textDim" mt={10}>
-              {report.finishedAt ? t('cloud115.noErrors') : t('cloud115.never')}
-            </Text>
-          )}
-        </Surface>
-      </Section.Root>
-
-      <Section.Root mt={28}>
-        <Section.Header>
-          <Section.Title>{t('cloud115.playLog')}</Section.Title>
-        </Section.Header>
-        <Text variant="meta" color="textDim" mt={-8} mb={16}>
-          {t('cloud115.playLogHint')}
-        </Text>
-        <Surface elevated border="border" pad="none" px={22} py={20}>
-          <Row wrap gapX={24} gapY={8}>
-            <Stat label={t('cloud115.playMode')} value={status.lastPlayMode || '—'} />
-            <Stat label={t('cloud115.playRequests')} value={status.playCount} />
-            <Stat label={t('cloud115.signCount')} value={status.signCount} />
-            <Stat
-              label={t('cloud115.cacheHits')}
-              value={Math.max(0, status.playCount - status.signCount)}
-            />
-            <Stat
-              label={t('cloud115.lastPlay')}
-              value={
-                status.lastPlayAt
-                  ? new Date(status.lastPlayAt * 1000).toLocaleString()
-                  : t('cloud115.never')
+            </Panel>
+          </>
+        ) : tab === 'sync' ? (
+          <>
+            <Panel
+              title={t('cloud115.watch')}
+              hint={t('cloud115.watchHint')}
+              actions={
+                <Switch
+                  checked={options.watchEnabled}
+                  onCheckedChange={(watchEnabled) => patchOptions({ watchEnabled })}
+                  label={t('cloud115.watch')}
+                />
               }
-            />
-          </Row>
-          {status.lastPlayUrl ? (
-            <Row between gap={12} mt={14} center>
-              <Box minW={0} shrink={1}>
-                <Text variant="meta" color="textDim">
-                  {t('cloud115.lastLink')}
+            >
+              <Box gap={18}>
+                <SettingRow
+                  label={t('cloud115.watchInterval')}
+                  hint={t('cloud115.watchIntervalHint')}
+                >
+                  <NumberField
+                    label={t('cloud115.watchInterval')}
+                    value={options.watchIntervalSecs}
+                    min={30}
+                    max={3600}
+                    step={10}
+                    w={140}
+                    onValueChange={(watchIntervalSecs) => patchOptions({ watchIntervalSecs })}
+                  />
+                </SettingRow>
+                <Text variant="meta" color={status.gateOk === false ? 'danger' : 'textDim'}>
+                  {status.lastPollAt
+                    ? t('cloud115.lastPoll', {
+                        time: new Date(status.lastPollAt * 1000).toLocaleTimeString(),
+                      })
+                    : t('cloud115.neverPolled')}
+                  {status.gateOk === false ? ` · ${t('cloud115.gateOff')}` : ''}
                 </Text>
-                <div style={LINK_TEXT} title={status.lastPlayUrl}>
-                  {status.lastPlayUrl}
-                </div>
+                {status.watchEnabled && status.indexedDirs === 0 ? (
+                  <Text variant="meta" color="accentText">
+                    {t('cloud115.indexNotReady')}
+                  </Text>
+                ) : null}
               </Box>
-              <Button
-                label={copiedLink ? t('cloud115.copied') : t('cloud115.playCopy')}
-                icon="copy"
-                variant="ghost"
-                size="sm"
-                onPress={() => {
-                  void navigator.clipboard
-                    .writeText(status.lastPlayUrl)
-                    .then(() => {
-                      setCopiedLink(true);
-                      setTimeout(() => setCopiedLink(false), 1500);
-                    })
-                    .catch(() => setError(t('cloud115.copyFailed')));
-                }}
-              />
-            </Row>
-          ) : null}
-        </Surface>
-      </Section.Root>
+            </Panel>
+
+            <Panel
+              title={status.running ? t('cloud115.syncProgress') : t('cloud115.lastRun')}
+              hint={t('cloud115.syncBoardHint')}
+              actions={
+                <Button
+                  label={t('cloud115.syncNow')}
+                  icon="refresh"
+                  variant="glass"
+                  size="sm"
+                  onPress={() => void syncNow()}
+                  disabled={busy || status.running}
+                />
+              }
+            >
+              {dirty ? (
+                <Text variant="meta" color="accentText" mb={10}>
+                  {t('cloud115.syncDirtyHint')}
+                </Text>
+              ) : null}
+              {status.running ? (
+                <Row wrap gapX={18} gapY={4} mb={10}>
+                  <Text variant="meta" color="accentText">
+                    {t('cloud115.syncProgress')}
+                  </Text>
+                  {report.current ? (
+                    <Text variant="meta" color="textDim">
+                      {t('cloud115.currentDir', { dir: report.current })}
+                    </Text>
+                  ) : null}
+                  {report.startedAt ? (
+                    <Text variant="meta" color="textDim">
+                      {t('cloud115.elapsed', {
+                        seconds: Math.max(0, Math.floor(Date.now() / 1000) - report.startedAt),
+                      })}
+                    </Text>
+                  ) : null}
+                </Row>
+              ) : null}
+              {status.running && report.callsTotal > 0 ? (
+                <Box mb={10}>
+                  <Progress
+                    value={report.callsTotal > 0 ? report.calls / report.callsTotal : 0}
+                    label={t('cloud115.budgetProgress')}
+                  />
+                  <Row between mt={4}>
+                    <Text variant="meta" color="textDim">
+                      {t('cloud115.budgetLine', {
+                        calls: report.calls,
+                        total: report.callsTotal,
+                      })}
+                    </Text>
+                    <Text variant="meta" color="textDim">
+                      {t('cloud115.statFilesRate', {
+                        rate: (report.startedAt
+                          ? report.files / Math.max(1, Date.now() / 1000 - report.startedAt)
+                          : 0
+                        ).toFixed(1),
+                      })}
+                    </Text>
+                  </Row>
+                </Box>
+              ) : null}
+              <Row wrap gapX={24} gapY={6}>
+                <Stat label={t('cloud115.statDirs')} value={report.dirs} />
+                <Stat label={t('cloud115.statFiles')} value={report.files} />
+                <Stat label={t('cloud115.statWritten')} value={report.written} />
+                <Stat label={t('cloud115.statKept')} value={report.kept} />
+                <Stat label={t('cloud115.statPruned')} value={report.pruned} />
+                <Stat label={t('cloud115.statProbed')} value={report.probed} />
+                <Stat label={t('cloud115.statPendingProbe')} value={report.pendingProbe} />
+                <Stat label={t('cloud115.statAssets')} value={report.assets} />
+                <Stat label={t('cloud115.statCalls')} value={report.calls} />
+                <Stat label={t('cloud115.statLinks')} value={status.linkCache} />
+              </Row>
+              {status.history.length ? (
+                <>
+                  <Text variant="cardTitle" mt={18}>
+                    {t('cloud115.history')}
+                  </Text>
+                  <Box gap={6} mt={8}>
+                    {[...status.history]
+                      .reverse()
+                      .slice(0, 10)
+                      .map((entry) => (
+                        <Row between wrap gap={12} key={entry.at}>
+                          <Text variant="meta" color="textDim">
+                            {new Date(entry.at * 1000).toLocaleString()}
+                          </Text>
+                          <Text variant="meta" color={entry.errors ? 'accentText' : 'textDim'}>
+                            {t('cloud115.historyLine', {
+                              dirs: entry.dirs,
+                              files: entry.files,
+                              written: entry.written,
+                              pruned: entry.pruned,
+                              errors: entry.errors,
+                            })}
+                          </Text>
+                        </Row>
+                      ))}
+                  </Box>
+                </>
+              ) : null}
+              {report.truncated ? (
+                <Text variant="meta" color="accentText" mt={8}>
+                  {t('cloud115.truncated')}
+                </Text>
+              ) : null}
+            </Panel>
+          </>
+        ) : (
+          <>
+            <Panel title={t('cloud115.runErrors')} hint={t('cloud115.runErrorsHint')}>
+              <Box gap={8}>
+                {status.lastPlayError ? (
+                  <Text variant="meta" color="danger">
+                    {t('cloud115.lastPlayError')} · {status.lastPlayError}
+                  </Text>
+                ) : null}
+                {report.errors.length ? (
+                  <pre style={ERRORS_PANE}>{report.errors.join('\n')}</pre>
+                ) : (
+                  <Text variant="meta" color="textDim">
+                    {report.finishedAt ? t('cloud115.noErrors') : t('cloud115.never')}
+                  </Text>
+                )}
+              </Box>
+            </Panel>
+
+            <Panel title={t('cloud115.playLog')} hint={t('cloud115.playLogHint')}>
+              <Box gap={8}>
+                <Row wrap gapX={24} gapY={8}>
+                  <Stat label={t('cloud115.playMode')} value={status.lastPlayMode || '—'} />
+                  <Stat label={t('cloud115.playRequests')} value={status.playCount} />
+                  <Stat label={t('cloud115.signCount')} value={status.signCount} />
+                  <Stat
+                    label={t('cloud115.cacheHits')}
+                    value={Math.max(0, status.playCount - status.signCount)}
+                  />
+                  <Stat
+                    label={t('cloud115.lastPlay')}
+                    value={
+                      status.lastPlayAt
+                        ? new Date(status.lastPlayAt * 1000).toLocaleString()
+                        : t('cloud115.never')
+                    }
+                  />
+                </Row>
+                {status.lastPlayUrl ? (
+                  <Row between gap={12} mt={6} center>
+                    <Box minW={0} shrink={1}>
+                      <Text variant="meta" color="textDim">
+                        {t('cloud115.lastLink')}
+                      </Text>
+                      <Text variant="body" color="textDim" font="mono" lines={1}>
+                        {status.lastPlayUrl}
+                      </Text>
+                      {copyError ? (
+                        <Text variant="meta" color="danger" mt={4}>
+                          {copyError}
+                        </Text>
+                      ) : null}
+                    </Box>
+                    <Button
+                      label={copiedLink ? t('cloud115.copied') : t('cloud115.playCopy')}
+                      icon="copy"
+                      variant="ghost"
+                      size="sm"
+                      onPress={() => {
+                        void navigator.clipboard
+                          .writeText(status.lastPlayUrl)
+                          .then(() => {
+                            setCopiedLink(true);
+                            setCopyError(null);
+                            setTimeout(() => setCopiedLink(false), 1500);
+                          })
+                          .catch(() => setCopyError(t('cloud115.copyFailed')));
+                      }}
+                    />
+                  </Row>
+                ) : null}
+              </Box>
+            </Panel>
+
+            <Panel title={t('cloud115.transferHistory')} hint={t('cloud115.transferHistoryHint')}>
+              <TransferHistory entries={status.transfers} />
+            </Panel>
+          </>
+        )}
+
+        {showSaveBar ? (
+          <SaveBar
+            dirty={dirty}
+            busy={busy}
+            saved={saved}
+            savedAt={savedAt}
+            error={error}
+            onSave={() => void save()}
+            onDiscard={() => void discardChanges()}
+          />
+        ) : null}
+      </Box>
 
       {picker !== null ? (
         <FolderPicker
@@ -1005,39 +1526,346 @@ export function Cloud115Settings() {
           }}
         />
       ) : null}
+
+      {targetOpen ? (
+        <CloudFolderPicker
+          onClose={() => setTargetOpen(false)}
+          onPick={(next) => {
+            setTarget(next);
+            setTargetOpen(false);
+          }}
+        />
+      ) : null}
     </>
   );
 }
 
-function NumberField({
-  label,
-  value,
-  onChange,
-}: Readonly<{ label: string; value: number; onChange: (next: number) => void }>) {
+function TabPicker({ tab, onPick }: Readonly<{ tab: Tab; onPick: (next: Tab) => void }>) {
+  const t = useT();
+  if (useBreakpoint() === 'base') {
+    return (
+      <Select.Root
+        label={t('cloud115.tabs')}
+        value={tab}
+        onValueChange={(next) => onPick(TABS.find((one) => one === next) ?? 'account')}
+      >
+        <Select.Trigger block />
+        {TABS.map((one) => (
+          <Select.Item key={one} value={one} label={t(TAB_LABEL[one])} />
+        ))}
+      </Select.Root>
+    );
+  }
   return (
-    <Field.Root
-      label={label}
-      value={String(value)}
-      onValueChange={(text) => {
-        const parsed = Number.parseInt(text.replace(/[^0-9]/g, ''), 10);
-        if (Number.isFinite(parsed)) {
-          onChange(parsed);
-        } else if (text.trim() === '') {
-          onChange(0);
-        }
-      }}
-    >
-      <Field.Input />
-    </Field.Root>
+    <SegmentGroup.Root value={tab} onValueChange={onPick} label={t('cloud115.tabs')}>
+      {TABS.map((one) => (
+        <SegmentGroup.Item key={one} value={one}>
+          <SegmentGroup.Label>{t(TAB_LABEL[one])}</SegmentGroup.Label>
+        </SegmentGroup.Item>
+      ))}
+    </SegmentGroup.Root>
   );
 }
 
-function SummaryStat({ label, value }: Readonly<{ label: string; value: string }>) {
+function LoginPrompt({ onGoAccount }: Readonly<{ onGoAccount: () => void }>) {
+  const t = useT();
   return (
-    <Box>
-      <Text variant="meta" color="textDim">{label}</Text>
-      <Text variant="h2" mt={4}>{value}</Text>
+    <Callout.Root tone="accent" icon="lock">
+      <Callout.Title>{t('cloud115.loginRequired')}</Callout.Title>
+      <Callout.Detail>{t('cloud115.loginRequiredHint')}</Callout.Detail>
+      <Callout.Actions>
+        <Button label={t('cloud115.goAccount')} variant="glass" size="sm" onPress={onGoAccount} />
+      </Callout.Actions>
+    </Callout.Root>
+  );
+}
+
+/** A titled card: the heading, its one sentence, optional actions, content. */
+function Panel({
+  title,
+  hint,
+  actions,
+  children,
+}: Readonly<{ title: string; hint?: string; actions?: ReactNode; children: ReactNode }>) {
+  return (
+    <Surface elevated border="border" pad="none" px={22} py={20}>
+      <Row between wrap gap={12} align="flex-start" mb={16}>
+        <Box shrink={1} minW={0} gap={4}>
+          <Text variant="cardTitle">{title}</Text>
+          {hint ? (
+            <Text variant="meta" color="textDim">
+              {hint}
+            </Text>
+          ) : null}
+        </Box>
+        {actions ?? null}
+      </Row>
+      {children}
+    </Surface>
+  );
+}
+
+/** Label and hint on the left, the control at the far end: the settings row the
+ *  design uses, so a value is read before it is changed. */
+function SettingRow({
+  label,
+  hint,
+  children,
+}: Readonly<{ label: string; hint?: string; children: ReactNode }>) {
+  return (
+    <Row wrap gapX={24} gapY={10} align="center" between>
+      <Box shrink={1} minW={220} gap={3}>
+        <Text variant="label">{label}</Text>
+        {hint ? (
+          <Text variant="meta" color="textDim">
+            {hint}
+          </Text>
+        ) : null}
+      </Box>
+      <Row gap={8} center shrink={0}>
+        {children}
+      </Row>
+    </Row>
+  );
+}
+
+function SaveBar({
+  dirty,
+  busy,
+  saved,
+  savedAt,
+  error,
+  onSave,
+  onDiscard,
+}: Readonly<{
+  dirty: boolean;
+  busy: boolean;
+  saved: boolean;
+  savedAt: Date | null;
+  error: string | null;
+  onSave: () => void;
+  onDiscard: () => void;
+}>) {
+  const t = useT();
+  const s = useStyles(sDefinition);
+  return (
+    <Surface elevated border="border" pad="none" px={18} py={14} style={s.sticky}>
+      <Row between wrap gap={12} center>
+        <Row wrap gap={10} center>
+          {dirty ? (
+            <Badge tone="warning">{t('cloud115.unsaved')}</Badge>
+          ) : saved ? (
+            <Badge tone="success">{t('cloud115.saved')}</Badge>
+          ) : (
+            <Text variant="meta" color="textDim">
+              {t('cloud115.clean')}
+            </Text>
+          )}
+          {dirty ? (
+            <Text variant="meta" color="textDim">
+              {t('cloud115.savedHint')}
+            </Text>
+          ) : saved && savedAt ? (
+            <Text variant="meta" color="textDim">
+              {savedAt.toLocaleTimeString()}
+            </Text>
+          ) : null}
+        </Row>
+        <Row gap={8} center>
+          <Button
+            label={t('cloud115.discard')}
+            icon="arrow-back-up"
+            variant="ghost"
+            size="sm"
+            onPress={onDiscard}
+            disabled={busy || !dirty}
+          />
+          <Button
+            label={busy ? t('cloud115.saving') : t('cloud115.save')}
+            icon="device-floppy"
+            variant="primary"
+            size="sm"
+            onPress={onSave}
+            disabled={busy || !dirty}
+            loading={busy && dirty}
+          />
+        </Row>
+      </Row>
+      {error ? (
+        <Text variant="meta" color="danger" mt={8}>
+          {error}
+        </Text>
+      ) : null}
+    </Surface>
+  );
+}
+
+/** The share receipts the module keeps, newest first. The stored `at` is in
+ *  MILLISECONDS (store::now_ms), unlike the scan history's seconds. */
+function TransferHistory({ entries }: Readonly<{ entries: TransferEntryView[] }>) {
+  const t = useT();
+  if (entries.length === 0) {
+    return (
+      <Text variant="meta" color="textDim">
+        {t('cloud115.transferNoHistory')}
+      </Text>
+    );
+  }
+  return (
+    <Box gap={10}>
+      {[...entries].reverse().map((entry) => (
+        <Row key={`${entry.at}-${entry.code}`} between wrap gap={12} align="flex-start">
+          <Box shrink={1} minW={0} gap={3}>
+            <Text variant="label" lines={1}>
+              {entry.title && entry.title !== UNTITLED_SHARE
+                ? entry.title
+                : t('cloud115.transferUntitled')}
+            </Text>
+            <Text variant="meta" color="textDim">
+              {new Date(entry.at).toLocaleString()} · {t('cloud115.transferCode')} {entry.code} ·{' '}
+              {t('cloud115.transferFileCount', { count: entry.files })}
+            </Text>
+            {/* A success message is the server's own Chinese sentence; the
+                badge and the count already say it in every language. */}
+            {!entry.ok && entry.message ? (
+              <Text variant="meta" color="danger" lines={2}>
+                {entry.message}
+              </Text>
+            ) : null}
+          </Box>
+          <Badge tone={entry.ok ? 'success' : 'danger'}>
+            {entry.ok ? t('cloud115.transferOk') : t('cloud115.transferFail')}
+          </Badge>
+        </Row>
+      ))}
     </Box>
+  );
+}
+
+/** Pick a 115 folder for a share transfer, answering the folder's cid and the
+ *  path it ends on. Starts at the root, like the mapping picker. */
+function CloudFolderPicker({
+  onClose,
+  onPick,
+}: Readonly<{ onClose: () => void; onPick: (target: Target) => void }>) {
+  const t = useT();
+  const api = useCloud115Api();
+  const [trail, setTrail] = useState<{ cid: string; name: string }[]>([{ cid: '0', name: '' }]);
+  const [view, setView] = useState<BrowseView | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const current = trail[trail.length - 1] ?? { cid: '0', name: '' };
+  const path = trail
+    .slice(1)
+    .map((step) => step.name)
+    .join('/');
+
+  const load = (cid: string) => {
+    setBusy(true);
+    setError(null);
+    api
+      .browse(cid)
+      .then(setView)
+      .catch((reason) => {
+        setView(null);
+        setError(errorText(reason));
+      })
+      .finally(() => setBusy(false));
+  };
+
+  useEffect(() => {
+    load('0');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one initial read per mount
+  }, [api]);
+
+  const enter = (entry: BrowseEntry) => {
+    if (!entry.cid) {
+      return;
+    }
+    setTrail((steps) => [...steps, { cid: entry.cid as string, name: entry.name }]);
+    load(entry.cid);
+  };
+
+  const up = () => {
+    if (trail.length <= 1) {
+      return;
+    }
+    const next = trail.slice(0, -1);
+    setTrail(next);
+    load((next[next.length - 1] ?? { cid: '0' }).cid);
+  };
+
+  const folders = view
+    ? view.entries
+        .filter((entry) => entry.isDir)
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans'))
+    : [];
+
+  return (
+    <Dialog.Root open title={t('cloud115.chooseFolder')} onClose={onClose} width="md" fullHeight>
+      <Dialog.Header>
+        <Text variant="title">{t('cloud115.chooseFolder')}</Text>
+        <Row wrap gap={10} center>
+          <Button
+            label={t('cloud115.up')}
+            icon="arrow-left"
+            variant="ghost"
+            size="sm"
+            disabled={busy || trail.length <= 1}
+            onPress={up}
+          />
+          <Text variant="meta" color="textDim">
+            {path ? `/${path}` : t('cloud115.root')}
+          </Text>
+        </Row>
+      </Dialog.Header>
+      <Dialog.Panel>
+        {error ? (
+          <Text variant="meta" color="danger" mb={8}>
+            {error}
+          </Text>
+        ) : null}
+        {busy ? (
+          <Text variant="meta" color="textDim">
+            {t('cloud115.loading')}
+          </Text>
+        ) : null}
+        {!busy && view
+          ? folders.map((entry) => (
+              <Row between gap={12} key={entry.cid ?? entry.name}>
+                <Row gap={10} center shrink={1} minW={0}>
+                  <Icon name="folder" size={16} thickness={1.8} color="accentText" />
+                  <Text variant="meta" lines={1}>
+                    {entry.name}
+                  </Text>
+                </Row>
+                <Button
+                  label={t('cloud115.open')}
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => enter(entry)}
+                />
+              </Row>
+            ))
+          : null}
+        {!busy && view && folders.length === 0 ? (
+          <Text variant="meta" color="textDim">
+            {t('cloud115.emptyFolder')}
+          </Text>
+        ) : null}
+      </Dialog.Panel>
+      <Dialog.Footer>
+        <Text variant="meta" color="textDim" mb={8}>
+          {t('cloud115.pickHint')}
+        </Text>
+        <Dialog.Actions
+          onCancel={onClose}
+          cancelLabel={t('cloud115.cancel')}
+          onConfirm={() => onPick({ cid: current.cid, name: path })}
+          confirmLabel={t('cloud115.pickThis')}
+        />
+      </Dialog.Footer>
+    </Dialog.Root>
   );
 }
 
@@ -1047,9 +1875,7 @@ function Stat({ label, value }: Readonly<{ label: string; value: number | string
       <Text variant="meta" color="textDim">
         {label}
       </Text>
-      <Text variant="cardTitle">
-        {typeof value === 'number' ? value.toLocaleString() : value}
-      </Text>
+      <Text variant="cardTitle">{typeof value === 'number' ? value.toLocaleString() : value}</Text>
     </Row>
   );
 }
@@ -1119,7 +1945,8 @@ const FILE_ACTIONS: CSSProperties = {
 
 const VIDEO_NAME = /\.(mkv|mp4|ts|m2ts|iso|avi|mov|wmv|flv|webm|rmvb|mpg|mpeg|m4v|rm)$/i;
 
-/** The module's own page: the card holds the settings, this adds the drive. */
+/** The module's own page: the card holds the five settings tabs, this adds the
+ *  drive. */
 export default function Cloud115Page() {
   const t = useT();
   const api = useCloud115Api();
@@ -1182,7 +2009,7 @@ export function Cloud115Files() {
       .then(setView)
       .catch((reason) => {
         setView(null);
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError(errorText(reason));
       })
       .finally(() => setBusy(false));
   };
@@ -1216,7 +2043,7 @@ export function Cloud115Files() {
       setCopied(entry.pickCode);
       setError(null);
     } catch {
-      setError(`${t('cloud115.copyFailed')}：${url}`);
+      setError(`${t('cloud115.copyFailed')} ${url}`);
     }
   };
 
@@ -1227,15 +2054,10 @@ export function Cloud115Files() {
     : [];
 
   return (
-    <Section.Root mt={28}>
-      <Section.Header>
-        <Section.Title>{t('cloud115.files')}</Section.Title>
-      </Section.Header>
-      <Text variant="meta" color="textDim" mt={-8} mb={16}>
-        {t('cloud115.filesHint')}
-      </Text>
-      <Surface elevated border="border" pad="none" px={22} py={20}>
-        <Row wrap gap={10} center mb={14}>
+    <Surface elevated border="border" pad="none" px={22} py={20} mt={24}>
+      <Row between wrap gap={12} mb={14} center>
+        <Text variant="cardTitle">{t('cloud115.files')}</Text>
+        <Row wrap gap={10} center>
           <Button
             label={t('cloud115.up')}
             icon="arrow-left"
@@ -1245,7 +2067,11 @@ export function Cloud115Files() {
             onPress={up}
           />
           <Text variant="meta" color="textDim">
-            / {trail.slice(1).map((step) => step.name).join(' / ') || t('cloud115.root')}
+            /{' '}
+            {trail
+              .slice(1)
+              .map((step) => step.name)
+              .join(' / ') || t('cloud115.root')}
           </Text>
           <Button
             label={t('cloud115.refresh')}
@@ -1256,91 +2082,76 @@ export function Cloud115Files() {
             onPress={() => load(current.cid)}
           />
         </Row>
+      </Row>
 
-        {error ? (
-          <Text variant="meta" color="danger" mb={10}>
-            {error}
-          </Text>
-        ) : null}
-        {busy ? (
-          <Text variant="meta" color="textDim">
-            {t('cloud115.loading')}
-          </Text>
-        ) : null}
-        {!busy && view && sorted.length === 0 ? (
-          <Text variant="meta" color="textDim">
-            {t('cloud115.emptyFolder')}
-          </Text>
-        ) : null}
+      {error ? (
+        <Text variant="meta" color="danger" mb={10}>
+          {error}
+        </Text>
+      ) : null}
+      {busy ? (
+        <Text variant="meta" color="textDim">
+          {t('cloud115.loading')}
+        </Text>
+      ) : null}
+      {!busy && view && sorted.length === 0 ? (
+        <Text variant="meta" color="textDim">
+          {t('cloud115.emptyFolder')}
+        </Text>
+      ) : null}
 
-        {sorted.map((entry) => {
-          const isVideo = !entry.isDir && VIDEO_NAME.test(entry.name);
-          return (
-            <div style={FILE_ROW} key={entry.fid ?? entry.cid ?? entry.name}>
-              <div style={FILE_MAIN}>
-                <Icon
-                  name={entry.isDir ? 'folder' : 'file'}
-                  size={16}
-                  thickness={1.8}
-                  color={entry.isDir ? 'accent' : 'textDim'}
-                />
-                <span style={FILE_NAME} title={entry.name}>
-                  {entry.name}
-                </span>
-              </div>
-              <div style={FILE_ACTIONS}>
-                {!entry.isDir ? (
-                  <Text variant="meta" color="textDim">
-                    {formatSize(entry.size)}
-                  </Text>
-                ) : null}
-                {entry.isDir ? (
-                  <Button
-                    label={t('cloud115.open')}
-                    variant="ghost"
-                    size="sm"
-                    disabled={!entry.cid}
-                    onPress={() => enter(entry)}
-                  />
-                ) : isVideo ? (
-                  <Button
-                    label={t('cloud115.copyLink')}
-                    icon="copy"
-                    variant="ghost"
-                    size="sm"
-                    disabled={!entry.pickCode}
-                    onPress={() => void copyLink(entry)}
-                  />
-                ) : null}
-              </div>
+      {sorted.map((entry) => {
+        const isVideo = !entry.isDir && VIDEO_NAME.test(entry.name);
+        return (
+          <div style={FILE_ROW} key={entry.fid ?? entry.cid ?? entry.name}>
+            <div style={FILE_MAIN}>
+              <Icon
+                name={entry.isDir ? 'folder' : 'file'}
+                size={16}
+                thickness={1.8}
+                color={entry.isDir ? 'accent' : 'textDim'}
+              />
+              <span style={FILE_NAME} title={entry.name}>
+                {entry.name}
+              </span>
             </div>
-          );
-        })}
+            <div style={FILE_ACTIONS}>
+              {!entry.isDir ? (
+                <Text variant="meta" color="textDim">
+                  {formatSize(entry.size)}
+                </Text>
+              ) : null}
+              {entry.isDir ? (
+                <Button
+                  label={t('cloud115.open')}
+                  variant="ghost"
+                  size="sm"
+                  disabled={!entry.cid}
+                  onPress={() => enter(entry)}
+                />
+              ) : isVideo ? (
+                <Button
+                  label={t('cloud115.copyLink')}
+                  icon="copy"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!entry.pickCode}
+                  onPress={() => void copyLink(entry)}
+                />
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
 
-        {copied ? (
-          <Text variant="meta" color="success" mt={8}>
-            {t('cloud115.copied')}
-          </Text>
-        ) : null}
-      </Surface>
-    </Section.Root>
+      {copied ? (
+        <Text variant="meta" color="success" mt={8}>
+          {t('cloud115.copied')}
+        </Text>
+      ) : null}
+    </Surface>
   );
 }
-
-const OVERLAY: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0, 0, 0, 0.55)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 50,
-  padding: 16,
-};
-
-const DIALOG: CSSProperties = { width: 'min(760px, 96vw)', maxHeight: '84vh' };
-
-const DIALOG_BODY: CSSProperties = { overflow: 'auto', maxHeight: '52vh', paddingRight: 4 };
 
 /** Pick a drive folder by walking the tree, so a mapping's remote side is never
  *  typed from memory. Starts at the root and answers the path it ends on. */
@@ -1366,6 +2177,7 @@ function FolderPicker({
           .slice(1)
           .map((step) => step.name)
           .join('/')}`;
+  const heading = mode === 'local' ? t('cloud115.chooseLocalFolder') : t('cloud115.chooseFolder');
 
   const load = (cid: string) => {
     setBusy(true);
@@ -1374,7 +2186,7 @@ function FolderPicker({
       .then(setView)
       .catch((reason) => {
         setView(null);
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError(errorText(reason));
       })
       .finally(() => setBusy(false));
   };
@@ -1414,77 +2226,70 @@ function FolderPicker({
     : [];
 
   return (
-    <div style={OVERLAY}>
-      <div style={DIALOG}>
-        <Surface elevated border="border" pad="none" px={22} py={20}>
-          <Row between gap={12} mb={12} center>
-            <Text variant="cardTitle">
-              {mode === 'local' ? t('cloud115.chooseLocalFolder') : t('cloud115.chooseFolder')}
-            </Text>
-            <Button label={t('cloud115.cancel')} variant="ghost" size="sm" onPress={onClose} />
-          </Row>
-          <Row wrap gap={10} center mb={10}>
-            <Button
-              label={t('cloud115.up')}
-              icon="arrow-left"
-              variant="ghost"
-              size="sm"
-              disabled={busy || trail.length <= 1}
-              onPress={up}
-            />
-            <Text variant="meta" color="textDim">
-              {mode === 'local' ? path : path === '/' ? t('cloud115.root') : path}
-            </Text>
-          </Row>
-          {error ? (
-            <Text variant="meta" color="danger" mb={8}>
-              {error}
-            </Text>
-          ) : null}
-          {busy ? (
-            <Text variant="meta" color="textDim">
-              {t('cloud115.loading')}
-            </Text>
-          ) : null}
-          <div style={DIALOG_BODY}>
-            {!busy && view
-              ? folders.map((entry) => (
-                  <div style={FILE_ROW} key={entry.cid ?? entry.name}>
-                    <div style={FILE_MAIN}>
-                      <Icon name="folder" size={16} thickness={1.8} color="accent" />
-                      <span style={FILE_NAME} title={entry.name}>
-                        {entry.name}
-                      </span>
-                    </div>
-                    <Button
-                      label={t('cloud115.open')}
-                      variant="ghost"
-                      size="sm"
-                      onPress={() => enter(entry)}
-                    />
-                  </div>
-                ))
-              : null}
-            {!busy && view && folders.length === 0 ? (
-              <Text variant="meta" color="textDim">
-                {t('cloud115.emptyFolder')}
-              </Text>
-            ) : null}
-          </div>
-          <Row between gap={12} mt={14} center>
-            <Text variant="meta" color="textDim">
-              {t('cloud115.pickHint')}
-            </Text>
-            <Button
-              label={t('cloud115.pickThis')}
-              variant="primary"
-              size="sm"
-              onPress={() => onPick(path)}
-            />
-          </Row>
-        </Surface>
-      </div>
-    </div>
+    <Dialog.Root open title={heading} onClose={onClose} width="md" fullHeight>
+      <Dialog.Header>
+        <Text variant="title">{heading}</Text>
+        <Row wrap gap={10} center>
+          <Button
+            label={t('cloud115.up')}
+            icon="arrow-left"
+            variant="ghost"
+            size="sm"
+            disabled={busy || trail.length <= 1}
+            onPress={up}
+          />
+          <Text variant="meta" color="textDim">
+            {mode === 'local' ? path : path === '/' ? t('cloud115.root') : path}
+          </Text>
+        </Row>
+      </Dialog.Header>
+      <Dialog.Panel>
+        {error ? (
+          <Text variant="meta" color="danger" mb={8}>
+            {error}
+          </Text>
+        ) : null}
+        {busy ? (
+          <Text variant="meta" color="textDim">
+            {t('cloud115.loading')}
+          </Text>
+        ) : null}
+        {!busy && view
+          ? folders.map((entry) => (
+              <Row between gap={12} key={entry.cid ?? entry.name}>
+                <Row gap={10} center shrink={1} minW={0}>
+                  <Icon name="folder" size={16} thickness={1.8} color="accentText" />
+                  <Text variant="meta" lines={1}>
+                    {entry.name}
+                  </Text>
+                </Row>
+                <Button
+                  label={t('cloud115.open')}
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => enter(entry)}
+                />
+              </Row>
+            ))
+          : null}
+        {!busy && view && folders.length === 0 ? (
+          <Text variant="meta" color="textDim">
+            {t('cloud115.emptyFolder')}
+          </Text>
+        ) : null}
+      </Dialog.Panel>
+      <Dialog.Footer>
+        <Text variant="meta" color="textDim" mb={8}>
+          {t('cloud115.pickHint')}
+        </Text>
+        <Dialog.Actions
+          onCancel={onClose}
+          cancelLabel={t('cloud115.cancel')}
+          onConfirm={() => onPick(path)}
+          confirmLabel={t('cloud115.pickThis')}
+        />
+      </Dialog.Footer>
+    </Dialog.Root>
   );
 }
 

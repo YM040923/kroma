@@ -273,6 +273,8 @@ fn apply_art_policy(
     }
     let poster_min = options.poster_min_width.unwrap_or(500);
     let backdrop_min = options.backdrop_min_width.unwrap_or(1920);
+    let poster_votes = options.poster_min_votes.unwrap_or(0);
+    let backdrop_votes = options.backdrop_min_votes.unwrap_or(0);
     let logo_min = options.logo_min_width.unwrap_or(0);
     let logo_locked = overrides.contains_key(db::art_overrides::LOGO);
     let needs_images = force
@@ -329,12 +331,18 @@ fn apply_art_policy(
         fanart.as_ref().map(|lists| &lists.logos[..]),
     );
     if !poster_locked && !poster.is_empty() {
-        if let Some(url) = pick_from(&poster_sources, &poster, poster_size, poster_min) {
+        if let Some(url) = pick_from(
+            &poster_sources,
+            &poster,
+            poster_size,
+            poster_min,
+            poster_votes,
+        ) {
             meta.poster_url = Some(url);
         }
     }
     if !logo_locked && !logo.is_empty() {
-        if let Some(url) = pick_from(&logo_sources, &logo, logo_size, logo_min) {
+        if let Some(url) = pick_from(&logo_sources, &logo, logo_size, logo_min, 0) {
             meta.logo_url = Some(url);
         }
     }
@@ -349,6 +357,7 @@ fn apply_art_policy(
             backdrop_size,
             backdrop_count,
             backdrop_min,
+            backdrop_votes,
         )
     } else {
         Vec::new()
@@ -485,18 +494,21 @@ fn pick_from(
     preferences: &[String],
     size: Option<&str>,
     min_width: u16,
+    min_votes: u32,
 ) -> Option<String> {
     for relaxed in [false, true] {
         if preferences.is_empty() {
             for (_, images) in sources {
-                if let Some(best) = best_of(images, None, min_width, relaxed) {
+                if let Some(best) = best_of(images, None, min_width, min_votes, relaxed) {
                     return Some(fit(best, size));
                 }
             }
         } else {
             for preference in preferences {
                 for (_, images) in sources {
-                    if let Some(best) = best_of(images, Some(preference), min_width, relaxed) {
+                    if let Some(best) =
+                        best_of(images, Some(preference), min_width, min_votes, relaxed)
+                    {
                         return Some(fit(best, size));
                     }
                 }
@@ -510,6 +522,7 @@ fn best_of<'a>(
     images: &'a [metadata::ArtImage],
     preference: Option<&str>,
     min_width: u16,
+    min_votes: u32,
     relaxed: bool,
 ) -> Option<&'a metadata::ArtImage> {
     let mut seen = std::collections::HashSet::new();
@@ -517,10 +530,12 @@ fn best_of<'a>(
         .iter()
         .filter(|image| preference.is_none_or(|preference| matches(image, preference)))
         .filter(|image| wide_enough(image, min_width, relaxed))
+        .filter(|image| popular_enough(image, min_votes, relaxed))
         .filter(|image| seen.insert(image_key(&image.url)))
         .max_by(|a, b| {
-            a.votes
-                .total_cmp(&b.votes)
+            a.popularity
+                .total_cmp(&b.popularity)
+                .then(a.votes.total_cmp(&b.votes))
                 .then((a.width * a.height).cmp(&(b.width * b.height)))
                 .then(a.url.cmp(&b.url))
         })
@@ -536,6 +551,7 @@ fn selected_from(
     size: Option<&str>,
     limit: Option<usize>,
     min_width: u16,
+    min_votes: u32,
 ) -> Vec<String> {
     let limit = limit.unwrap_or(8).min(8);
     let mut ordered: Vec<&metadata::ArtImage> = Vec::new();
@@ -547,6 +563,7 @@ fn selected_from(
                 let mut batch: Vec<_> = images
                     .iter()
                     .filter(|image| wide_enough(image, min_width, relaxed))
+                    .filter(|image| popular_enough(image, min_votes, relaxed))
                     .filter(|image| seen.insert(image_key(&image.url)))
                     .collect();
                 sort_art(&mut batch);
@@ -559,6 +576,7 @@ fn selected_from(
                         .iter()
                         .filter(|image| matches(image, preference))
                         .filter(|image| wide_enough(image, min_width, relaxed))
+                        .filter(|image| popular_enough(image, min_votes, relaxed))
                         .filter(|image| seen.insert(image_key(&image.url)))
                         .collect();
                     sort_art(&mut batch);
@@ -570,6 +588,7 @@ fn selected_from(
             let mut rest: Vec<_> = images
                 .iter()
                 .filter(|image| wide_enough(image, min_width, relaxed))
+                .filter(|image| popular_enough(image, min_votes, relaxed))
                 .filter(|image| seen.insert(image_key(&image.url)))
                 .collect();
             sort_art(&mut rest);
@@ -588,8 +607,9 @@ fn selected_from(
 
 fn sort_art(batch: &mut Vec<&metadata::ArtImage>) {
     batch.sort_by(|a, b| {
-        b.votes
-            .total_cmp(&a.votes)
+        b.popularity
+            .total_cmp(&a.popularity)
+            .then(b.votes.total_cmp(&a.votes))
             .then((b.width * b.height).cmp(&(a.width * a.height)))
             .then(a.url.cmp(&b.url))
     });
@@ -598,6 +618,11 @@ fn sort_art(batch: &mut Vec<&metadata::ArtImage>) {
 fn wide_enough(image: &metadata::ArtImage, min_width: u16, relaxed: bool) -> bool {
     // A provider that omits dimensions is unknown, not bad.
     relaxed || image.width == 0 || image.width >= u32::from(min_width)
+}
+
+fn popular_enough(image: &metadata::ArtImage, min_votes: u32, relaxed: bool) -> bool {
+    // The relaxed pass exists so a catalogue of obscure art still gets a pick.
+    relaxed || min_votes == 0 || image.popularity >= f64::from(min_votes)
 }
 
 /// Re-pick each season's poster from the provider's season gallery, so the
@@ -668,7 +693,7 @@ fn apply_season_art(
             &posters,
             Some(fanart_season),
         );
-        let Some(url) = pick_from(&sources, &prefs, options.season_size.as_deref(), min_width)
+        let Some(url) = pick_from(&sources, &prefs, options.season_size.as_deref(), min_width, 0)
         else {
             continue;
         };
@@ -967,6 +992,7 @@ mod artwork_tests {
             height,
             language: language.map(str::to_string),
             votes,
+            popularity: votes,
         }
     }
 

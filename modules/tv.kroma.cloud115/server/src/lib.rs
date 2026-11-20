@@ -21,10 +21,12 @@ pub mod oss;
 pub mod play;
 pub mod pacer;
 pub mod probe;
+pub mod replace;
 pub mod routes;
 pub mod settings;
 pub mod store;
 pub mod sync;
+pub mod transfer;
 pub mod upload;
 pub mod watch;
 

@@ -76,6 +76,7 @@ impl Raw {
             height: self.height,
             language: self.lang.filter(|lang| !lang.trim().is_empty() && lang != "00"),
             votes: self.likes,
+            popularity: self.likes,
         })
     }
 }

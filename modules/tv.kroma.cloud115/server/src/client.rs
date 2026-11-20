@@ -269,6 +269,83 @@ pub async fn list(cookie: &str, ua: &str, cid: &str, offset: u32, limit: u32) ->
     })
 }
 
+/// One page of a share link's folder. Shares are read through the web API with
+/// the share page as Referer; the cookie alone is enough, no open-platform
+/// token is involved.
+pub async fn share_snap(
+    cookie: &str,
+    ua: &str,
+    share_code: &str,
+    receive_code: &str,
+    cid: &str,
+    offset: u32,
+    limit: u32,
+) -> Result<Value, ApiError> {
+    pacer().acquire().await.map_err(ApiError::network)?;
+    let url = format!(
+        "{WEB}/share/snap?share_code={share_code}&receive_code={receive_code}&cid={cid}\
+         &offset={offset}&limit={limit}&asc=0&o=file_name&format=json"
+    );
+    let referer = format!("https://115cdn.com/s/{share_code}?password={receive_code}&");
+    let response = Fetch::default()
+        .purpose("cloud-drive")
+        .header("Cookie", cookie)
+        .header("User-Agent", ua)
+        .header("Referer", referer)
+        .header("Origin", "https://115.com")
+        .max_time(TIMEOUT_SECS)
+        .get(&url);
+    let (status, body) = match response {
+        Ok(response) => (response.status, response.text()),
+        Err(error) => return Err(ApiError::network(error.to_string())),
+    };
+    pacer().note(status, errno_of(&body)).await;
+    let envelope = check(status, &body)?;
+    Ok(envelope.data)
+}
+
+/// Save files from a share into `cid`. Deliberately never sends `is_check=1`:
+/// with it 115 only validates and answers `state: true` while receiving
+/// nothing.
+pub async fn share_receive(
+    cookie: &str,
+    ua: &str,
+    share_code: &str,
+    receive_code: &str,
+    file_ids: &[String],
+    cid: &str,
+) -> Result<Value, ApiError> {
+    if file_ids.is_empty() {
+        return Err(ApiError::network("没有可转存的文件"));
+    }
+    let joined = file_ids.join(",");
+    let referer = format!("https://115cdn.com/s/{share_code}?password={receive_code}&");
+    pacer().acquire().await.map_err(ApiError::network)?;
+    let response = Fetch::default()
+        .purpose("cloud-drive")
+        .header("Cookie", cookie)
+        .header("User-Agent", ua)
+        .header("Referer", referer)
+        .header("Origin", "https://115.com")
+        .max_time(TIMEOUT_SECS)
+        .post_form(
+            &format!("{WEB}/share/receive"),
+            &[
+                ("share_code", share_code),
+                ("receive_code", receive_code),
+                ("file_id", joined.as_str()),
+                ("cid", cid),
+            ],
+        );
+    let (status, body) = match response {
+        Ok(response) => (response.status, response.text()),
+        Err(error) => return Err(ApiError::network(error.to_string())),
+    };
+    pacer().note(status, errno_of(&body)).await;
+    let envelope = check(status, &body)?;
+    Ok(envelope.data)
+}
+
 /// Resolve a path like `/电影` to its folder id. The drive's root is `0`, which
 /// the lookup endpoint does not answer for, so it is answered here.
 pub async fn folder_id_by_path(cookie: &str, ua: &str, path: &str) -> Result<String, ApiError> {
