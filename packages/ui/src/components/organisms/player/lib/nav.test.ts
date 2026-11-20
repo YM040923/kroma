@@ -33,10 +33,10 @@ describe('controlOrder', () => {
     ]);
   });
 
-  it('inserts "next" right after the transport trio when there is a next episode', () => {
+  it('puts "next" between play and the ten-second skip', () => {
     const row = controlOrder(TV_FLAGS, true);
-    expect(row[3]).toBe('next');
-    expect(controlOrder(WEB_FLAGS, true).indexOf('next')).toBe(3);
+    expect(row.slice(0, 4)).toEqual(['rewind', 'play', 'next', 'forward']);
+    expect(controlOrder(WEB_FLAGS, true).indexOf('next')).toBe(2);
   });
 
   it('leaves the track pickers out of a clip that has no tracks to pick', () => {

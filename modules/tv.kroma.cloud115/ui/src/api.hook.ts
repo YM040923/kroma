@@ -7,7 +7,14 @@ import {
   CloudAccount,
   CloudSettingsView,
   CloudStatusView,
+  CookieImported,
+  LoginStarted,
+  LoginState,
+  RapidView,
   SavedView,
+  UploadFinished,
+  UploadPartView,
+  UploadStarted,
   StartedView,
   type CloudLibrary,
   type CloudOptions,
@@ -30,4 +37,16 @@ export const useCloud115Api = moduleApiHook((api) => ({
   sync: (baseUrl: string) => api.post('/sync', { baseUrl }, StartedView),
   browse: (cid: string) => api.get(`/browse?cid=${encodeURIComponent(cid)}`, BrowseView),
   browseLocal: (path: string) => api.get(`/browse-local?path=${encodeURIComponent(path)}`, BrowseView),
+  loginStart: (app: string) => api.post('/login/start', { app }, LoginStarted),
+  loginState: (flow: string) =>
+    api.get(`/login/state?flow=${encodeURIComponent(flow)}`, LoginState),
+  loginCancel: (flow: string) => api.post('/login/cancel', { flow }),
+  loginCookie: (cookie: string) => api.post('/login/cookie', { cookie }, CookieImported),
+  uploadRapid: (remote: string, path: string) =>
+    api.post('/upload/rapid', { remote, path }, RapidView),
+  uploadStart: (remote: string, path: string) =>
+    api.post('/upload/start', { remote, path }, UploadStarted),
+  uploadPart: (upload: string, index: number) =>
+    api.post('/upload/part', { upload, index }, UploadPartView),
+  uploadFinish: (upload: string) => api.post('/upload/finish', { upload }, UploadFinished),
 }));

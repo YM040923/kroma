@@ -22,6 +22,7 @@ interface ArtImage {
 
 interface ArtView {
   current: { poster?: string | null; backdrop?: string | null; logo?: string | null };
+  locked?: { poster?: boolean; backdrop?: boolean; logo?: boolean };
   /** Libraries only: their generated/uploaded cover is what 小幻 draws. */
   library?: boolean;
   name?: string;
@@ -31,6 +32,32 @@ interface ArtView {
 
 const COVER_W = 1280;
 const COVER_H = 720;
+
+function imageKey(url: string): string {
+  const path = url.split('?')[0] ?? url;
+  const afterProvider = path.split('/t/p/')[1];
+  return afterProvider ? afterProvider.split('/').slice(1).join('/') : path;
+}
+
+/** Deduplicate provider size variants by source file and put the strongest,
+ * largest options first, with a stable URL tie break for repeatable grids. */
+function rankedImages(images: readonly ArtImage[]): ArtImage[] {
+  const unique = new Map<string, ArtImage>();
+  for (const image of images) {
+    const key = imageKey(image.url);
+    const held = unique.get(key);
+    if (
+      !held ||
+      image.votes > held.votes ||
+      (image.votes === held.votes && image.width * image.height > held.width * held.height)
+    ) {
+      unique.set(key, image);
+    }
+  }
+  return [...unique.values()].sort(
+    (a, b) => b.votes - a.votes || b.width * b.height - a.width * a.height || a.url.localeCompare(b.url),
+  );
+}
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -176,7 +203,12 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
     setBusy(true);
     setError('');
     try {
-      const next = (await call('GET')) as ArtView;
+      const raw = (await call('GET')) as ArtView;
+      const next = {
+        ...raw,
+        posters: rankedImages(raw.posters),
+        backdrops: rankedImages(raw.backdrops),
+      };
       setView(next);
       setSelected({});
       const candidates = next.posters.length > 0 ? next.posters : next.backdrops;
@@ -430,8 +462,14 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
               {t('artwork.empty')}
             </Text>
           ) : (
-            <div style={GRID}>
-              {images.map((image) => {
+            <>
+              {view?.locked?.[tab] ? (
+                <Text variant="meta" color="accentText" mb={8}>
+                  {t('artwork.locked')}
+                </Text>
+              ) : null}
+              <div style={GRID}>
+                {images.map((image) => {
                 const active =
                   selected[tab] === image.url ||
                   (!selected[tab] && view.current[tab] === image.url);
@@ -455,6 +493,11 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
                           {image.width}×{image.height}
                         </Text>
                       ) : null}
+                      {image.votes > 0 ? (
+                        <Text variant="meta" color="accentText">
+                          {image.votes.toFixed(1)}
+                        </Text>
+                      ) : null}
                     </Row>
                     {active ? (
                       <Badge tone="success">{t('artwork.current')}</Badge>
@@ -462,7 +505,8 @@ export function ArtworkButton({ itemId, title }: Readonly<{ itemId: string; titl
                   </button>
                 );
               })}
-            </div>
+              </div>
+            </>
           )}
           <Row gap={12} mt={16}>
             <Button

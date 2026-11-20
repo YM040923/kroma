@@ -15,6 +15,8 @@
   "requests.availableDate": "Disponible le {date}",
   "requests.backToQueue": "Retour à la file",
   "requests.calendarEmpty": "Rien à l'horizon",
+  "requests.actions": "Actions de la demande",
+  "requests.edit": "Ouvrir le titre",
   "requests.cancel": "Annuler la demande",
   "requests.colDate": "Date",
   "requests.colEpisode": "Épisode",

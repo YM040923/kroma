@@ -17,6 +17,7 @@ use kroma_module_sdk::domain::Permission;
 use kroma_module_sdk::host::{json_error, AuthUser, HostCtx};
 
 use crate::client;
+use crate::login;
 use crate::play::links;
 use crate::settings::{Config, Library, Options};
 
@@ -29,6 +30,79 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/browse", get(browse::<S>))
         .route("/browse-local", get(browse_local::<S>))
         .route("/sync", post(sync::<S>))
+        .route("/login/start", post(login_start::<S>))
+        .route("/login/state", get(login_state::<S>))
+        .route("/login/cancel", post(login_cancel::<S>))
+        .route("/login/cookie", post(login_cookie::<S>))
+        .route("/upload/rapid", post(crate::upload::rapid::<S>))
+        .route("/upload/start", post(crate::upload::start::<S>))
+        .route("/upload/part", post(crate::upload::part::<S>))
+        .route("/upload/finish", post(crate::upload::finish::<S>))
+}
+
+// ---------------------------------------------------------------------------
+// QR sign-in
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct LoginStartBody {
+    app: Option<String>,
+}
+
+async fn login_start<S: HostCtx + Clone + Send + Sync + 'static>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+    body: Option<Json<LoginStartBody>>,
+) -> Result<Json<login::Started>, Response> {
+    require_settings(&host, &user)?;
+    let app = body
+        .and_then(|Json(body)| body.app)
+        .unwrap_or_else(|| "alipaymini".to_string());
+    login::begin(&app).map(Json).map_err(|error| {
+        json_error(StatusCode::BAD_GATEWAY, &error)
+    })
+}
+
+#[derive(Deserialize)]
+struct FlowQuery {
+    flow: String,
+}
+
+async fn login_state<S: HostCtx + Clone + Send + Sync + 'static>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+    Query(query): Query<FlowQuery>,
+) -> Result<Json<login::State>, Response> {
+    require_settings(&host, &user)?;
+    login::state(&query.flow)
+        .map(Json)
+        .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))
+}
+
+#[derive(Deserialize)]
+struct CookieBody {
+    cookie: String,
+}
+
+async fn login_cookie<S: HostCtx + Clone + Send + Sync + 'static>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+    Json(body): Json<CookieBody>,
+) -> Result<Json<login::CookieImported>, Response> {
+    require_settings(&host, &user)?;
+    Ok(Json(login::import_cookie(&body.cookie)))
+}
+
+async fn login_cancel<S: HostCtx + Clone + Send + Sync + 'static>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+    body: Option<Json<FlowQuery>>,
+) -> Result<StatusCode, Response> {
+    require_settings(&host, &user)?;
+    if let Some(Json(query)) = body {
+        login::cancel(&query.flow);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------------------------------------------------------------------------

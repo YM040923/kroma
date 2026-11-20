@@ -30,6 +30,11 @@ export const User = z.object({
   subtitleLanguage: z.string().nullish(),
   permissions: z.array(z.string()),
   libraries: z.array(z.string()).nullish(),
+  /** The oldest age a title this account may see can be rated for; absent
+   * means no limit. */
+  maxAge: z.number().nullish(),
+  /** Whether titles the provider did not rate are shown under `maxAge`. */
+  allowUnrated: z.boolean().default(true),
   createdAt: z.string(),
   hasPin: z.boolean(),
 });

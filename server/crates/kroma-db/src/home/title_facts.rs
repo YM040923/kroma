@@ -61,7 +61,7 @@ struct Crew {
 
 const MOVIES: &str = "SELECT id, year, duration_ms, \
        CAST(strftime('%s', added_at) AS INTEGER), library, metadata, 0 \
-     FROM items WHERE kind != 'episode'";
+     FROM items WHERE kind IN ('movie','video')";
 
 const SHOWS: &str = "SELECT s.id, s.year, NULL, \
        CAST(strftime('%s', s.added_at) AS INTEGER), s.library, s.metadata, \

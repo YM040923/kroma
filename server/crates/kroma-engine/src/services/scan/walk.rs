@@ -3,6 +3,8 @@
 //! into the shared logical-item / show maps.
 
 use std::collections::HashSet;
+use std::fs::File;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -16,9 +18,67 @@ use super::batches::Batches;
 use super::found::LibraryWalk;
 use super::ids::{detect_edition, short_hash};
 use super::index::index_parsed;
+use super::nfo;
 use super::now_iso8601;
 
 pub use kroma_media::video::{has_video_extension, VIDEO_EXTENSIONS};
+
+const PHOTO_EXTENSIONS: &[&str] = &[
+    "jpg", "jpeg", "png", "webp", "gif", "tif", "tiff", "bmp", "heic", "heif", "avif",
+];
+
+fn has_photo_extension(path: &Path) -> bool {
+    path.extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .is_some_and(|ext| PHOTO_EXTENSIONS.iter().any(|known| ext.eq_ignore_ascii_case(known)))
+}
+
+fn photo_mtime_date(mtime: i64) -> Option<String> {
+    let date = time::OffsetDateTime::from_unix_timestamp(mtime).ok()?.date();
+    Some(format!(
+        "{:04}-{:02}-{:02}T00:00:00Z",
+        date.year(),
+        u8::from(date.month()),
+        date.day()
+    ))
+}
+
+fn photo_taken_at(path: &Path) -> Option<String> {
+    let file = File::open(path).ok()?;
+    let exif = exif::Reader::new()
+        .read_from_container(&mut BufReader::new(file))
+        .ok()?;
+    for tag in [
+        exif::Tag::DateTimeOriginal,
+        exif::Tag::DateTimeDigitized,
+        exif::Tag::DateTime,
+    ] {
+        let Some(field) = exif.get_field(tag, exif::In::PRIMARY) else {
+            continue;
+        };
+        let exif::Value::Ascii(values) = &field.value else {
+            continue;
+        };
+        let Some(value) = values.first() else {
+            continue;
+        };
+        let value = std::str::from_utf8(value).ok()?.trim_matches(char::from(0)).trim();
+        if value.len() >= 19
+            && value.as_bytes()[4] == b':'
+            && value.as_bytes()[7] == b':'
+            && value.as_bytes()[10] == b' '
+        {
+            return Some(format!(
+                "{}-{}-{}T{}",
+                &value[..4],
+                &value[5..7],
+                &value[8..10],
+                &value[11..19]
+            ));
+        }
+    }
+    None
+}
 
 /// Scan one folder of `lib`'s library, accumulating items (by logical id) and
 /// shows into the shared maps. Flags/ids track what this library contributed so
@@ -72,15 +132,41 @@ pub(super) fn scan_root<S>(
                 continue;
             }
         };
+        if entry.file_type().is_dir() {
+            let path = entry.path();
+            if let Some((stream, container)) = disc_main_stream(&path) {
+                let indexed = index_disc(lib, &root, &abs_root, &path, &stream, container, &added_at);
+                batches.note(indexed);
+            }
+            continue;
+        }
         if !entry.file_type().is_file() {
             continue;
         }
         let path = entry.path();
+        // A disc's own streams live inside BDMV/VIDEO_TS; the folder above them
+        // is the one item, and its main stream is the file that was indexed.
+        if inside_disc(&path) {
+            continue;
+        }
+        let photo_library = lib.def.kind == "photos" || lib.def.kind == "photo";
+        let other_library = lib.def.kind == "other";
+        if photo_library && !has_photo_extension(&path) {
+            continue;
+        }
+        if other_library
+            && !has_video_extension(&path)
+            && !path.extension().is_some_and(|ext| {
+                ext.to_str().is_some_and(|ext| ext.eq_ignore_ascii_case("strm"))
+            })
+        {
+            continue;
+        }
         let is_strm = path
             .extension()
             .and_then(std::ffi::OsStr::to_str)
             .is_some_and(|ext| ext.eq_ignore_ascii_case("strm"));
-        if !is_strm && !has_video_extension(&path) {
+        if !photo_library && !other_library && !is_strm && !has_video_extension(&path) {
             continue;
         }
         // A `.strm` holds one line: the URL the entry streams from. The path the
@@ -124,6 +210,10 @@ pub(super) fn scan_root<S>(
             None
         };
 
+        let photo_time = photo_library
+            .then(|| photo_taken_at(&path).or_else(|| mtime.and_then(photo_mtime_date)))
+            .flatten();
+        let file_added_at = photo_time.as_deref().unwrap_or(&added_at);
         let file = MediaFile {
             // A streamed entry is identified by what it points at, so rewriting
             // the URL inside the `.strm` keeps the same catalog row (and its
@@ -159,11 +249,15 @@ pub(super) fn scan_root<S>(
             edition,
             // A sidecar is a verdict from a reader that could open the URL, so
             // the entry is described and the probe pass must not retry it.
-            probed: sidecar.is_some(),
-            probe_version: sidecar
-                .as_ref()
-                .filter(|s| s.unreadable.is_none())
-                .and_then(|s| s.probe_version),
+            probed: sidecar.is_some() || photo_library,
+            probe_version: if photo_library {
+                Some(crate::model::MEDIA_PROBE_VERSION)
+            } else {
+                sidecar
+                    .as_ref()
+                    .filter(|s| s.unreadable.is_none())
+                    .and_then(|s| s.probe_version)
+            },
             unreadable: sidecar.as_ref().and_then(|s| s.unreadable.clone()),
             edition_id: None,
             abs_path: Some(match streamed {
@@ -171,7 +265,23 @@ pub(super) fn scan_root<S>(
                 None => abs.to_string_lossy().to_string(),
             }),
         };
-        let parsed = naming::parse(root, &path);
+        let parsed = if photo_library || other_library {
+            let title = path
+                .file_stem()
+                .and_then(std::ffi::OsStr::to_str)
+                .unwrap_or("Untitled")
+                .to_string();
+            naming::Parsed::Movie { title, year: None }
+        } else {
+            nfo::apply(naming::parse(root, &path), &path)
+        };
+        let item_kind = if photo_library {
+            Some(crate::model::Kind::Photo)
+        } else if other_library {
+            Some(crate::model::Kind::Other)
+        } else {
+            None
+        };
         // A TV library's season folder vouches for the show; a file in it
         // without an episode marker is an unnumbered copy, not a film that
         // belongs in the movies rows. Jellyfin drops these too.
@@ -192,15 +302,18 @@ pub(super) fn scan_root<S>(
         batches.note(index_parsed(
             parsed,
             &lib.def.id,
-            &added_at,
+            file_added_at,
             file,
             mtime,
+            item_kind,
             &mut lib.found.items,
             &mut lib.found.shows,
             &mut lib.found.mtimes,
             &mut lib.item_ids,
             &mut lib.movie_seen,
             &mut lib.episode_seen,
+            &mut lib.photo_seen,
+            &mut lib.other_seen,
         ));
 
         debug!("indexed file under {}", lib_name);
@@ -215,6 +328,112 @@ pub(super) fn scan_root<S>(
         );
     }
     Ok(unreadable)
+}
+
+const DISC_STREAM_EXTENSIONS: &[&str] = &["m2ts", "mts"];
+
+/// The file a disc folder plays: the largest stream under `BDMV/STREAM`, or the
+/// largest VOB under `VIDEO_TS`. `None` for an ordinary folder.
+fn disc_main_stream(dir: &Path) -> Option<(PathBuf, &'static str)> {
+    let bdmv = dir.join("BDMV").join("STREAM");
+    if bdmv.is_dir() {
+        return largest_with_extension(&bdmv, DISC_STREAM_EXTENSIONS).map(|path| (path, "bluray"));
+    }
+    let video_ts = dir.join("VIDEO_TS");
+    if video_ts.is_dir() {
+        return largest_with_extension(&video_ts, &["vob"]).map(|path| (path, "dvd"));
+    }
+    None
+}
+
+fn largest_with_extension(dir: &Path, extensions: &[&str]) -> Option<PathBuf> {
+    let mut best: Option<(u64, PathBuf)> = None;
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        let path = entry.path();
+        let matches = path
+            .extension()
+            .and_then(std::ffi::OsStr::to_str)
+            .is_some_and(|ext| extensions.iter().any(|known| ext.eq_ignore_ascii_case(known)));
+        if !matches {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else { continue };
+        if !meta.is_file() {
+            continue;
+        }
+        if best.as_ref().is_none_or(|(size, _)| meta.len() > *size) {
+            best = Some((meta.len(), path));
+        }
+    }
+    best.map(|(_, path)| path)
+}
+
+fn inside_disc(path: &Path) -> bool {
+    path.ancestors().skip(1).any(|ancestor| {
+        ancestor
+            .file_name()
+            .and_then(std::ffi::OsStr::to_str)
+            .is_some_and(|name| {
+                name.eq_ignore_ascii_case("BDMV") || name.eq_ignore_ascii_case("VIDEO_TS")
+            })
+    })
+}
+
+/// One disc folder as one item, backed by its main stream. Named after the
+/// folder, so `Avatar (2009)/BDMV` is the film and not a pile of clips.
+fn index_disc(
+    lib: &mut LibraryWalk<'_>,
+    root: &Path,
+    abs_root: &Path,
+    dir: &Path,
+    stream: &Path,
+    container: &'static str,
+    added_at: &str,
+) -> super::index::Indexed {
+    let rel = stream.trim_prefix(root).to_string_lossy().replace('\\', "/");
+    let abs = abs_root.join(&rel);
+    let meta = std::fs::metadata(stream).ok();
+    let size = meta.as_ref().map(std::fs::Metadata::len);
+    let mtime = meta
+        .as_ref()
+        .and_then(|meta| meta.modified().ok())
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|since| since.as_secs() as i64);
+    let file = MediaFile {
+        id: short_hash(&abs.to_string_lossy()),
+        rel_path: Some(rel),
+        container: container.to_string(),
+        duration_ms: None,
+        video: None,
+        audio: None,
+        audio_tracks: Vec::new(),
+        subtitles: Vec::new(),
+        size,
+        edition: None,
+        // The probe pass reads the main stream itself.
+        probed: false,
+        probe_version: None,
+        unreadable: None,
+        edition_id: None,
+        abs_path: Some(abs.to_string_lossy().to_string()),
+    };
+    let parsed = nfo::apply(naming::parse(root, dir), dir);
+    index_parsed(
+        parsed,
+        &lib.def.id,
+        added_at,
+        file,
+        mtime,
+        None,
+        &mut lib.found.items,
+        &mut lib.found.shows,
+        &mut lib.found.mtimes,
+        &mut lib.item_ids,
+        &mut lib.movie_seen,
+        &mut lib.episode_seen,
+        &mut lib.photo_seen,
+        &mut lib.other_seen,
+    )
 }
 
 // jwalk `process_read_dir` body: prune Synology/hidden dirs and already-visited

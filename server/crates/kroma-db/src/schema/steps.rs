@@ -53,4 +53,6 @@ pub(super) const STEPS: &[Step] = &[
         run: Run::Code(super::probe_technical::apply),
         rebuilds: false,
     },
+    sql_step!("0027_content_limit"),
+    sql_step!("0028_media_share"),
 ];

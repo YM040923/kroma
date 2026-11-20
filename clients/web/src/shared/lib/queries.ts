@@ -92,6 +92,11 @@ export function createQueries(client: QueryClient) {
         },
       }),
 
+    photos: (library?: LibraryId, month?: string) =>
+      client.query.media.photos({ library, month }),
+
+    other: (library?: LibraryId) => client.query.media.other(library),
+
     shows: () => client.query.media.shows(),
 
     item: (id: ItemId) => client.query.media.item(id),
@@ -131,6 +136,17 @@ export function createQueries(client: QueryClient) {
         // A title page renders without its "more like this" rail, so a failure
         // resolves to an empty one rather than to the route's error boundary.
         queryFn: () => client.media.similarCards(id).catch(() => []),
+      }),
+
+    /** The other films of the same series. Absent for a title in no series, so
+     * a failure resolves to an empty rail like `similar`. */
+    collection: (id: ItemId) =>
+      queryOptions({
+        queryKey: ['collection', id] as const,
+        queryFn: () =>
+          client.media
+            .collection(id)
+            .catch(() => ({ name: null as string | null, items: [] })),
       }),
 
     personCredits: (person: string) => client.query.media.people(person),

@@ -174,6 +174,16 @@ async fn similar_and_for_you_are_ok_arrays() {
     assert_eq!(status, StatusCode::OK);
     assert!(similar.is_array());
 
+    let (status, collection) =
+        get(&t.app, &format!("/api/items/{id}/collection"), Some(&t.token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(collection["items"].is_array());
+
+    // Configuration only: the layout answers without an upstream call.
+    let (status, layout) = get(&t.app, "/api/douban/discover/movie", Some(&t.token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(layout["rows"].as_array().is_some_and(|rows| !rows.is_empty()));
+
     let (status, for_you) = get(&t.app, "/api/for-you", Some(&t.token)).await;
     assert_eq!(status, StatusCode::OK);
     assert!(for_you.is_array());

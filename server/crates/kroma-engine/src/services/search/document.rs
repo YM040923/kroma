@@ -47,6 +47,10 @@ impl<'a> Indexer<'a> {
         }
         if let Some(show_title) = &item.show_title {
             draft.doc.add_text(f.show_title, show_title);
+            draft.doc.add_text(f.cjk, show_title);
+            for spelling in super::pinyin::forms(show_title) {
+                draft.doc.add_text(f.title_pinyin, spelling);
+            }
         }
         if let Some(season) = item.season {
             draft.doc.add_u64(f.season, u64::from(season));
@@ -126,8 +130,12 @@ impl<'a> Indexer<'a> {
             return;
         }
         draft.doc.add_text(field, title);
+        draft.doc.add_text(self.fields.cjk, title);
         for spelling in joined(&words) {
             draft.doc.add_text(self.fields.joined, spelling);
+        }
+        for spelling in super::pinyin::forms(title) {
+            draft.doc.add_text(self.fields.title_pinyin, spelling);
         }
         draft.titles.push(words);
     }
@@ -166,9 +174,15 @@ impl<'a> Indexer<'a> {
         }
         for member in &meta.cast {
             draft.doc.add_text(f.cast, &member.name);
+            for spelling in super::pinyin::forms(&member.name) {
+                draft.doc.add_text(f.people_pinyin, spelling);
+            }
         }
         for member in &meta.crew {
             draft.doc.add_text(f.crew, &member.name);
+            for spelling in super::pinyin::forms(&member.name) {
+                draft.doc.add_text(f.people_pinyin, spelling);
+            }
         }
     }
 

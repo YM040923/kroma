@@ -27,6 +27,7 @@ const user = (over: Partial<User> = {}): User => ({
   username: 'ada',
   email: 'ada@test.dev',
   permissions: [],
+  allowUnrated: true,
   createdAt: '2026-01-01T00:00:00.000Z',
   hasPin: false,
   ...over,

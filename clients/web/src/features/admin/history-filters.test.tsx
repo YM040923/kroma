@@ -21,6 +21,7 @@ const USERS: AdminUser[] = [
     username: 'maxime',
     permissions: [],
     libraries: null,
+    allowUnrated: true,
     role: 'admin.roleOwner',
     createdAt: '2026-01-01',
     online: true,

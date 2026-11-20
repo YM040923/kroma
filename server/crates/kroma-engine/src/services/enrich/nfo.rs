@@ -12,6 +12,19 @@ use crate::model::Metadata;
 use super::engine::Engine;
 use super::jobs::Job;
 
+pub(super) fn read_existing(eng: &Engine, job: &Job) -> Option<crate::services::scan::nfo::Nfo> {
+    let files = if job.is_show {
+        db::local_paths::show_file_paths(&eng.pool, &job.id).ok()?
+    } else {
+        db::local_paths::item_file_paths(&eng.pool, &job.id).ok()?
+    };
+    local_paths(eng, &job.library, files)
+        .into_iter()
+        .find_map(|path| crate::services::scan::nfo::read_for_media(&path, job.is_show))
+}
+
+const GENERATED_MARKER: &str = "<!-- KROMA:generated-nfo -->";
+
 pub(super) fn write(eng: &Engine, job: &Job) {
     if job.is_show {
         write_show(eng, &job.id, &job.library);
@@ -91,7 +104,12 @@ fn local_paths(eng: &Engine, library: &str, files: Vec<db::local_paths::LocalFil
 }
 
 fn write_file(target: &Path, xml: &str) {
+    // Preserve user- and third-party-authored NFO files. Only replace a file
+    // this writer stamped itself.
     if let Ok(existing) = std::fs::read_to_string(target) {
+        if !existing.contains(GENERATED_MARKER) {
+            return;
+        }
         if existing == xml {
             return;
         }
@@ -115,14 +133,20 @@ fn esc(value: &str) -> String {
 }
 
 fn movie_xml(meta: &Metadata, year: Option<u32>) -> String {
-    let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<movie>\n");
+    let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n");
+    out.push_str(GENERATED_MARKER);
+    out.push('\n');
+    out.push_str("<movie>\n");
     push_common(&mut out, meta, year);
     out.push_str("</movie>\n");
     out
 }
 
 fn show_xml(meta: &Metadata, year: Option<u32>) -> String {
-    let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<tvshow>\n");
+    let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n");
+    out.push_str(GENERATED_MARKER);
+    out.push('\n');
+    out.push_str("<tvshow>\n");
     push_common(&mut out, meta, year);
     out.push_str("</tvshow>\n");
     out
@@ -154,16 +178,87 @@ fn push_common(out: &mut String, meta: &Metadata, year: Option<u32>) {
     for genre in &meta.genres {
         out.push_str(&format!("  <genre>{}</genre>\n", esc(genre)));
     }
-    out.push_str(&format!(
-        "  <uniqueid type=\"tmdb\" default=\"true\">{}</uniqueid>\n",
-        meta.tmdb_id
-    ));
+    // An NFO-only title has no provider id; naming it 0 would point the other
+    // players in the house at a title that does not exist.
+    if meta.tmdb_id != 0 {
+        out.push_str(&format!(
+            "  <uniqueid type=\"tmdb\" default=\"true\">{}</uniqueid>\n",
+            meta.tmdb_id
+        ));
+    }
     if let Some(imdb) = meta.imdb_id.as_deref() {
         out.push_str(&format!("  <uniqueid type=\"imdb\">{}</uniqueid>\n", esc(imdb)));
     }
-    if let Some(tmdb_url) = Some(meta.tmdb_url.as_str()) {
-        if !tmdb_url.is_empty() {
-            out.push_str(&format!("  <tmdburl>{}</tmdburl>\n", esc(tmdb_url)));
-        }
+    if let Some(set) = meta.collection_name.as_deref() {
+        out.push_str("  <set>\n");
+        out.push_str(&format!("    <name>{}</name>\n", esc(set)));
+        out.push_str("  </set>\n");
+    }
+    if !meta.tmdb_url.is_empty() {
+        out.push_str(&format!("  <tmdburl>{}</tmdburl>\n", esc(&meta.tmdb_url)));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_generated_nfo_names_the_set_and_omits_a_zero_provider_id() {
+        let mut meta = Metadata {
+            provider: "tmdb",
+            tmdb_id: 0,
+            imdb_id: None,
+            title: Some("Local Film".into()),
+            tagline: None,
+            overview: None,
+            release_date: None,
+            genres: Vec::new(),
+            studios: Vec::new(),
+            backdrops: Vec::new(),
+            tmdb_genre_ids: Vec::new(),
+            rating: None,
+            certification: None,
+            collection_id: None,
+            collection_name: Some("Local Set".into()),
+            poster_url: None,
+            backdrop_url: None,
+            logo_url: None,
+            theme_url: None,
+            cast: Vec::new(),
+            crew: Vec::new(),
+            keywords: Vec::new(),
+            tvdb_id: None,
+            tmdb_url: String::new(),
+        };
+
+        let xml = movie_xml(&meta, Some(2001));
+        assert!(!xml.contains("type=\"tmdb\""), "{xml}");
+        assert!(xml.contains("<set>"), "{xml}");
+        assert!(xml.contains("<name>Local Set</name>"), "{xml}");
+
+        meta.tmdb_id = 7;
+        let xml = movie_xml(&meta, None);
+        assert!(xml.contains("<uniqueid type=\"tmdb\" default=\"true\">7</uniqueid>"), "{xml}");
+    }
+
+    #[test]
+    fn user_nfo_is_preserved_and_generated_nfo_can_be_refreshed() {
+        let dir = kroma_testing::temp_dir("nfo-preserve");
+        let user = dir.path().join("user.nfo");
+        std::fs::write(&user, "<movie><title>Curated by me</title></movie>").unwrap();
+        write_file(&user, "generated version");
+        assert_eq!(
+            std::fs::read_to_string(&user).unwrap(),
+            "<movie><title>Curated by me</title></movie>"
+        );
+
+        let generated = dir.path().join("generated.nfo");
+        std::fs::write(&generated, format!("{GENERATED_MARKER}\nold")).unwrap();
+        write_file(&generated, &format!("{GENERATED_MARKER}\nnew"));
+        assert_eq!(
+            std::fs::read_to_string(generated).unwrap(),
+            format!("{GENERATED_MARKER}\nnew")
+        );
     }
 }

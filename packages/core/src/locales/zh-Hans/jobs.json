@@ -9,6 +9,8 @@
   "jobs.acquisition.ondemand.name": "手动发起的搜索",
   "jobs.acquisition.refresh.desc": "从 TMDB 重新读取已请求和监控中的片目，让新公布的剧集进入其清单。",
   "jobs.acquisition.refresh.name": "片目刷新",
+  "jobs.artwork.refresh.desc": "为媒体库设置了定期刷新封面的剧集重新读取提供商的海报和背景图；手动选过的图会锁定，不会被覆盖。",
+  "jobs.artwork.refresh.name": "封面刷新",
   "jobs.acquisition.rss.desc": "读取索引器的最新发布，抓取监控片目缺失或可升级的内容。",
   "jobs.acquisition.rss.name": "RSS 同步",
   "jobs.acquisition.search.desc": "先搜索监控片目缺失的内容，再搜索其现有内容的更好版本，并开始下载。",

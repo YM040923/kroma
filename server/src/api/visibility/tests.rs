@@ -12,6 +12,8 @@ fn viewer(libraries: LibraryScope) -> User {
         subtitle_language: None,
         permissions: vec![Permission::Playback],
         libraries,
+        max_age: None,
+        allow_unrated: true,
         created_at: String::new(),
         has_pin: false,
     }

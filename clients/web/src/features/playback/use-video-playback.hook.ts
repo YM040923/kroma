@@ -2,6 +2,7 @@ import type { PlaybackMode } from '@kromatv/client/playback';
 import {
   audioTracksOf,
   type EngineDecision,
+  canDecodeAudioCodec,
   preferredAudioIndex,
   rescueRoute,
   restartBudget,
@@ -72,6 +73,23 @@ export function useVideoPlayback(latest: MovieView): VideoPlayback {
   }
 
   const { env, decision, enginePref, setEnginePrefState, setForceHls } = useEngineDecision(item);
+
+  // The chosen track decides whether a bare <video> can produce sound; a direct
+  // play of AC3/DTS/TrueHD is the silent case this routes around. A `.strm`
+  // entry has no local file, so its only engine stays direct — the player warns
+  // there instead of forcing a stream this server cannot build.
+  const selectedAudio = audioTracks.find((track) => track.index === audioIndex);
+  const silentOnDirect =
+    selectedAudio !== undefined && !canDecodeAudioCodec(selectedAudio.codec);
+  useEffect(() => {
+    if (
+      decision.kind === 'direct' &&
+      (item.container ?? '').toLowerCase() !== 'strm' &&
+      silentOnDirect
+    ) {
+      setForceHls(true);
+    }
+  }, [decision.kind, item.container, silentOnDirect, setForceHls]);
   const hlsRef = useRef<import('hls.js').default | null>(null);
   const shakaRef = useRef<import('#web/features/playback/video-engine').ShakaPlayerLike | null>(
     null,
@@ -283,7 +301,10 @@ export function useVideoPlayback(latest: MovieView): VideoPlayback {
     setAudio,
     anchor,
     baseSec,
-    aac: decision.kind === 'direct' ? false : Boolean(decision.aacMaster),
+    aac:
+      decision.kind === 'direct'
+        ? false
+        : Boolean(decision.aacMaster) || silentOnDirect,
     hlsRef,
     shakaRef,
     ...transport,

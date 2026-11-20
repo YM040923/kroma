@@ -1,9 +1,9 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use kroma_media::tmp_file::unique_tmp;
 use kroma_primitives::short_hash;
 
-use super::encode::encode_webp;
+use super::encode::{encode_webp, encode_webp_capped};
 use super::scratch::finalize;
 use super::{images_dir, PUBLIC_PREFIX};
 
@@ -40,6 +40,28 @@ pub fn cache_remote(data_dir: &Path, remote_url: &str) -> Option<String> {
 pub fn local_art_missing(data_dir: &Path, url: &str) -> bool {
     url.strip_prefix(PUBLIC_PREFIX)
         .is_some_and(|name| !images_dir(data_dir).join(name).exists())
+}
+
+pub fn cache_local_capped(data_dir: &Path, source: &Path, max_width: u32) -> Option<PathBuf> {
+    if max_width == 0 {
+        return Some(source.to_path_buf());
+    }
+    let metadata = std::fs::metadata(source).ok()?;
+    let modified = metadata.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+    let key = format!("{}:{}:{}", source.display(), metadata.len(), modified);
+    let dir = images_dir(data_dir);
+    std::fs::create_dir_all(&dir).ok()?;
+    let name = format!("{}-w{max_width}.webp", short_hash(&key));
+    let out = dir.join(name);
+    if !out.exists() {
+        let tmp = unique_tmp(&out);
+        if !encode_webp_capped(source, &tmp, max_width) {
+            let _ = std::fs::remove_file(&tmp);
+            return None;
+        }
+        finalize(&tmp, &out)?;
+    }
+    Some(out)
 }
 
 pub(super) fn cache(data_dir: &Path, remote_url: &str) -> Option<String> {

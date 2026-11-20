@@ -105,6 +105,8 @@ mod tests {
             avatar_url: None,
             permissions: permissions.to_vec(),
             libraries: crate::model::LibraryScope::All,
+            max_age: None,
+            allow_unrated: true,
             created_at: "2026-01-01".into(),
             language: None,
             has_pin: false,

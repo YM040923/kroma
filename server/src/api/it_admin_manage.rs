@@ -243,6 +243,51 @@ async fn admin_user_permission_edit_and_last_owner_guard() {
 }
 
 #[tokio::test]
+async fn admin_sets_a_members_content_limit_and_can_lift_it() {
+    let t = test_app();
+    let (member_id, _) = seed_session(&t.state, "kid@test.dev", "kid", &[Permission::Playback]);
+
+    let (status, _) = send(
+        &t.app,
+        "PATCH",
+        &format!("/api/admin/users/{member_id}"),
+        Some(&t.token),
+        Some(json!({ "maxAge": 12, "allowUnrated": false })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, body) = get(&t.app, "/api/admin/users", Some(&t.token)).await;
+    let member = body["users"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["id"] == json!(member_id))
+        .unwrap();
+    assert_eq!(member["maxAge"], json!(12));
+    assert_eq!(member["allowUnrated"], json!(false));
+
+    // `null` lifts the age limit; the unrated choice stays until it is sent.
+    let (status, _) = send(
+        &t.app,
+        "PATCH",
+        &format!("/api/admin/users/{member_id}"),
+        Some(&t.token),
+        Some(json!({ "maxAge": null })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, body) = get(&t.app, "/api/admin/users", Some(&t.token)).await;
+    let member = body["users"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["id"] == json!(member_id))
+        .unwrap();
+    assert!(member["maxAge"].is_null());
+    assert_eq!(member["allowUnrated"], json!(false));
+}
+
+#[tokio::test]
 async fn admin_user_delete_removes_a_member_but_404s_the_unknown() {
     let t = test_app();
     let (member_id, _) = seed_session(&t.state, "gone@test.dev", "gone", &[Permission::Playback]);

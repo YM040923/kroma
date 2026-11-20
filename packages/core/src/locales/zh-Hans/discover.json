@@ -43,6 +43,8 @@
   "discover.source": "来源",
   "discover.source.douban": "豆瓣",
   "discover.source.doubanUnavailable": "豆瓣：数据源暂不可用。",
+  "discover.doubanHint": "输入片名搜索豆瓣。",
+  "discover.doubanEmpty": "豆瓣没有找到相关结果。",
   "discover.source.library": "本库",
   "discover.source.tmdb": "TMDB",
   "discover.state.in": "已入库",

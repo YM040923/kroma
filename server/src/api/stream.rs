@@ -51,6 +51,7 @@ fn byte_sink(
 pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/items/{id}/stream", get(stream_item))
+        .route("/items/{id}/photo", get(photo))
         .route(
             "/items/{id}/hls/{mode}/{anchor}/{audio}/index.m3u8",
             get(hls_master),
@@ -79,6 +80,88 @@ pub struct StreamQuery {
     pub file: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub struct PhotoQuery {
+    pub width: Option<u32>,
+}
+
+/// `GET /api/items/:id/photo?t=<media-ticket>&width=480` → a visible local photo.
+/// Photos library. It streams the file without buffering the original in memory.
+pub async fn photo(
+    State(state): State<SharedState>,
+    MediaViewer(viewer): MediaViewer,
+    Path(id): Path<String>,
+    Query(query): Query<PhotoQuery>,
+) -> Response {
+    let Some(item) = load_item(&state, &viewer, id).await else {
+        return visibility::out_of_scope();
+    };
+    if item.kind != crate::model::Kind::Photo {
+        return json_error(StatusCode::NOT_FOUND, "photo not found");
+    }
+    let Some(source_path) = item
+        .abs_path
+        .as_deref()
+        .filter(|path| !kroma_media::remote::is_remote(path))
+    else {
+        return json_error(StatusCode::NOT_FOUND, "photo file not found");
+    };
+    let width = query.width.unwrap_or(0).clamp(0, 2400);
+    let original = source_path.to_string();
+    let data_dir = state.config.data_dir.clone();
+    let path = match tokio::task::spawn_blocking(move || {
+        if width == 0 {
+            Ok(std::path::PathBuf::from(original))
+        } else {
+            crate::infra::image::cache_local_capped(
+                &data_dir,
+                std::path::Path::new(&original),
+                width,
+            )
+            .ok_or_else(|| std::io::Error::other("thumbnail conversion failed"))
+        }
+    })
+    .await
+    {
+        Ok(Ok(path)) => path,
+        _ => return json_error(StatusCode::NOT_FOUND, "photo file not found"),
+    };
+    let extension = path
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let content_type = if width > 0 {
+        "image/webp"
+    } else {
+        match extension.as_str() {
+            "jpg" | "jpeg" => "image/jpeg",
+            "png" => "image/png",
+            "webp" => "image/webp",
+            "gif" => "image/gif",
+            "avif" => "image/avif",
+            "heic" | "heif" => "image/heic",
+            "tif" | "tiff" => "image/tiff",
+            "bmp" => "image/bmp",
+            _ => "application/octet-stream",
+        }
+    };
+    let Ok(metadata) = tokio::fs::metadata(&path).await else {
+        return json_error(StatusCode::NOT_FOUND, "photo file not found");
+    };
+    let Ok(file) = tokio::fs::File::open(&path).await else {
+        return json_error(StatusCode::NOT_FOUND, "photo file not found");
+    };
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CONTENT_LENGTH, metadata.len())
+        .header(header::CACHE_CONTROL, "private, max-age=300")
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
+        .body(Body::from_stream(tokio_util::io::ReaderStream::new(file)))
+        .unwrap_or_else(|_| json_error(StatusCode::INTERNAL_SERVER_ERROR, "photo response failed"))
+}
+
 /// `GET /api/items/:id/stream` (optional `?file=<fileId>`) → range-streamed
 /// original file. Without `?file`, the item's default/best file is served.
 ///
@@ -99,12 +182,25 @@ pub async fn stream_item(
     let item = load_item(&state, &viewer, id)
         .await
         .ok_or_else(visibility::out_of_scope)?;
-    let sink = byte_sink(&state, &headers, &addr);
+    Ok(serve_selected_file(&state, &item, q.file.as_deref(), &headers, addr).await)
+}
+
+/// Serve one of `item`'s files to a caller already proven to reach it. Shared by
+/// the session route and the share route, so a public share streams the same
+/// bytes with the same range handling.
+pub(super) async fn serve_selected_file(
+    state: &SharedState,
+    item: &MediaItem,
+    file_id: Option<&str>,
+    headers: &HeaderMap,
+    addr: SocketAddr,
+) -> Response {
+    let sink = byte_sink(state, headers, &addr);
     let range = headers
         .get(header::RANGE)
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
-    Ok(match pick_file_path(&item, q.file.as_deref()) {
+    match pick_file_path(item, file_id) {
         Some(path) if kroma_media::remote::is_remote(&path) => {
             tracing::info!(
                 item_id = %item.id,
@@ -116,7 +212,7 @@ pub async fn stream_item(
             let user_agent = headers
                 .get(header::USER_AGENT)
                 .and_then(|value| value.to_str().ok());
-            kroma_media::remote::stream_remote(&path, &headers, user_agent, true, sink).await
+            kroma_media::remote::stream_remote(&path, headers, user_agent, true, sink).await
         }
         Some(path) => {
             tracing::info!(
@@ -126,10 +222,10 @@ pub async fn stream_item(
                 range = ?range,
                 "media stream"
             );
-            stream_file(std::path::Path::new(&path), &headers, sink).await
+            stream_file(std::path::Path::new(&path), headers, sink).await
         }
         None => json_error(StatusCode::NOT_FOUND, "demo item has no media"),
-    })
+    }
 }
 
 fn pick_file_path(item: &MediaItem, file_id: Option<&str>) -> Option<String> {

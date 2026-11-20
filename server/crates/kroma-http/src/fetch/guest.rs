@@ -156,6 +156,10 @@ impl Fetch {
         self.hand_over("POST", url, Some(content_type), body.to_vec())
     }
 
+    pub fn put_bytes(&self, url: &str, content_type: &str, body: &[u8]) -> Result<Response> {
+        self.hand_over("PUT", url, Some(content_type), body.to_vec())
+    }
+
     pub fn post_form(&self, url: &str, fields: &[(&str, &str)]) -> Result<Response> {
         let body = form_urlencoded::Serializer::new(String::new())
             .extend_pairs(fields)

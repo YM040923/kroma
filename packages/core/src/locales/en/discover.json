@@ -43,6 +43,8 @@
   "discover.source": "Source",
   "discover.source.douban": "Douban",
   "discover.source.doubanUnavailable": "Douban: source coming soon.",
+  "discover.doubanHint": "Type a title to search Douban.",
+  "discover.doubanEmpty": "Douban found nothing for this query.",
   "discover.source.library": "My library",
   "discover.source.tmdb": "TMDB",
   "discover.state.in": "In the library",

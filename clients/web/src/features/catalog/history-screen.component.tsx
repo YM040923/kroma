@@ -178,7 +178,11 @@ function ProgressRow({
               disabled={busy}
               onPress={onClearShow}
             />
-          ) : null}
+          ) : (
+            // Keep the slot so every row's resume button starts on the same
+            // edge; a film has no whole-show action to put here.
+            <Box w={36} />
+          )}
           <IconButton
             control="sm"
             variant="ghost"

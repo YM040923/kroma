@@ -33,6 +33,8 @@ pub enum Kind {
     Movie,
     Episode,
     Video,
+    Photo,
+    Other,
 }
 
 /// One physical file backing a logical [`MediaItem`]. A single item can have

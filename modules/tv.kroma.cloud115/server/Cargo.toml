@@ -22,6 +22,18 @@ anyhow = "1"
 base64 = "0.22"
 num-bigint = "0.4"
 num-traits = "0.2"
+# The scan code is drawn in the admin page as inline SVG; no image service.
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+# 115's upload handshake: fixed-key AES-CBC, LZ4 chunks, SHA1/MD5 signatures.
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+md-5 = "0.10"
+sha1 = "0.10"
+hex = "0.4"
+crc32fast = "1"
+lz4_flex = "0.11"
+hmac = "0.12"
+time = { version = "0.3", features = ["formatting", "macros"] }
 
 [dev-dependencies]
 kroma-module-sdk = { path = "../../../server/crates/kroma-module-sdk", features = ["testing"] }

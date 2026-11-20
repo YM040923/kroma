@@ -48,9 +48,12 @@ export function useWebSubtitles(item: MovieView, t: Translate): WebSubtitles {
   const [prefApplied, setPrefApplied] = useState(false);
   if (!prefApplied && user) {
     setPrefApplied(true);
+    // No stored subtitle choice falls back to the account's own language, so a
+    // Chinese household sees the Chinese track without hunting for it; `off`
+    // and `none` are explicit choices and stay as they are.
     const idx = preferredSubIndex(
       item.subs.map((s) => ({ ...s, generated: s.downloaded })),
-      user.subtitleLanguage,
+      user.subtitleLanguage ?? user.language,
     );
     if (idx != null) {
       setActiveIndex(idx);

@@ -5,11 +5,14 @@ use tantivy::schema::{
     Field, IndexRecordOption, Schema, SchemaBuilder, TextFieldIndexing, TextOptions, FAST, INDEXED,
 };
 use tantivy::tokenizer::{
-    AsciiFoldingFilter, LowerCaser, RemoveLongFilter, SimpleTokenizer, TextAnalyzer,
+    AsciiFoldingFilter, LowerCaser, NgramTokenizer, RemoveLongFilter, SimpleTokenizer, TextAnalyzer,
 };
 use tantivy::Index;
 
 pub(super) const ANALYZER: &str = "kroma";
+/// Title text cut into character bigrams: a Chinese tokenizer runs a title
+/// together as one token, and this is what lets "地球" find "流浪地球".
+pub(super) const CJK_ANALYZER: &str = "kroma_cjk";
 pub(super) const ORD: &str = "ord";
 
 /// Field ids are stable across every index built from the same [`Schema`].
@@ -21,6 +24,9 @@ pub(super) struct Fields {
     pub title: Field,
     pub alt_title: Field,
     pub joined: Field,
+    pub title_pinyin: Field,
+    pub people_pinyin: Field,
+    pub cjk: Field,
     pub show_title: Field,
     pub cast: Field,
     pub crew: Field,
@@ -29,8 +35,12 @@ pub(super) struct Fields {
 }
 
 fn text(b: &mut SchemaBuilder, name: &str) -> Field {
+    text_with(b, name, ANALYZER)
+}
+
+fn text_with(b: &mut SchemaBuilder, name: &str, tokenizer: &str) -> Field {
     let indexing = TextFieldIndexing::default()
-        .set_tokenizer(ANALYZER)
+        .set_tokenizer(tokenizer)
         .set_index_option(IndexRecordOption::WithFreqsAndPositions);
     b.add_text_field(name, TextOptions::default().set_indexing_options(indexing))
 }
@@ -43,6 +53,9 @@ pub(super) fn build() -> (Schema, Fields) {
     let title = text(&mut b, "title");
     let alt_title = text(&mut b, "alt_title");
     let joined = text(&mut b, "joined");
+    let title_pinyin = text(&mut b, "title_pinyin");
+    let people_pinyin = text(&mut b, "people_pinyin");
+    let cjk = text_with(&mut b, "cjk", CJK_ANALYZER);
     let show_title = text(&mut b, "show_title");
     let cast = text(&mut b, "cast");
     let crew = text(&mut b, "crew");
@@ -56,6 +69,9 @@ pub(super) fn build() -> (Schema, Fields) {
         title,
         alt_title,
         joined,
+        title_pinyin,
+        people_pinyin,
+        cjk,
         show_title,
         cast,
         crew,
@@ -73,9 +89,16 @@ pub(super) fn analyzer() -> TextAnalyzer {
         .build()
 }
 
-/// In-RAM, with the `kroma` analyzer registered.
+fn cjk_analyzer() -> TextAnalyzer {
+    // Two-character grams; the bounds are constants, so construction cannot fail.
+    let ngrams = NgramTokenizer::new(2, 2, false).expect("2-2 bigrams are a valid ngram range");
+    TextAnalyzer::builder(ngrams).filter(LowerCaser).build()
+}
+
+/// In-RAM, with both analyzers registered.
 pub(super) fn new_index(schema: Schema) -> Index {
     let index = Index::create_in_ram(schema);
     index.tokenizers().register(ANALYZER, analyzer());
+    index.tokenizers().register(CJK_ANALYZER, cjk_analyzer());
     index
 }

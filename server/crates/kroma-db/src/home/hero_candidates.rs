@@ -37,11 +37,11 @@ const MOVIE_FILES: &str = "SELECT f.item_id AS owner, \
          CASE WHEN f.unreadable IS NOT NULL THEN 0 WHEN f.probed = 0 THEN 1 ELSE 2 END DESC, \
          CASE WHEN f.v_codec IS NULL THEN 0 ELSE COALESCE(f.v_width, 0) END DESC, \
          (f.v_codec IS NOT NULL AND COALESCE(f.v_hdr, 0) != 0) DESC) AS rank \
-     FROM files f JOIN items i ON i.id = f.item_id WHERE i.kind != 'episode'";
+     FROM files f JOIN items i ON i.id = f.item_id WHERE i.kind IN ('movie','video')";
 
 const MOVIES: &str = "SELECT id, added_at, \
        CASE WHEN json_valid(metadata) THEN metadata END AS meta \
-     FROM items WHERE kind != 'episode'";
+     FROM items WHERE kind IN ('movie','video')";
 
 // A show wears its widest probed episode, the same pick its listing makes.
 const SHOW_FILES: &str = "SELECT i.show_id AS owner, COALESCE(f.v_width, 0) AS width, \

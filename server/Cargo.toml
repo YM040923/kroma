@@ -209,6 +209,8 @@ rusqlite = { workspace = true }
 # download), walkdir + sysinfo (storage/stats endpoints).
 time = { workspace = true }
 hex = { workspace = true }
+# The share access code is stored as a salted SHA-256 digest.
+sha2 = { workspace = true }
 # The weak ETag the catalogue listings answer with (api/etag.rs).
 twox-hash = { workspace = true }
 # A registry publishes checksums in Subresource-Integrity form (sha256-<base64>).

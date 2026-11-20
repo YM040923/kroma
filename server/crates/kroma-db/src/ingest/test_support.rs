@@ -106,6 +106,8 @@ pub(super) fn meta(tmdb: u64, title: &str) -> Metadata {
         tmdb_genre_ids: vec![878],
         rating: Some(8.0),
         certification: Some("PG-13".into()),
+        collection_id: None,
+        collection_name: None,
         poster_url: Some("/api/images/p.webp".into()),
         backdrop_url: None,
         logo_url: None,

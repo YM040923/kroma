@@ -60,7 +60,7 @@ pub fn trending_ids(pool: &Pool, n: usize) -> Result<Vec<String>> {
 pub fn recently_added_ids(pool: &Pool, n: usize) -> Result<Vec<String>> {
     let conn = pool.get()?;
     let mut stmt = conn
-        .prepare("SELECT id FROM items WHERE kind != 'episode' ORDER BY added_at DESC LIMIT ?1")?;
+        .prepare("SELECT id FROM items WHERE kind IN ('movie','video') ORDER BY added_at DESC LIMIT ?1")?;
     let rows = stmt.query_map(params![n as i64], |r| r.get::<_, String>(0))?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }

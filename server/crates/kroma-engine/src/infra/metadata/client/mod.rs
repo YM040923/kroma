@@ -66,18 +66,34 @@ pub fn images(
         &params,
     )?;
     let map = |raw: Vec<RawArt>, size: &str| -> Vec<ArtImage> {
-        raw.into_iter()
-            .filter_map(|image| {
-                let path = image.file_path?;
-                Some(ArtImage {
-                    url: format!("{IMG}/{size}{path}"),
-                    width: image.width,
-                    height: image.height,
-                    language: image.iso_639_1,
-                    votes: image.vote_average,
-                })
-            })
-            .collect()
+        let mut unique: Vec<ArtImage> = Vec::new();
+        for image in raw {
+            let Some(path) = image.file_path else { continue };
+            let candidate = ArtImage {
+                url: format!("{IMG}/{size}{path}"),
+                width: image.width,
+                height: image.height,
+                language: image.iso_639_1,
+                votes: image.vote_average,
+            };
+            match unique.iter_mut().find(|seen| seen.url == candidate.url) {
+                Some(seen)
+                    if candidate
+                        .votes
+                        .total_cmp(&seen.votes)
+                        .then((candidate.width * candidate.height).cmp(&(seen.width * seen.height)))
+                        .is_gt() => *seen = candidate,
+                Some(_) => {}
+                None => unique.push(candidate),
+            }
+        }
+        unique.sort_by(|a, b| {
+            b.votes
+                .total_cmp(&a.votes)
+                .then((b.width * b.height).cmp(&(a.width * a.height)))
+                .then(a.url.cmp(&b.url))
+        });
+        unique
     };
     Ok((map(block.posters, "w500"), map(block.backdrops, "w1280")))
 }

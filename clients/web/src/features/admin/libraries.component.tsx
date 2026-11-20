@@ -39,6 +39,8 @@ const KIND_LABEL = {
   movies: 'admin.typeMovies',
   shows: 'admin.typeShows',
   mixed: 'admin.typeMixed',
+  photos: 'admin.typePhotos',
+  other: 'admin.typeOther',
 } as const;
 
 export function LibrariesScreen() {

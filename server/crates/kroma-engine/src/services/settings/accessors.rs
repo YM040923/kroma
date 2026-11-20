@@ -171,6 +171,27 @@ pub struct ScrapeOptions {
     /// How many gallery backdrops to keep per title. `None` keeps the
     /// provider's full set (capped by the metadata client).
     pub backdrop_count: Option<u8>,
+    /// TMDB image size to store for poster and backdrop URLs.
+    pub artwork_size: Option<String>,
+    /// Refresh show artwork after this many days; `None` disables the job.
+    pub artwork_refresh_days: Option<u16>,
+}
+
+impl ScrapeOptions {
+    fn sane(mut self) -> Self {
+        self.backdrop_count = self.backdrop_count.map(|count| count.min(8));
+        self.artwork_size = self
+            .artwork_size
+            .as_deref()
+            .map(str::trim)
+            .filter(|size| matches!(*size, "w500" | "w780" | "w1280" | "original"))
+            .map(str::to_string);
+        self.artwork_refresh_days = self
+            .artwork_refresh_days
+            .filter(|days| *days > 0)
+            .map(|days| days.min(365));
+        self
+    }
 }
 
 pub fn library_scrape(settings: &Settings, library_id: &str) -> ScrapeOptions {
@@ -178,6 +199,7 @@ pub fn library_scrape(settings: &Settings, library_id: &str) -> ScrapeOptions {
         .get("libraryScrape")
         .get(library_id)
         .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .map(ScrapeOptions::sane)
         .unwrap_or_default()
 }
 
@@ -190,6 +212,7 @@ pub fn all_library_scrape(settings: &Settings) -> BTreeMap<String, ScrapeOptions
                 .filter_map(|(id, value)| {
                     serde_json::from_value::<ScrapeOptions>(value.clone())
                         .ok()
+                        .map(ScrapeOptions::sane)
                         .map(|options| (id.clone(), options))
                 })
                 .collect()
@@ -210,7 +233,7 @@ pub fn set_library_scrape(
         .unwrap_or_default();
     map.insert(
         library_id.to_string(),
-        serde_json::to_value(options).unwrap_or_default(),
+        serde_json::to_value(options.clone().sane()).unwrap_or_default(),
     );
     let mut patch = BTreeMap::new();
     patch.insert("libraryScrape".to_string(), Value::Object(map));
@@ -671,6 +694,8 @@ mod tests {
             poster_language: Some("textless".to_string()),
             backdrop_language: None,
             backdrop_count: Some(4),
+            artwork_size: Some("w780".to_string()),
+            artwork_refresh_days: Some(30),
         };
         set_library_scrape(&s, &pool, "lib1", &wanted);
 

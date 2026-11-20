@@ -36,6 +36,7 @@ struct Page {
     poster: Option<String>,
     backdrop: Option<String>,
     logo: Option<String>,
+    locked: Vec<String>,
 }
 
 async fn page(state: &SharedState, user: &crate::model::User, id: &str) -> Result<Page, Response> {
@@ -69,6 +70,7 @@ async fn page(state: &SharedState, user: &crate::model::User, id: &str) -> Resul
             poster: overrides.get("poster").cloned().or_else(|| meta.poster_url.clone()),
             backdrop: overrides.get("backdrop").cloned().or_else(|| meta.backdrop_url.clone()),
             logo: overrides.get("logo").cloned().or_else(|| meta.logo_url.clone()),
+            locked: overrides.keys().cloned().collect(),
         });
     }
     if let Some(page) = library_page(state, id).await? {
@@ -107,6 +109,7 @@ async fn library_page(state: &SharedState, id: &str) -> Result<Option<Page>, Res
         poster: cover.or(poster),
         backdrop: overrides.get("backdrop").cloned().or(backdrop),
         logo: None,
+        locked: overrides.keys().cloned().collect(),
     }))
 }
 
@@ -159,6 +162,7 @@ async fn show_page(state: &SharedState, user: &crate::model::User, id: &str) -> 
         poster: overrides.get("poster").cloned().or_else(|| meta.poster_url.clone()),
         backdrop: overrides.get("backdrop").cloned().or_else(|| meta.backdrop_url.clone()),
         logo: overrides.get("logo").cloned().or_else(|| meta.logo_url.clone()),
+        locked: overrides.keys().cloned().collect(),
     })
 }
 
@@ -194,6 +198,11 @@ async fn get_artwork(
             "poster": page.poster,
             "backdrop": page.backdrop,
             "logo": page.logo,
+        },
+        "locked": {
+            "poster": page.locked.iter().any(|art| art == db::art_overrides::POSTER),
+            "backdrop": page.locked.iter().any(|art| art == db::art_overrides::BACKDROP),
+            "logo": page.locked.iter().any(|art| art == db::art_overrides::LOGO),
         },
         "posters": posters,
         "backdrops": backdrops,
@@ -305,6 +314,11 @@ async fn library_artwork(state: &SharedState, page: &Page) -> Response {
             "poster": page.poster,
             "backdrop": page.backdrop,
             "logo": page.logo,
+        },
+        "locked": {
+            "poster": page.locked.iter().any(|art| art == db::art_overrides::POSTER),
+            "backdrop": page.locked.iter().any(|art| art == db::art_overrides::BACKDROP),
+            "logo": page.locked.iter().any(|art| art == db::art_overrides::LOGO),
         },
         "name": name,
         "library": true,

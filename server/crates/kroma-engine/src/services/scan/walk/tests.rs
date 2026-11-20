@@ -60,6 +60,8 @@ struct ScanOutcome {
     item_ids: HashSet<String>,
     movie_seen: bool,
     episode_seen: bool,
+    photo_seen: bool,
+    other_seen: bool,
     unreadable: usize,
 }
 
@@ -86,6 +88,8 @@ fn scan_into_kind(lib_id: &str, root: &Path, tv_library: bool) -> ScanOutcome {
         item_ids: lib.item_ids,
         movie_seen: lib.movie_seen,
         episode_seen: lib.episode_seen,
+        photo_seen: lib.photo_seen,
+        other_seen: lib.other_seen,
         items: found.items,
         shows: found.shows,
         mtimes: found.mtimes,
@@ -435,4 +439,40 @@ fn takes_says_of_each_file_what_a_walk_does_with_it() {
         assert_eq!(takes(Path::new(file)), written.contains(file), "{file}");
     }
     assert_eq!(written.len(), 3);
+}
+
+#[test]
+fn an_nfo_overrides_the_filename_and_show_folder() {
+    let dir = temp_scan_dir();
+    let root = dir.path();
+    let show = root.join("Wrong Show");
+    let season = show.join("Season 1");
+    std::fs::create_dir_all(&season).unwrap();
+    std::fs::write(
+        show.join("tvshow.nfo"),
+        "<tvshow><title>Right Show</title><year>2020</year></tvshow>",
+    )
+    .unwrap();
+    std::fs::write(
+        season.join("Wrong Show S01E01.mkv"),
+        b"x",
+    )
+    .unwrap();
+    std::fs::write(
+        season.join("Wrong Show S01E01.nfo"),
+        "<episodedetails><title>Right Episode</title><season>2</season><episode>4</episode></episodedetails>",
+    )
+    .unwrap();
+
+    let scan = scan_into("lib", root);
+    let episode = scan
+        .items
+        .values()
+        .find(|item| item.kind == kroma_domain::Kind::Episode)
+        .expect("the episode");
+    assert_eq!(episode.show_title.as_deref(), Some("Right Show"));
+    assert_eq!(episode.season, Some(2));
+    assert_eq!(episode.episode, Some(4));
+    assert_eq!(episode.episode_title.as_deref(), Some("Right Episode"));
+    assert_eq!(episode.year, Some(2020));
 }

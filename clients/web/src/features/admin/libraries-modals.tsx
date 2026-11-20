@@ -20,7 +20,7 @@ import { ArtworkButton } from '#web/features/catalog/artwork-picker.component';
 import { useAuth } from '#web/shared/lib/auth';
 
 /** Library kind as accepted by the create/update API: `""` = Auto. */
-export type LibKind = '' | 'movies' | 'shows' | 'mixed';
+export type LibKind = '' | 'movies' | 'shows' | 'mixed' | 'photos' | 'other';
 
 /** Accepts both the legacy `film`/`tv` kinds and the current `movies`/`shows`. */
 export function normalizeLibKind(kind: string): LibKind {
@@ -29,6 +29,12 @@ export function normalizeLibKind(kind: string): LibKind {
   }
   if (kind === 'movies' || kind === 'film') {
     return 'movies';
+  }
+  if (kind === 'photos' || kind === 'photo') {
+    return 'photos';
+  }
+  if (kind === 'other') {
+    return 'other';
   }
   if (kind === 'mixed') {
     return 'mixed';
@@ -54,6 +60,12 @@ export function LibraryTypeSelect({
       </SegmentGroup.Item>
       <SegmentGroup.Item value="mixed">
         <SegmentGroup.Label>{t('admin.typeMixed')}</SegmentGroup.Label>
+      </SegmentGroup.Item>
+      <SegmentGroup.Item value="photos">
+        <SegmentGroup.Label>{t('admin.typePhotos')}</SegmentGroup.Label>
+      </SegmentGroup.Item>
+      <SegmentGroup.Item value="other">
+        <SegmentGroup.Label>{t('admin.typeOther')}</SegmentGroup.Label>
       </SegmentGroup.Item>
     </SegmentGroup.Root>
   );
@@ -174,6 +186,50 @@ function BackdropCountSelect({
   );
 }
 
+const ARTWORK_SIZES = ['w500', 'w780', 'w1280', 'original'] as const;
+
+function ArtworkSizeSelect({
+  value,
+  onChange,
+}: Readonly<{ value: string; onChange: (v: string) => void }>) {
+  const t = useT();
+  return (
+    <Select.Root label={t('admin.artworkSize')} value={value} onValueChange={onChange}>
+      <Select.Trigger />
+      <Select.Item value="" label={t('admin.artworkSizeDefault')} />
+      {ARTWORK_SIZES.map((size) => (
+        <Select.Item key={size} value={size} label={size} />
+      ))}
+    </Select.Root>
+  );
+}
+
+const REFRESH_DAYS = ['7', '14', '30', '90'] as const;
+
+function ArtworkRefreshSelect({
+  value,
+  onChange,
+}: Readonly<{ value: string; onChange: (v: string) => void }>) {
+  const t = useT();
+  return (
+    <Select.Root
+      label={t('admin.artworkRefresh')}
+      value={value}
+      onValueChange={onChange}
+    >
+      <Select.Trigger />
+      <Select.Item value="" label={t('admin.artworkRefreshOff')} />
+      {REFRESH_DAYS.map((days) => (
+        <Select.Item
+          key={days}
+          value={days}
+          label={t('admin.artworkRefreshDays', { count: Number(days) })}
+        />
+      ))}
+    </Select.Root>
+  );
+}
+
 export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>(
   ({ call, lib }) => {
     const confirm = useConfirm();
@@ -190,6 +246,10 @@ export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>
     const [backdropCount, setBackdropCount] = useState(
       lib.scrape.backdropCount == null ? '' : String(lib.scrape.backdropCount),
     );
+    const [artworkSize, setArtworkSize] = useState(lib.scrape.artworkSize ?? '');
+    const [artworkRefreshDays, setArtworkRefreshDays] = useState(
+      lib.scrape.artworkRefreshDays == null ? '' : String(lib.scrape.artworkRefreshDays),
+    );
     const { busy, run } = useAsyncAction();
 
     const save = () =>
@@ -205,6 +265,9 @@ export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>
             posterLanguage: posterLanguage || null,
             backdropLanguage: backdropLanguage || null,
             backdropCount: backdropCount === '' ? null : Number(backdropCount),
+            artworkSize: artworkSize || null,
+            artworkRefreshDays:
+              artworkRefreshDays === '' ? null : Number(artworkRefreshDays),
           },
         });
         call.end(true);
@@ -292,6 +355,8 @@ export const ManageLibraryModal = createCallable<{ lib: AdminLibrary }, boolean>
           onChange={setBackdropLanguage}
         />
         <BackdropCountSelect value={backdropCount} onChange={setBackdropCount} />
+        <ArtworkSizeSelect value={artworkSize} onChange={setArtworkSize} />
+        <ArtworkRefreshSelect value={artworkRefreshDays} onChange={setArtworkRefreshDays} />
         <Dialog.Footer>
           <Dialog.Actions
             onCancel={() => call.end(false)}

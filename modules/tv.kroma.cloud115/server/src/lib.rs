@@ -16,6 +16,8 @@
 pub mod client;
 pub mod crypto;
 pub mod events;
+pub mod login;
+pub mod oss;
 pub mod play;
 pub mod pacer;
 pub mod probe;
@@ -23,6 +25,7 @@ pub mod routes;
 pub mod settings;
 pub mod store;
 pub mod sync;
+pub mod upload;
 pub mod watch;
 
 mod module;

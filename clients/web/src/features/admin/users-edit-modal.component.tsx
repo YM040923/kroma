@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   Callout,
+  Chip,
   Dialog,
   Field,
   Icon,
@@ -13,6 +14,7 @@ import {
   Row,
   resolveStyles,
   styles,
+  Switch,
   Text,
   useConfirm,
   useStyleScope,
@@ -42,6 +44,8 @@ export const EditUserModal = createCallable<{ user: AdminUser }, boolean>(({ cal
   const [name, setName] = useState(user.username);
   const [perms, toggle] = usePermissionSet(user.permissions);
   const [granted, setGranted] = useState<readonly LibraryId[] | null>(user.libraries);
+  const [maxAge, setMaxAge] = useState<number | null>(user.maxAge ?? null);
+  const [allowUnrated, setAllowUnrated] = useState(user.allowUnrated);
   const { busy, error, run } = useAsyncAction();
   const isSelf = me?.id === user.id;
   const [reset, setReset] = useState<ResetCreated | null>(null);
@@ -55,6 +59,8 @@ export const EditUserModal = createCallable<{ user: AdminUser }, boolean>(({ cal
           permissions: [...perms],
           username: name.trim(),
           libraries: granted === null ? null : [...granted],
+          maxAge,
+          allowUnrated,
         });
         call.end(true);
       },
@@ -146,6 +152,40 @@ export const EditUserModal = createCallable<{ user: AdminUser }, boolean>(({ cal
       </Box>
 
       <LibraryVisibility granted={granted} onChange={setGranted} />
+
+      <Box>
+        <Text variant="overline" color="textDim" mb={8}>
+          {t('admin.contentLimit')}
+        </Text>
+        <Row wrap gap={8} mb={12}>
+          {([null, 6, 12, 16, 18] as const).map((age) => (
+            <Chip
+              key={age ?? 'none'}
+              active={maxAge === age}
+              variant="subtle"
+              label={age === null ? t('admin.unlimited') : t('admin.ageValue', { age })}
+              onPress={() => setMaxAge(age)}
+            />
+          ))}
+        </Row>
+        <Row between gap={16}>
+          <Box shrink={1} minW={0}>
+            <Text variant="label">{t('admin.allowUnrated')}</Text>
+            <Text variant="meta" color="textDim" mt={2}>
+              {t('admin.allowUnratedHint')}
+            </Text>
+          </Box>
+          <Switch
+            checked={allowUnrated}
+            onCheckedChange={setAllowUnrated}
+            label={t('admin.allowUnrated')}
+            disabled={maxAge === null}
+          />
+        </Row>
+        <Text variant="meta" color="textDim" mt={8}>
+          {t('admin.contentLimitHint')}
+        </Text>
+      </Box>
 
       <Box>
         <Text variant="overline" color="textDim" mb={8}>

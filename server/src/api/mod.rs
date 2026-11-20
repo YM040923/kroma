@@ -12,9 +12,11 @@ pub mod ws;
 
 mod accounts;
 mod cast;
+mod content_limit;
 mod diagnostics;
 mod direct;
 mod discover;
+mod douban;
 mod downloads_overlay;
 mod etag;
 mod extract;
@@ -50,6 +52,7 @@ mod requests;
 pub mod seam;
 mod search;
 mod server_status;
+mod share;
 mod sso;
 mod stream;
 mod suggest;
@@ -117,6 +120,8 @@ mod it_imports_people;
 mod it_invites;
 #[cfg(test)]
 mod it_library_visibility;
+#[cfg(test)]
+mod it_share;
 #[cfg(test)]
 mod it_settings_libraries;
 #[cfg(test)]
@@ -290,9 +295,11 @@ pub fn router(state: SharedState, supervisor: Arc<Supervisor>) -> Router {
         .merge(images::routes())
         .merge(remote_art::routes())
         .merge(media::public_routes())
+        .merge(douban::public_routes())
         .merge(server_status::public_routes())
         .merge(direct::public_routes())
         .merge(stream::routes())
+        .merge(share::public_routes())
         .merge(online_subs::public_routes())
         .merge(themes::routes())
         .merge(trailers::public_routes())
@@ -312,9 +319,11 @@ pub fn router(state: SharedState, supervisor: Arc<Supervisor>) -> Router {
         .merge(direct::routes())
         .merge(stream::protected_routes())
         .merge(search::routes())
+        .merge(share::protected_routes())
         .merge(people::routes())
         .merge(metadata::routes())
         .merge(recommend::routes())
+        .merge(douban::routes())
         .merge(suggest::routes())
         .merge(online_subs::routes())
         .merge(home::routes())

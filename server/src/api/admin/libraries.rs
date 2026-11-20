@@ -93,8 +93,10 @@ fn kind_label(def: &LibraryDef, _st: Option<&crate::model::LibraryStat>) -> Stri
     match def.kind.as_str() {
         "shows" => "tv",
         "movies" => "film",
+        "mixed" => "mixed",
+        "photos" | "photo" => "photo",
+        "other" => "other",
         "music" => "music",
-        "photo" => "photo",
         _ => "film",
     }
     .to_string()

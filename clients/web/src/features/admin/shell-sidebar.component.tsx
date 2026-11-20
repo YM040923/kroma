@@ -44,7 +44,7 @@ import {
 const ADMIN_RAIL_COLLAPSED = 76;
 
 const sDefinition = styles({
-  navFill: { bg: 'bg' },
+  navFill: { bg: 'surface1' },
   railEdge: { borderRightWidth: 1, borderRightColor: 'border' },
   drawerHead: { pl: 24, pr: 16, pb: 16, ...safeAreaTop(24) },
 });
@@ -215,7 +215,7 @@ export function AdminSidebar() {
       w={compact ? ADMIN_RAIL_COLLAPSED : ADMIN_RAIL_WIDTH}
       shrink={0}
       h="100%"
-      bg="bg"
+      bg="surface1"
       style={s.railEdge}
     >
       <SideNavCompactProvider compact={compact}>

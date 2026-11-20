@@ -9,6 +9,10 @@ export const ScrapeOptions = z.object({
   backdropLanguage: z.string().nullable(),
   /** Gallery backdrops kept per title; null keeps the provider's full set. */
   backdropCount: z.number().nullable().optional(),
+  /** TMDB image size stored for provider URLs: w500, w780, w1280 or original. */
+  artworkSize: z.string().nullable().optional(),
+  /** Re-check show artwork every N days; null/0 disables the sweep. */
+  artworkRefreshDays: z.number().nullable().optional(),
 });
 export type ScrapeOptions = z.infer<typeof ScrapeOptions>;
 

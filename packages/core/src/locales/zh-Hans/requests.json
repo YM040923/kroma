@@ -14,6 +14,8 @@
   "requests.backToQueue": "返回队列",
   "requests.calendarEmpty": "暂无即将上映",
   "requests.cancel": "取消请求",
+  "requests.actions": "请求操作",
+  "requests.edit": "打开条目",
   "requests.colDate": "日期",
   "requests.colEpisode": "剧集",
   "requests.colEpisodeShort": "集",

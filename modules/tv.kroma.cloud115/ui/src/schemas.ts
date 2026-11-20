@@ -106,6 +106,48 @@ export const CloudAccount = z.object({
 });
 export type CloudAccount = z.infer<typeof CloudAccount>;
 
+export const LoginStarted = z.object({
+  flow: z.string(),
+  qr: z.string(),
+  svg: z.string(),
+  status: z.string(),
+  app: z.string(),
+});
+export type LoginStarted = z.infer<typeof LoginStarted>;
+
+export const LoginState = z.object({
+  status: z.string(),
+  message: z.string(),
+  hasCookie: z.boolean(),
+});
+export type LoginState = z.infer<typeof LoginState>;
+
+export const UploadStarted = z.object({
+  hit: z.boolean(),
+  upload: z.string().nullish(),
+  parts: z.number(),
+  partSize: z.number(),
+  pickcode: z.string().nullish(),
+});
+export type UploadStarted = z.infer<typeof UploadStarted>;
+
+export const UploadPartView = z.object({ uploaded: z.number(), parts: z.number() });
+export type UploadPartView = z.infer<typeof UploadPartView>;
+
+export const UploadFinished = z.object({ pickcode: z.string() });
+export type UploadFinished = z.infer<typeof UploadFinished>;
+
+export const RapidView = z.object({
+  hit: z.boolean(),
+  needUpload: z.boolean(),
+  pickcode: z.string().nullish(),
+  status: z.number(),
+});
+export type RapidView = z.infer<typeof RapidView>;
+
+export const CookieImported = z.object({ ok: z.boolean(), message: z.string() });
+export type CookieImported = z.infer<typeof CookieImported>;
+
 export const SavedView = z.object({ saved: z.boolean(), errors: z.array(z.string()) });
 export const StartedView = z.object({ started: z.boolean() });
 

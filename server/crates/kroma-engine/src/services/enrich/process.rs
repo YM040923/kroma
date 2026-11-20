@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
 use tracing::warn;
@@ -74,23 +75,121 @@ pub(super) fn fill_langs(eng: &Engine, job: &Job, tmdb_id: u64, missing: &[Strin
 }
 
 pub(super) fn post_process(eng: &Engine, job: &Job) {
-    let Some(options) = eng.scrape.get(&job.library) else {
-        return;
-    };
-    if options.nfo {
-        super::nfo::write(eng, job);
+    if let Some(options) = eng.scrape.get(&job.library) {
+        if options.nfo {
+            super::nfo::write(eng, job);
+        }
+        apply_art_preference(eng, job, options);
     }
-    apply_art_preference(eng, job, options);
+    apply_nfo_metadata(eng, job);
 }
 
-/// Picks the preferred poster/backdrop (a language tag, or "textless") from the
-/// provider's full image list and stores it in the title's metadata. This is an
-/// automatic preference, distinct from the manual per-title override table.
+pub(super) fn apply_nfo_metadata(eng: &Engine, job: &Job) {
+    let Some(mut nfo) = super::nfo::read_existing(eng, job) else {
+        return;
+    };
+    if let Some(pin) = job.pin {
+        nfo.tmdb_id = Some(pin);
+    }
+    let (kind, mut meta) = if job.is_show {
+        let kind = db::metadata_core::SHOW;
+        let Some(detail) = db::get_show(&eng.pool, &job.id).ok().flatten() else {
+            return;
+        };
+        (kind, detail.show.metadata.unwrap_or_else(|| nfo.metadata(true)))
+    } else {
+        let kind = db::metadata_core::ITEM;
+        let Some(item) = db::get_item(&eng.pool, &job.id).ok().flatten() else {
+            return;
+        };
+        (kind, item.metadata.unwrap_or_else(|| nfo.metadata(false)))
+    };
+    crate::services::scan::nfo::overlay_metadata(&mut meta, &nfo);
+    let write = if job.is_show {
+        db::set_show_metadata(&eng.pool, &job.id, &meta)
+    } else {
+        db::set_item_metadata(&eng.pool, &job.id, &meta)
+    }
+    .and_then(|()| db::store_localized(&eng.pool, kind, &job.id, &meta, &HashMap::new()));
+    if let Err(error) = write {
+        warn!(id = %job.id, error = %error, "failed to store NFO metadata");
+        return;
+    }
+    let language = nfo
+        .language
+        .as_deref()
+        .or_else(|| eng.scrape.get(&job.library).and_then(|o| o.language.as_deref()))
+        .unwrap_or(&eng.language);
+    let language = crate::i18n::normalize(language).unwrap_or("en");
+    let mut data = db::translations::load_all(&eng.pool, kind, &[job.id.as_str()])
+        .ok()
+        .and_then(|all| {
+            all.get(&job.id)
+                .and_then(|by_lang| by_lang.get(language))
+                .cloned()
+        })
+        .unwrap_or_default();
+    let has_localized_nfo = nfo.title.is_some()
+        || nfo.original_title.is_some()
+        || nfo.plot.is_some()
+        || !nfo.genres.is_empty();
+    if let Some(title) = nfo.title.or(nfo.original_title) {
+        data.title = Some(title);
+    }
+    if let Some(overview) = nfo.plot {
+        data.overview = Some(overview);
+    }
+    if !nfo.genres.is_empty() {
+        data.genres = nfo.genres;
+    }
+    data.rev = db::translations::REV;
+    if has_localized_nfo {
+        if let Err(error) = db::translations::put(
+            &eng.pool,
+            kind,
+            &job.id,
+            language,
+            db::translations::NFO,
+            &data,
+        ) {
+            warn!(id = %job.id, error = %error, "failed to store NFO translation");
+        }
+    }
+    eng.bus.publish(if job.is_show {
+        ServerEvent::ShowUpdated { id: job.id.clone() }
+    } else {
+        ServerEvent::ItemUpdated { id: job.id.clone() }
+    });
+}
+
+/// Picks the preferred poster/backdrop from the provider's full image list and
+/// stores it in the title's metadata. The explicit language/textless choice
+/// wins; otherwise the best-voted, largest image wins. Manual overrides always
+/// win and are never touched by this pass.
 fn apply_art_preference(
     eng: &Engine,
     job: &Job,
     options: &crate::services::settings::ScrapeOptions,
 ) {
+    apply_art_policy(eng, job, options, false);
+}
+
+/// Re-check artwork even when the title is already enriched. Used by the
+/// scheduled show-artwork sweep; each manual override locks only its image type.
+pub(super) fn refresh_art(
+    eng: &Engine,
+    job: &Job,
+    options: &crate::services::settings::ScrapeOptions,
+) -> bool {
+    apply_art_policy(eng, job, options, true)
+}
+
+fn apply_art_policy(
+    eng: &Engine,
+    job: &Job,
+    options: &crate::services::settings::ScrapeOptions,
+    force: bool,
+) -> bool {
     let poster = options
         .poster_language
         .as_deref()
@@ -101,71 +200,223 @@ fn apply_art_preference(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("auto"));
+    let poster = if force && poster.is_none() {
+        Some("auto")
+    } else {
+        poster
+    };
+    let backdrop = if force && backdrop.is_none() {
+        Some("auto")
+    } else {
+        backdrop
+    };
     let backdrop_count = options.backdrop_count.map(usize::from);
-    if poster.is_none() && backdrop.is_none() && backdrop_count.is_none() {
-        return;
+    let size = options.artwork_size.as_deref().filter(|size| {
+        matches!(*size, "w500" | "w780" | "w1280" | "original")
+    });
+    if !force
+        && poster.is_none()
+        && backdrop.is_none()
+        && backdrop_count.is_none()
+        && size.is_none()
+    {
+        return false;
     }
     let (mut meta, tmdb_id, is_show) = if job.is_show {
         let Ok(Some(detail)) = db::get_show(&eng.pool, &job.id) else {
-            return;
+            return false;
         };
         let Some(meta) = detail.show.metadata.clone() else {
-            return;
+            return false;
         };
         let tmdb = meta.tmdb_id;
         (meta, tmdb, true)
     } else {
         let Ok(Some(item)) = db::get_item(&eng.pool, &job.id) else {
-            return;
+            return false;
         };
         let Some(meta) = item.metadata.clone() else {
-            return;
+            return false;
         };
         let tmdb = meta.tmdb_id;
         (meta, tmdb, false)
     };
     if tmdb_id == 0 {
-        return;
+        return false;
     }
-    if poster.is_some() || backdrop.is_some() {
-        let Ok((posters, backdrops)) =
-            metadata::images(&eng.api_key, &eng.language, job.target, tmdb_id)
-        else {
-            return;
-        };
+    let kind = if is_show {
+        db::art_overrides::SHOW_KIND
+    } else {
+        db::art_overrides::ITEM_KIND
+    };
+    let overrides = match db::art_overrides::get(&eng.pool, kind, &job.id) {
+        Ok(overrides) => overrides,
+        Err(error) => {
+            warn!(id = %job.id, error = %error, "failed to read artwork locks");
+            return false;
+        }
+    };
+    let poster_locked = overrides.contains_key(db::art_overrides::POSTER);
+    let backdrop_locked = overrides.contains_key(db::art_overrides::BACKDROP);
+    if force && poster_locked && backdrop_locked {
+        return false;
+    }
+    let needs_images = force
+        || backdrop_count.is_some()
+        || size.is_some()
+        || (!poster_locked && poster.is_some())
+        || (!backdrop_locked && backdrop.is_some());
+    let (posters, gallery) = if needs_images {
+        match metadata::images(&eng.api_key, &eng.language, job.target, tmdb_id) {
+            Ok(images) => images,
+            Err(()) => return false,
+        }
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    if !poster_locked {
         if let Some(pref) = poster {
-            if let Some(url) = pick_image(&posters, pref) {
+            if let Some(url) = pick_image(&posters, pref, size) {
                 meta.poster_url = Some(url);
             }
         }
-        if let Some(pref) = backdrop {
-            if let Some(url) = pick_image(&backdrops, pref) {
-                meta.backdrop_url = Some(url);
-            }
+    }
+    let backdrop_policy = force || backdrop.is_some() || backdrop_count.is_some() || size.is_some();
+    let preference = backdrop.unwrap_or("auto");
+    let selected_backdrops = if backdrop_policy {
+        selected_images(&gallery, preference, size, backdrop_count)
+    } else {
+        Vec::new()
+    };
+    if backdrop_policy && !backdrop_locked {
+        if let Some(primary) = selected_backdrops.first() {
+            meta.backdrop_url = Some(primary.clone());
         }
     }
-    if let Some(limit) = backdrop_count {
+    if backdrop_policy {
+        let primary = overrides
+            .get(db::art_overrides::BACKDROP)
+            .or(meta.backdrop_url.as_ref());
+        let primary_key = primary.map(|url| image_key(url));
+        meta.backdrops = selected_backdrops
+            .into_iter()
+            .filter(|url| primary_key.as_ref().is_none_or(|key| image_key(url) != *key))
+            .collect();
+    } else if let Some(limit) = backdrop_count {
         meta.backdrops.truncate(limit);
     }
+    if let Some(size) = size {
+        if !poster_locked {
+            if let Some(url) = meta.poster_url.as_mut() {
+                *url = sized_url(url, size);
+            }
+        }
+        if !backdrop_locked {
+            if let Some(url) = meta.backdrop_url.as_mut() {
+                *url = sized_url(url, size);
+            }
+        }
+        for url in &mut meta.backdrops {
+            *url = sized_url(url, size);
+        }
+    }
     let meta = image::localize(&eng.data_dir, meta);
-    let _ = if is_show {
+    let kind = if is_show {
+        db::metadata_core::SHOW
+    } else {
+        db::metadata_core::ITEM
+    };
+    let write = if is_show {
         db::set_show_metadata(&eng.pool, &job.id, &meta)
     } else {
         db::set_item_metadata(&eng.pool, &job.id, &meta)
-    };
+    }
+    .and_then(|()| db::store_localized(&eng.pool, kind, &job.id, &meta, &HashMap::new()));
+    if let Err(error) = write {
+        warn!(id = %job.id, error = %error, "failed to store artwork policy");
+        false
+    } else {
+        true
+    }
 }
 
-fn pick_image(images: &[metadata::ArtImage], preference: &str) -> Option<String> {
+fn pick_image(images: &[metadata::ArtImage], preference: &str, size: Option<&str>) -> Option<String> {
+    // `None` means any language; `Some(None)` is textless; `Some(Some(tag))`
+    // is an exact language.
     let wanted = if preference.eq_ignore_ascii_case("textless") {
+        Some(None)
+    } else if preference.is_empty() || preference.eq_ignore_ascii_case("auto") {
         None
     } else {
-        Some(preference)
+        Some(Some(preference))
     };
+    let mut seen = std::collections::HashSet::new();
     images
         .iter()
-        .filter(|image| image.language.as_deref() == wanted)
-        .max_by(|a, b| a.votes.total_cmp(&b.votes))
-        .map(|image| image.url.clone())
+        .filter(|image| wanted.is_none_or(|wanted| image.language.as_deref() == wanted))
+        .filter(|image| seen.insert(image_key(&image.url)))
+        .max_by(|a, b| {
+            a.votes
+                .total_cmp(&b.votes)
+                .then((a.width * a.height).cmp(&(b.width * b.height)))
+                .then(a.url.cmp(&b.url))
+        })
+        .map(|image| size.map_or_else(|| image.url.clone(), |size| sized_url(&image.url, size)))
+}
+
+fn selected_images(
+    images: &[metadata::ArtImage],
+    preference: &str,
+    size: Option<&str>,
+    limit: Option<usize>,
+) -> Vec<String> {
+    let wanted = if preference.eq_ignore_ascii_case("textless") {
+        Some(None)
+    } else if preference.is_empty() || preference.eq_ignore_ascii_case("auto") {
+        None
+    } else {
+        Some(Some(preference))
+    };
+    let mut seen = std::collections::HashSet::new();
+    let mut ranked: Vec<_> = images
+        .iter()
+        .filter(|image| wanted.is_none_or(|wanted| image.language.as_deref() == wanted))
+        .filter(|image| seen.insert(image_key(&image.url)))
+        .collect();
+    ranked.sort_by(|a, b| {
+        b.votes
+            .total_cmp(&a.votes)
+            .then((b.width * b.height).cmp(&(a.width * a.height)))
+            .then(a.url.cmp(&b.url))
+    });
+    ranked
+        .into_iter()
+        .take(limit.unwrap_or(8).min(8))
+        .map(|image| {
+            size.map_or_else(|| image.url.clone(), |size| sized_url(&image.url, size))
+        })
+        .collect()
+}
+
+fn image_key(url: &str) -> String {
+    let path = url.split('?').next().unwrap_or(url);
+    path.split_once("/t/p/")
+        .map(|(_, rest)| rest.split_once('/').map(|(_, file)| file).unwrap_or(rest))
+        .unwrap_or(path)
+        .to_string()
+}
+
+/// Rewrite a TMDB image URL to the chosen size; local/cached paths are left
+/// alone.
+fn sized_url(url: &str, size: &str) -> String {
+    if !url.contains("/t/p/") {
+        return url.to_string();
+    }
+    let mut parts = url.splitn(2, "/t/p/");
+    let head = parts.next().unwrap_or_default();
+    let tail = parts.next().unwrap_or_default();
+    let rest = tail.split_once('/').map(|(_, rest)| rest).unwrap_or(tail);
+    format!("{head}/t/p/{size}/{rest}")
 }
 
 pub(super) fn process_job(
@@ -194,6 +445,16 @@ pub(super) fn process_job(
         }
     }
     let eng = &local;
+    let mut job = job;
+    if let Some(nfo) = super::nfo::read_existing(eng, &job) {
+        if job.pin.is_none() {
+            if let Some(tmdb_id) = nfo.tmdb_id {
+                job.pin = Some(tmdb_id);
+                job.resolved_tmdb = None;
+                job.refetch = None;
+            }
+        }
+    }
     let langs = crate::i18n::content_locales();
     let job = identified(eng, job);
     if let Some(tmdb_id) = job.resolved_tmdb {
@@ -356,5 +617,69 @@ pub(super) fn rename_if_pinned(eng: &Engine, job: &Job, meta: &Metadata) {
     };
     if let Err(e) = renamed {
         warn!(id = %job.id, error = %e, "failed to rename catalog title after a pinned match");
+    }
+}
+
+#[cfg(test)]
+mod artwork_tests {
+    use super::*;
+
+    fn image(url: &str, language: Option<&str>, width: u32, height: u32, votes: f64) -> metadata::ArtImage {
+        metadata::ArtImage {
+            url: url.into(),
+            width,
+            height,
+            language: language.map(str::to_string),
+            votes,
+        }
+    }
+
+    #[test]
+    fn an_explicit_language_wins_over_a_more_voted_other_language() {
+        let images = vec![
+            image("https://image.test/en.jpg", Some("en"), 1000, 1500, 9.0),
+            image("https://image.test/zh.jpg", Some("zh"), 500, 750, 1.0),
+        ];
+        assert_eq!(
+            pick_image(&images, "zh", None).as_deref(),
+            Some("https://image.test/zh.jpg")
+        );
+    }
+
+    #[test]
+    fn textless_only_considers_images_without_a_language() {
+        let images = vec![
+            image("https://image.test/en.jpg", Some("en"), 1000, 1500, 9.0),
+            image("https://image.test/clean.jpg", None, 500, 750, 1.0),
+        ];
+        assert_eq!(
+            pick_image(&images, "textless", None).as_deref(),
+            Some("https://image.test/clean.jpg")
+        );
+    }
+
+    #[test]
+    fn auto_prefers_votes_then_resolution_and_deduplicates() {
+        let images = vec![
+            image("https://image.test/a.jpg", Some("en"), 500, 750, 4.0),
+            image("https://image.test/b.jpg", Some("en"), 1000, 1500, 4.0),
+            image("https://image.test/b.jpg", Some("en"), 1000, 1500, 4.0),
+        ];
+        assert_eq!(
+            pick_image(&images, "auto", None).as_deref(),
+            Some("https://image.test/b.jpg")
+        );
+    }
+
+    #[test]
+    fn a_provider_url_is_rewritten_to_the_requested_size() {
+        assert_eq!(
+            sized_url("https://image.tmdb.org/t/p/w1280/abc.jpg", "w780"),
+            "https://image.tmdb.org/t/p/w780/abc.jpg"
+        );
+        assert_eq!(
+            sized_url("/data/images/local.webp", "w500"),
+            "/data/images/local.webp"
+        );
     }
 }

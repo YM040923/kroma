@@ -20,6 +20,8 @@ pub(crate) fn meta(title: &str, overview: &str, genres: &[&str], cast: &[&str]) 
         tmdb_genre_ids: Vec::new(),
         rating: None,
         certification: None,
+        collection_id: None,
+        collection_name: None,
         poster_url: None,
         backdrop_url: None,
         logo_url: None,
@@ -213,6 +215,50 @@ fn episodes_of_a_show_that_did_not_match_are_capped() {
     e.rebuild(&[], &[], &episodes).unwrap();
 
     assert_eq!(e.search("ozymandias", 24).len(), MAX_EPISODES_PER_SHOW);
+}
+
+fn chinese_engine() -> SearchEngine {
+    let e = SearchEngine::new().unwrap();
+    e.rebuild(
+        &[
+            movie("m-wandering", "流浪地球", None),
+            movie(
+                "m-wolf",
+                "战狼",
+                Some(meta("战狼", "A soldier", &["Action"], &["吴京"])),
+            ),
+            movie("m-nobody", "无名之辈", None),
+        ],
+        &[],
+        &[],
+    )
+    .unwrap();
+    e
+}
+
+#[test]
+fn a_chinese_title_is_found_by_pinyin_or_initials() {
+    let e = chinese_engine();
+
+    assert_eq!(ids(&e, "liulangdiqiu", 24), ["m-wandering"]);
+    assert_eq!(ids(&e, "liu lang di qiu", 24), ["m-wandering"]);
+    assert_eq!(ids(&e, "lldq", 24), ["m-wandering"]);
+    assert_eq!(ids(&e, "liulang地球", 24), ["m-wandering"]);
+}
+
+#[test]
+fn a_chinese_actor_is_found_by_pinyin() {
+    let e = chinese_engine();
+
+    assert_eq!(ids(&e, "wujing", 24), ["m-wolf"]);
+}
+
+#[test]
+fn a_chinese_substring_finds_the_title_it_sits_in() {
+    let e = chinese_engine();
+
+    assert_eq!(ids(&e, "地球", 24), ["m-wandering"]);
+    assert!(ids(&e, "球地", 24).is_empty(), "order still matters");
 }
 
 #[test]

@@ -11,6 +11,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Deserialize;
 
+use crate::api::content_limit;
 use crate::api::dto::{one_per_title, PersonHit, SearchHit, SearchResponse};
 use crate::api::extract::AuthUser;
 use crate::api::media::ListView;
@@ -77,8 +78,9 @@ pub async fn search(
         .into_response());
     }
 
+    let viewer_limit = content_limit::for_user(&user);
     let engine = state.clone();
-    let resp = query(&state.db, move |pool| {
+    let mut resp = query(&state.db, move |pool| {
         let favoured = favoured(&engine, &pool, &user);
         let visible =
             |lib: &str| library.as_deref().is_none_or(|want| lib == want) && user.sees_library(lib);
@@ -102,6 +104,55 @@ pub async fn search(
         })
     })
     .await?;
+    if let Some(limit) = viewer_limit {
+        // An episode inherits its show's rating; resolving the shows once keeps
+        // a rated-out series from surfacing through its episodes.
+        let show_ids: Vec<String> = resp
+            .results
+            .iter()
+            .filter_map(|hit| match hit {
+                SearchHit::Episode { item } => item.show_id.clone(),
+                SearchHit::EpisodeCard { item } => item.show_id.clone(),
+                _ => None,
+            })
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        let shows = if show_ids.is_empty() {
+            HashMap::new()
+        } else {
+            query(&state.db, move |pool| db::show_certifications(&pool, &show_ids)).await?
+        };
+        resp.results.retain(|hit| match hit {
+            SearchHit::Movie { item } => limit.allows_metadata(item.metadata.as_ref()),
+            SearchHit::Show { show } => limit.allows_metadata(show.metadata.as_ref()),
+            SearchHit::MovieCard { item } => limit.allows_metadata(item.metadata.as_ref()),
+            SearchHit::Episode { item } => {
+                let own = item
+                    .metadata
+                    .as_ref()
+                    .and_then(|meta| meta.certification.as_deref());
+                let inherited = item
+                    .show_id
+                    .as_ref()
+                    .and_then(|id| shows.get(id))
+                    .and_then(|cert| cert.as_deref());
+                limit.allows(own.or(inherited))
+            }
+            SearchHit::EpisodeCard { item } => {
+                let own = item
+                    .metadata
+                    .as_ref()
+                    .and_then(|meta| meta.certification.as_deref());
+                let inherited = item
+                    .show_id
+                    .as_ref()
+                    .and_then(|id| shows.get(id))
+                    .and_then(|cert| cert.as_deref());
+                limit.allows(own.or(inherited))
+            }
+        });
+    }
     Ok(Json(resp).into_response())
 }
 

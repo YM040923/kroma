@@ -21,6 +21,7 @@ use super::{params, Connection, Pool, Result};
 pub const TMDB: &str = "tmdb";
 pub const LLM: &str = "llm";
 pub const MANUAL: &str = "manual";
+pub const NFO: &str = "nfo";
 
 /// The payload stored per `(subject, lang)`; every field is skip-if-empty so a row
 /// only carries what its `subject_kind` needs.
@@ -176,9 +177,9 @@ pub fn stale_langs(pool: &Pool, kind: &str, id: &str, langs: &[&str]) -> Result<
     let conn = pool.get()?;
     let mut stmt = conn.prepare(
         "SELECT lang, data FROM translations \
-         WHERE subject_kind=?1 AND subject_id=?2 AND source=?3",
+         WHERE subject_kind=?1 AND subject_id=?2 AND source IN (?3,?4)",
     )?;
-    let rows = stmt.query_map(params![kind, id, TMDB], |r| {
+    let rows = stmt.query_map(params![kind, id, TMDB, NFO], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
     })?;
     let mut current: Vec<String> = Vec::new();

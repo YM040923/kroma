@@ -480,7 +480,7 @@ CREATE TABLE translations (
         subject_kind TEXT NOT NULL,   -- 'item'|'show'|'episode'|'episode_guide'|'season_cast'|'curated'|'suggestion'
         subject_id   TEXT NOT NULL,
         lang         TEXT NOT NULL,   -- a code from i18n::SUPPORTED_LOCALES
-        source       TEXT NOT NULL,   -- 'tmdb' | 'llm' | 'manual'
+        source       TEXT NOT NULL,   -- 'tmdb' | 'llm' | 'manual' | 'nfo'
         data         TEXT NOT NULL,   -- JSON: {title,overview,tagline,genres,posterUrl?,logoUrl?,characters?,reason?,rev?}
         updated_at   INTEGER NOT NULL,
         PRIMARY KEY (subject_kind, subject_id, lang)

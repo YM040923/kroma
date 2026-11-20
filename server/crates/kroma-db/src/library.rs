@@ -26,6 +26,8 @@ fn parse_library_kind(s: &str) -> LibraryKind {
     match s {
         "shows" => LibraryKind::Shows,
         "mixed" => LibraryKind::Mixed,
+        "photos" | "photo" => LibraryKind::Photos,
+        "other" => LibraryKind::Other,
         _ => LibraryKind::Movies,
     }
 }

@@ -11,6 +11,7 @@ mod index;
 mod lexicon;
 mod parse;
 mod people;
+mod pinyin;
 mod query;
 mod rerank;
 mod run;

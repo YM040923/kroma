@@ -1,4 +1,9 @@
-import { type MediaCard, type MediaItem, ItemId } from '@kromatv/client/media';
+import {
+  type CollectionView,
+  type MediaCard,
+  type MediaItem,
+  ItemId,
+} from '@kromatv/client/media';
 import { useT } from '@kromatv/ui';
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, redirect } from '@tanstack/react-router';
@@ -22,6 +27,7 @@ export const Route = createFileRoute('/_app/movies/$id')({
     const id = ItemId.parse(params.id);
     const { catalogQueries } = webRuntime.queries;
     void queryClient.prefetchQuery(catalogQueries.similar(id));
+    void queryClient.prefetchQuery(catalogQueries.collection(id));
     await queryClient.ensureQueryData(catalogQueries.item(id));
   },
   pendingComponent: DetailSkeleton,
@@ -36,13 +42,25 @@ function MovieDetailPage() {
   useCatalogLiveRefresh('item', id);
   const { data: item } = useSuspenseQuery(webRuntime.queries.catalogQueries.item(id));
   const { data: similar } = useQuery(webRuntime.queries.catalogQueries.similar(id));
-  return <MovieDetail item={item} similar={similar?.slice(0, SIMILAR_COUNT)} />;
+  const { data: collection } = useQuery(webRuntime.queries.catalogQueries.collection(id));
+  return (
+    <MovieDetail
+      item={item}
+      similar={similar?.slice(0, SIMILAR_COUNT)}
+      collection={collection}
+    />
+  );
 }
 
 function MovieDetail({
   item,
   similar,
-}: Readonly<{ item: MediaItem; similar: MediaCard[] | undefined }>) {
+  collection,
+}: Readonly<{
+  item: MediaItem;
+  similar: MediaCard[] | undefined;
+  collection: CollectionView | undefined;
+}>) {
   const t = useT();
   const { client, user } = useAuth();
   const view = buildTitleView(client, t, user, {
@@ -56,6 +74,14 @@ function MovieDetail({
       key={item.id}
       initial={view}
       similar={similar && movieSimilarTargets(client, t, similar)}
+      collection={
+        collection?.items.length
+          ? {
+              name: collection.name ?? null,
+              targets: movieSimilarTargets(client, t, collection.items),
+            }
+          : null
+      }
     />
   );
 }

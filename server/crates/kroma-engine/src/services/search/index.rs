@@ -66,4 +66,36 @@ pub(super) fn normalize(index: &Index, raw: &str) -> Vec<String> {
         return raw.split_whitespace().map(str::to_lowercase).collect();
     };
     super::entry::tokens(&mut analyzer, raw)
+        .into_iter()
+        .flat_map(split_scripts)
+        .collect()
+}
+
+/// `liulang地球` reaches the analyzer as one token — every character in it is
+/// alphanumeric. To a reader it is two words, so it is split where one script
+/// gives way to the other; digits stay with the run they follow.
+fn split_scripts(token: String) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut latin_run: Option<bool> = None;
+    for c in token.chars() {
+        let run = if c.is_ascii_alphabetic() {
+            Some(true)
+        } else if super::pinyin::is_cjk(c) {
+            Some(false)
+        } else {
+            None
+        };
+        if let Some(kind) = run {
+            if latin_run.is_some_and(|current| current != kind) {
+                out.push(std::mem::take(&mut current));
+            }
+            latin_run = Some(kind);
+        }
+        current.push(c);
+    }
+    if !current.is_empty() {
+        out.push(current);
+    }
+    out
 }

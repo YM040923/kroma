@@ -49,14 +49,14 @@ function Row({ hasNext }: Readonly<{ hasNext: boolean }>) {
 }
 
 describe('the control row under the remote', () => {
-  it('stops on a next episode that arrives after the row, between forward and subtitles', () => {
+  it('stops on a next episode that arrives late, on the right of play', () => {
     const view = host.render(<Row hasNext={false} />);
     view.rerender(<Row hasNext />);
 
     press('ArrowRight');
-    expect(lit('Forward 10 s')).toBe(true);
-    press('ArrowRight');
     expect(lit('Next episode')).toBe(true);
+    press('ArrowRight');
+    expect(lit('Forward 10 s')).toBe(true);
     press('ArrowRight');
     expect(lit('Subtitles')).toBe(true);
   });

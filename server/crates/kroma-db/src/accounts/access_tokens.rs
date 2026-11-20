@@ -141,12 +141,12 @@ pub fn access_token_user(pool: &Pool, token: &str) -> Result<Option<(User, bool)
     let conn = pool.get()?;
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let mut stmt = conn.prepare(
-        "SELECT u.id,u.email,u.username,u.avatar_url,u.created_at,u.permissions,u.language,(u.pin_hash IS NOT NULL),u.audio_language,u.subtitle_language,u.libraries,a.pin_verified \
+        "SELECT u.id,u.email,u.username,u.avatar_url,u.created_at,u.permissions,u.language,(u.pin_hash IS NOT NULL),u.audio_language,u.subtitle_language,u.libraries,u.max_age,u.allow_unrated,a.pin_verified \
          FROM access_tokens a JOIN users u ON u.id = a.user_id \
          WHERE a.token = ?1 AND a.expires_at > ?2 AND u.waiting = 0",
     )?;
     let mut rows = stmt.query_map(params![stored(token), now], |r| {
-        Ok((row_to_user(r)?, r.get::<_, i64>(11)? != 0))
+        Ok((row_to_user(r)?, r.get::<_, i64>(13)? != 0))
     })?;
     match rows.next() {
         Some(v) => Ok(Some(v?)),
@@ -164,7 +164,7 @@ pub fn access_token_user_by_id(pool: &Pool, id: &str) -> Result<Option<User>> {
     let now = time::OffsetDateTime::now_utc().unix_timestamp();
     Ok(conn
         .query_row(
-            "SELECT u.id,u.email,u.username,u.avatar_url,u.created_at,u.permissions,u.language,(u.pin_hash IS NOT NULL),u.audio_language,u.subtitle_language,u.libraries \
+            "SELECT u.id,u.email,u.username,u.avatar_url,u.created_at,u.permissions,u.language,(u.pin_hash IS NOT NULL),u.audio_language,u.subtitle_language,u.libraries,u.max_age,u.allow_unrated \
              FROM access_tokens a JOIN users u ON u.id = a.user_id \
              WHERE a.expires_at > ?1 AND substr(a.token, 1, 16) = ?2 AND u.waiting = 0",
             params![now, id],

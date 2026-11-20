@@ -11,6 +11,7 @@ import { AiSuggestRail } from '#web/features/catalog/ai-suggest-rail.component';
 import { CastRail, type SimilarItem, SimilarRail } from '#web/features/catalog/detail.component';
 import { SeasonSection } from '#web/features/catalog/episode-list.component';
 import { TitleHero } from '#web/features/catalog/title-hero.component';
+import { SharePanel } from '#web/features/catalog/share-panel.component';
 import { TreatmentsPanel } from '#web/features/catalog/treatments-panel.component';
 import { useTitleCommands } from '#web/features/catalog/use-title-commands.hook';
 import { useTitleRequest } from '#web/features/catalog/use-title-request.hook';
@@ -48,6 +49,17 @@ function progressMap(entries: readonly ProgressEntry[]): Record<string, number> 
   return map;
 }
 
+function similarItemsOf(targets: readonly SimilarTarget[]): SimilarItem[] {
+  return targets.map((entry) => ({
+    id: entry.key,
+    title: entry.title,
+    genre: entry.genre,
+    badge: null,
+    poster: entry.poster,
+    link: similarLink(entry),
+  }));
+}
+
 function similarLink(target: SimilarTarget): HostElement | undefined {
   if (target.localId) {
     return (
@@ -74,6 +86,8 @@ function TitleBody({
   localId,
   error,
   similarItems,
+  collectionItems,
+  collectionTitle,
   epProgress,
   busy,
   pendingEps,
@@ -93,6 +107,8 @@ function TitleBody({
   localId: string | null | undefined;
   error: string | null;
   similarItems: SimilarItem[];
+  collectionItems: SimilarItem[];
+  collectionTitle: string;
   epProgress: Record<string, number>;
   busy: boolean;
   pendingEps: Set<string>;
@@ -128,6 +144,8 @@ function TitleBody({
         />
       ) : null}
 
+      {owned && localId && view.kind === 'movie' ? <SharePanel id={localId} /> : null}
+
       {view.kind === 'movie' ? (
         <CastRail cast={view.cast} />
       ) : (
@@ -156,6 +174,10 @@ function TitleBody({
         />
       )}
 
+      {collectionItems.length ? (
+        <SimilarRail title={collectionTitle} items={collectionItems} />
+      ) : null}
+
       <SimilarRail title={t('content.similarTitles')} items={similarItems} />
 
       {owned && localId ? <AiSuggestRail id={ItemId.parse(localId)} /> : null}
@@ -167,7 +189,14 @@ export function TitleDetail({
   initial,
   season,
   similar,
-}: Readonly<{ initial: TitleView; season?: number; similar?: readonly SimilarTarget[] }>) {
+  collection,
+}: Readonly<{
+  initial: TitleView;
+  season?: number;
+  similar?: readonly SimilarTarget[];
+  /** The film's series, when it has one: its title and its other films. */
+  collection?: { name: string | null; targets: readonly SimilarTarget[] } | null;
+}>) {
   const webRuntime = useWebRuntime();
 
   const s = useStyles(sDefinition);
@@ -218,14 +247,9 @@ export function TitleDetail({
   const overline = view.genres.length
     ? view.genres.slice(0, 3).join(' · ')
     : t(fallbackOverlineKey);
-  const similarItems: SimilarItem[] = (similar ?? view.similar).map((entry) => ({
-    id: entry.key,
-    title: entry.title,
-    genre: entry.genre,
-    badge: null,
-    poster: entry.poster,
-    link: similarLink(entry),
-  }));
+  const similarItems = similarItemsOf(similar ?? view.similar);
+  const collectionItems = similarItemsOf(collection?.targets ?? []);
+  const collectionTitle = collection?.name?.trim() || t('content.collection');
 
   return (
     <main className={classes(s.page)}>
@@ -250,6 +274,8 @@ export function TitleDetail({
         localId={localId}
         error={error}
         similarItems={similarItems}
+        collectionItems={collectionItems}
+        collectionTitle={collectionTitle}
         epProgress={epProgress}
         busy={busy}
         pendingEps={pendingEps}

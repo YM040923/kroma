@@ -18,6 +18,12 @@ pub struct AdminUser {
     pub avatar_url: Option<String>,
     pub permissions: Vec<Permission>,
     pub libraries: crate::LibraryScope,
+    /// The oldest age a title this account may see can be rated for; absent
+    /// means no limit.
+    #[serde(rename = "maxAge", skip_serializing_if = "Option::is_none")]
+    pub max_age: Option<u8>,
+    #[serde(rename = "allowUnrated")]
+    pub allow_unrated: bool,
     pub role: String,
     #[serde(rename = "createdAt")]
     pub created_at: String,

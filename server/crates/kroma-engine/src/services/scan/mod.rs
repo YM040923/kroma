@@ -17,6 +17,7 @@ mod found;
 mod ids;
 mod index;
 mod live;
+pub(crate) mod nfo;
 pub mod walk;
 
 use std::collections::{HashMap, HashSet};

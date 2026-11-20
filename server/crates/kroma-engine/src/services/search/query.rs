@@ -25,11 +25,13 @@ enum Fuzzy {
     Exact,
 }
 
-fn weights(f: &Fields) -> [(Field, f32, Fuzzy); 8] {
+fn weights(f: &Fields) -> [(Field, f32, Fuzzy); 10] {
     [
         (f.title, 6.0, Fuzzy::Allowed),
         (f.alt_title, 4.0, Fuzzy::Allowed),
         (f.joined, 3.0, Fuzzy::Exact),
+        (f.title_pinyin, 5.0, Fuzzy::Allowed),
+        (f.people_pinyin, 2.5, Fuzzy::Allowed),
         (f.show_title, 1.5, Fuzzy::Allowed),
         (f.cast, 3.0, Fuzzy::Allowed),
         (f.crew, 2.5, Fuzzy::Allowed),
@@ -51,6 +53,11 @@ fn distance(token: &str) -> u8 {
 
 const EXACT_BONUS: f32 = 1.5;
 const PREFIX_PENALTY: f32 = 0.5;
+
+/// A Chinese query token lands through its bigrams: the whole token must be
+/// spelled out somewhere in the bigram field, so "地球" reaches "流浪地球"
+/// without matching a title that merely carries one of its characters.
+const CJK_BOOST: f32 = 4.0;
 
 const COMMON_SHARE: f64 = 0.3;
 
@@ -147,7 +154,34 @@ fn token_clause(fields: &Fields, token: &Token, scale: f32) -> Box<dyn Query> {
             }
         }
     }
+    if let Some(bigrams) = cjk_bigrams(&token.text) {
+        let clauses: Vec<(Occur, Box<dyn Query>)> = bigrams
+            .into_iter()
+            .map(|bigram| {
+                (
+                    Occur::Must,
+                    exact(Term::from_field_text(fields.cjk, &bigram)),
+                )
+            })
+            .collect();
+        variants.push(should(Box::new(BooleanQuery::new(clauses)), CJK_BOOST * scale));
+    }
     Box::new(BooleanQuery::new(variants))
+}
+
+/// Every adjacent pair of characters in a token that carries Chinese. A Latin
+/// token answers `None`: its own field already matches it as written.
+fn cjk_bigrams(text: &str) -> Option<Vec<String>> {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() < 2 || !chars.iter().any(|c| super::pinyin::is_cjk(*c)) {
+        return None;
+    }
+    Some(
+        chars
+            .windows(2)
+            .map(|pair| pair.iter().collect())
+            .collect(),
+    )
 }
 
 const AS_WRITTEN: f32 = 2.0;

@@ -28,7 +28,15 @@ export const GUTTER = 34;
 export const TRANSPORT_HEIGHT = 164;
 export const ROW_GAP = 24;
 
-const TRANSPORT: ReadonlySet<ControlId> = new Set<ControlId>(['rewind', 'play', 'forward']);
+// Episode steps belong to the transport: previous sits left of play, next to
+// its right, with the ten-second skips outside them.
+const TRANSPORT: ReadonlySet<ControlId> = new Set<ControlId>([
+  'rewind',
+  'previous',
+  'play',
+  'next',
+  'forward',
+]);
 
 export const isTransport = (id: ControlId): boolean => TRANSPORT.has(id);
 

@@ -97,6 +97,65 @@ async fn naming_an_ungranted_library_outright_lists_nothing_rather_than_everythi
     assert_eq!(items.as_array().map(Vec::len), Some(0));
 }
 
+fn set_certification(app: &crate::api::test_support::TestApp, id: &str, certification: Option<&str>) {
+    let meta: crate::model::Metadata = serde_json::from_value(json!({
+        "tmdbId": 1,
+        "genres": [],
+        "tmdbUrl": "x",
+        "certification": certification,
+    }))
+    .unwrap();
+    crate::db::set_item_metadata(&app.state.db, id, &meta).unwrap();
+}
+
+#[tokio::test]
+async fn a_limited_account_sees_and_opens_only_titles_within_its_age() {
+    let app = test_app();
+    let (viewer_id, viewer) = seed_session(
+        &app.state,
+        "kid@test.dev",
+        "kid",
+        &[Permission::Playback],
+    );
+    crate::db::set_user_content_limit(&app.state.db, &viewer_id, Some(Some(12)), Some(false))
+        .unwrap();
+    let rated = demo_item_id("Blade Runner 2049");
+    let unrated = demo_item_id("The Matrix");
+    set_certification(&app, &rated, Some("R"));
+
+    // The R-rated title and the unrated one are both out at this policy.
+    let (status, movies) = get(&app.app, "/api/movies", Some(&viewer)).await;
+    assert_eq!(status, StatusCode::OK);
+    let ids: Vec<&str> = movies
+        .as_array()
+        .expect("movies array")
+        .iter()
+        .filter_map(|movie| movie["id"].as_str())
+        .collect();
+    assert!(!ids.contains(&rated.as_str()), "{ids:?}");
+    assert!(!ids.contains(&unrated.as_str()), "{ids:?}");
+
+    for id in [&rated, &unrated] {
+        let (status, _) = get(&app.app, &format!("/api/items/{id}"), Some(&viewer)).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "detail {id}");
+        let (status, _) = get(
+            &app.app,
+            &format!("/api/items/{id}/download"),
+            Some(&viewer),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "download {id}");
+    }
+
+    // A rating inside the limit shows; an unrated title shows once allowed.
+    set_certification(&app, &rated, Some("PG"));
+    crate::db::set_user_content_limit(&app.state.db, &viewer_id, None, Some(true)).unwrap();
+    for id in [&rated, &unrated] {
+        let (status, _) = get(&app.app, &format!("/api/items/{id}"), Some(&viewer)).await;
+        assert_eq!(status, StatusCode::OK, "detail {id}");
+    }
+}
+
 #[tokio::test]
 async fn a_title_outside_the_grant_is_not_reachable_by_its_id() {
     let h = household_where_the_viewer_only_sees_films();
@@ -108,6 +167,7 @@ async fn a_title_outside_the_grant_is_not_reachable_by_its_id() {
         format!("/api/shows/{}/metadata", h.show),
         format!("/api/items/{}/download", h.episode),
         format!("/api/items/{}/similar", h.episode),
+        format!("/api/items/{}/collection", h.episode),
     ] {
         let (status, _) = get(&h.app.app, &uri, Some(&h.viewer)).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{uri} should refuse");

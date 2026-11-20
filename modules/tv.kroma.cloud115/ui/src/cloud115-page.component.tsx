@@ -28,8 +28,32 @@ import type {
   CloudLibrary,
   CloudOptions,
   CloudStatusView,
+  LoginStarted,
+  LoginState,
   SyncReport,
 } from './schemas';
+
+const LOGIN_APPS = [
+  { value: 'alipaymini', label: '支付宝小程序' },
+  { value: 'wechatmini', label: '微信小程序' },
+  { value: 'tv', label: '电视端' },
+  { value: 'apple_tv', label: 'Apple TV 端' },
+  { value: 'harmony', label: '鸿蒙端' },
+  { value: 'os_linux', label: 'Linux 客户端' },
+  { value: 'os_mac', label: 'Mac 客户端' },
+  { value: 'os_windows', label: 'Windows 客户端' },
+  { value: 'web', label: '网页端' },
+] as const;
+
+const APP_SELECT: CSSProperties = {
+  background: 'var(--kroma-surface-1)',
+  border: '1px solid var(--kroma-border)',
+  borderRadius: 'var(--radius-md)',
+  padding: '10px 12px',
+  color: 'var(--kroma-text)',
+  font: 'var(--type-body)',
+  minWidth: 180,
+};
 
 const ERRORS_PANE: CSSProperties = {
   margin: 0,
@@ -146,6 +170,14 @@ export function Cloud115Settings() {
   const [error, setError] = useState<string | null>(null);
   const loaded = useRef(false);
   const [picker, setPicker] = useState<{ at: number; mode: 'remote' | 'local' } | null>(null);
+  const [loginApp, setLoginApp] = useState<string>('alipaymini');
+  const [login, setLogin] = useState<LoginStarted | null>(null);
+  const [loginState, setLoginState] = useState<LoginState | null>(null);
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [uploadRemote, setUploadRemote] = useState('');
+  const [uploadPath, setUploadPath] = useState('');
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
   const baseMismatch = Boolean(baseUrl) && baseUrl.replace(/\/$/, '') !== origin;
 
@@ -182,6 +214,111 @@ export function Cloud115Settings() {
       .catch(() => undefined);
     return () => clearInterval(id);
   }, [api, t]);
+
+  // Poll a scan while it is open; a confirmed one has already stored the
+  // cookies server-side, so the page only has to re-read its settings.
+  useEffect(() => {
+    if (!login) {
+      return;
+    }
+    const id = setInterval(() => {
+      api
+        .loginState(login.flow)
+        .then((view) => {
+          setLoginState(view);
+          if (view.status === 'confirmed') {
+            setLogin(null);
+            setHasCookie(true);
+            setSaved(false);
+            setDirty(false);
+            api.settings().then((settings) => setResolved(settings.resolvedLocal)).catch(() => undefined);
+            api.account().then(setAccount).catch(() => undefined);
+          } else if (view.status === 'expired' || view.status === 'failed') {
+            setLogin(null);
+          }
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => clearInterval(id);
+  }, [api, login]);
+
+  const startLogin = () => {
+    setLoginBusy(true);
+    setLoginState(null);
+    api
+      .loginStart(loginApp)
+      .then(setLogin)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+      .finally(() => setLoginBusy(false));
+  };
+
+  const cancelLogin = () => {
+    if (login) {
+      void api.loginCancel(login.flow).catch(() => undefined);
+    }
+    setLogin(null);
+  };
+
+  const rapidCheck = async () => {
+    const remote = uploadRemote.trim();
+    const path = uploadPath.trim();
+    if (!remote || !path) {
+      setUploadMsg(t('cloud115.uploadMissing'));
+      return;
+    }
+    setUploadBusy(true);
+    setUploadMsg(null);
+    try {
+      const result = await api.uploadRapid(remote, path);
+      setUploadMsg(
+        result.hit
+          ? t('cloud115.uploadHit', { pickcode: result.pickcode ?? '' })
+          : t('cloud115.uploadRejected', { status: result.status }),
+      );
+    } catch (reason) {
+      setUploadMsg(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+
+  const uploadFile = async () => {
+    const remote = uploadRemote.trim();
+    const path = uploadPath.trim();
+    if (!remote || !path) {
+      setUploadMsg(t('cloud115.uploadMissing'));
+      return;
+    }
+    setUploadBusy(true);
+    setUploadMsg(t('cloud115.uploadStarting'));
+    try {
+      const started = await api.uploadStart(remote, path);
+      if (started.hit) {
+        setUploadMsg(t('cloud115.uploadHit', { pickcode: started.pickcode ?? '' }));
+        return;
+      }
+      if (!started.upload) {
+        setUploadMsg(t('cloud115.uploadRejected', { status: -1 }));
+        return;
+      }
+      for (let index = 0; index < started.parts; index += 1) {
+        setUploadMsg(
+          t('cloud115.uploadProgress', {
+            done: index + 1,
+            total: started.parts,
+          }),
+        );
+        await api.uploadPart(started.upload, index);
+      }
+      setUploadMsg(t('cloud115.uploadMerging'));
+      const done = await api.uploadFinish(started.upload);
+      setUploadMsg(t('cloud115.uploadDone', { pickcode: done.pickcode }));
+    } catch (reason) {
+      setUploadMsg(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setUploadBusy(false);
+    }
+  };
 
   if (!canManage) {
     return <Denied />;
@@ -232,6 +369,26 @@ export function Cloud115Settings() {
         setError(result.errors.join('；'));
       } else if (view.resolvedLocal.some((path) => !path)) {
         setError(t('cloud115.unresolved'));
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importCookie = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.loginCookie(cookie.trim());
+      if (result.ok) {
+        setCookie('');
+        setHasCookie(true);
+        setSaved(true);
+        setSavedAt(new Date());
+      } else {
+        setError(result.message);
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -331,11 +488,72 @@ export function Cloud115Settings() {
               </Field.Root>
             </div>
             <Row gap={8}>
+              {cookie.trim() ? (
+                <Button
+                  label={t('cloud115.cookieImport')}
+                  variant="glass"
+                  size="sm"
+                  onPress={() => void importCookie()}
+                  disabled={busy}
+                />
+              ) : null}
               {hasCookie ? (
                 <Button label={t('cloud115.clearCookie')} variant="ghost" size="sm" onPress={() => void clearCookie()} />
               ) : null}
             </Row>
           </div>
+          <Row wrap gap={10} mt={18} center>
+            <select
+              value={loginApp}
+              onChange={(event) => setLoginApp(event.target.value)}
+              style={APP_SELECT}
+              aria-label={t('cloud115.qrApp')}
+            >
+              {LOGIN_APPS.map((app) => (
+                <option key={app.value} value={app.value}>
+                  {app.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              label={t('cloud115.qrLogin')}
+              icon="qrcode"
+              variant="glass"
+              size="sm"
+              onPress={startLogin}
+              disabled={loginBusy || login !== null}
+            />
+            <Text variant="meta" color="textDim">
+              {t('cloud115.qrHint')}
+            </Text>
+          </Row>
+          {login ? (
+            <Row wrap gap={20} mt={14} align="flex-start">
+              <img
+                src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(login.svg)}`}
+                alt={t('cloud115.qrLogin')}
+                style={{ width: 220, height: 220, background: '#fff', padding: 8, borderRadius: 12 }}
+              />
+              <Box gap={8}>
+                <Text variant="meta" color="textDim">
+                  {loginState?.message ?? t('cloud115.qrWaiting')}
+                </Text>
+                <Row gap={8}>
+                  <Button
+                    label={t('cloud115.qrCancel')}
+                    variant="ghost"
+                    size="sm"
+                    onPress={cancelLogin}
+                  />
+                </Row>
+                <div style={{ maxWidth: 320, wordBreak: 'break-all' }}>
+                  <Text variant="meta" color="textDim">
+                    {login.qr}
+                  </Text>
+                </div>
+              </Box>
+            </Row>
+          ) : null}
           {baseMismatch ? (
             <Row wrap gap={10} mt={10} center>
               <Text variant="meta" color="accentText">{t('cloud115.baseMismatch')}</Text>
@@ -388,6 +606,61 @@ export function Cloud115Settings() {
               <Button label={t('cloud115.addMapping')} icon="plus" variant="ghost" size="sm" onPress={() => { setDirty(true); setLibraries((current) => [...current, { ...EMPTY_LIBRARY }]); }} disabled={busy} />
             </Row>
           </Box>
+        </Surface>
+      </Section.Root>
+
+      <Section.Root mt={28}>
+        <Section.Header>
+          <Section.Title>{t('cloud115.upload')}</Section.Title>
+        </Section.Header>
+        <Text variant="meta" color="textDim" mt={-8} mb={16}>
+          {t('cloud115.uploadHint')}
+        </Text>
+        <Surface elevated border="border" pad="none" px={22} py={20}>
+          <div style={GRID_ROW}>
+            <div style={CELL}>
+              <Field.Root
+                label={t('cloud115.uploadRemote')}
+                value={uploadRemote}
+                onValueChange={setUploadRemote}
+              >
+                <Field.Input placeholder="/电影" />
+                <Field.Hint>{t('cloud115.uploadRemoteHint')}</Field.Hint>
+              </Field.Root>
+            </div>
+            <div style={CELL}>
+              <Field.Root
+                label={t('cloud115.uploadPath')}
+                value={uploadPath}
+                onValueChange={setUploadPath}
+              >
+                <Field.Input placeholder="/media/电影/xxx.mkv" />
+                <Field.Hint>{t('cloud115.uploadPathHint')}</Field.Hint>
+              </Field.Root>
+            </div>
+          </div>
+          <Row wrap gap={8} mt={10} center>
+            <Button
+              label={t('cloud115.uploadRapid')}
+              variant="ghost"
+              size="sm"
+              onPress={() => void rapidCheck()}
+              disabled={uploadBusy}
+            />
+            <Button
+              label={t('cloud115.uploadFile')}
+              icon="upload"
+              variant="glass"
+              size="sm"
+              onPress={() => void uploadFile()}
+              disabled={uploadBusy}
+            />
+            {uploadMsg ? (
+              <Text variant="meta" color="textDim">
+                {uploadMsg}
+              </Text>
+            ) : null}
+          </Row>
         </Surface>
       </Section.Root>
 
@@ -472,6 +745,13 @@ export function Cloud115Settings() {
                 onChange={(linkTtlSecs) => patchOptions({ linkTtlSecs })}
               />
             </div>
+            <div style={CELL}>
+              <NumberField
+                label={t('cloud115.pageSize')}
+                value={options.pageSize}
+                onChange={(pageSize) => patchOptions({ pageSize })}
+              />
+            </div>
           </div>
           <Row between gap={16} mt={14}>
             <Box shrink={1} minW={0}>
@@ -484,6 +764,19 @@ export function Cloud115Settings() {
               checked={options.skipIso}
               onCheckedChange={(skipIso) => patchOptions({ skipIso })}
               label={t('cloud115.skipIso')}
+            />
+          </Row>
+          <Row between gap={16} mt={14}>
+            <Box shrink={1} minW={0}>
+              <Text variant="cardTitle">{t('cloud115.probe')}</Text>
+              <Text variant="meta" color="textDim" mt={2}>
+                {t('cloud115.probeHint')}
+              </Text>
+            </Box>
+            <Switch
+              checked={options.probeEnabled}
+              onCheckedChange={(probeEnabled) => patchOptions({ probeEnabled })}
+              label={t('cloud115.probe')}
             />
           </Row>
         </Surface>

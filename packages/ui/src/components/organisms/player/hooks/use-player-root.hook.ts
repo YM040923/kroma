@@ -255,10 +255,15 @@ function usePlayerRoot({
     onOpen: () => setPeekArmed(true),
     onClose: dismissPeek,
   });
-  // The drawer must not keep the phone's playback keys away: the moment the
-  // film rolls again, it gets out of the way.
+  // The drawer must not keep the phone's playback keys away: when the film is
+  // STARTED while the drawer is open it gets out of the way. Testing `playing`
+  // alone closed the drawer on the very next frame whenever it was opened
+  // during playback, which is why the picker looked dead.
+  const wasPlaying = useRef(c.playing);
   useEffect(() => {
-    if (c.playing && episodesOpen) {
+    const started = !wasPlaying.current && c.playing;
+    wasPlaying.current = c.playing;
+    if (started && episodesOpen) {
       nav.closeOverlay();
     }
   }, [c.playing, episodesOpen, nav.closeOverlay]);

@@ -30,6 +30,7 @@ const SHORT_LIVED: &[&str] = &[
     "imports",
     "job_logs",
     "job_runs",
+    "media_share",
     "network_flows_daily",
     "network_inbound_daily",
     "notification_deliveries",

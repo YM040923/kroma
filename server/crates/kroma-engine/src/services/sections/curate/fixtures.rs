@@ -32,6 +32,8 @@ pub(super) fn meta(rating: f32, genres: &[&str], directors: &[&str]) -> crate::m
         tmdb_genre_ids: Vec::new(),
         rating: Some(rating),
         certification: None,
+        collection_id: None,
+        collection_name: None,
         poster_url: None,
         backdrop_url: None,
         logo_url: None,

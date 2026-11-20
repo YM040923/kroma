@@ -36,7 +36,7 @@ pub fn metadata_counts(pool: &Pool) -> Result<(i64, i64, i64)> {
     // Episodes also carry metadata but aren't "titles"; exclude them so the
     // count matches the movie/loose-video figure the panel documents.
     let items: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM items WHERE metadata IS NOT NULL AND kind != 'episode'",
+        "SELECT COUNT(*) FROM items WHERE metadata IS NOT NULL AND kind IN ('movie','video')",
         [],
         |r| r.get(0),
     )?;

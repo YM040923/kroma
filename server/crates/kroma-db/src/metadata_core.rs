@@ -10,6 +10,8 @@
 
 use std::collections::HashMap;
 
+use rusqlite::OptionalExtension;
+
 use super::{params, Connection, Pool, Result, Row};
 
 use kroma_domain::{CastMember, CrewMember};
@@ -112,6 +114,18 @@ pub fn get_core(pool: &Pool, kind: &str, id: &str) -> Result<Option<MetaCore>> {
         Some(r) => Ok(Some(r?)),
         None => Ok(None),
     }
+}
+
+/// When a subject's invariant metadata was last written, in Unix milliseconds.
+pub fn updated_at(pool: &Pool, kind: &str, id: &str) -> Result<Option<i64>> {
+    let conn = pool.get()?;
+    Ok(conn
+        .query_row(
+            "SELECT updated_at FROM metadata_core WHERE subject_kind=?1 AND subject_id=?2",
+            params![kind, id],
+            |r| r.get(0),
+        )
+        .optional()?)
 }
 
 /// Invariant cores for a batch of ids (one query per id-chunk), keyed by id.

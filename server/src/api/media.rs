@@ -5,7 +5,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::api::error::json_error;
 use crate::api::extract::AuthUser;
@@ -33,8 +33,11 @@ pub fn routes() -> Router<SharedState> {
         .route("/items", get(list_items))
         .route("/movies", get(list_movies))
         .route("/shows", get(list_shows))
+        .route("/photos", get(list_photos))
+        .route("/other", get(list_other))
         .route("/shows/{id}", get(get_show))
         .route("/items/{id}", get(get_item))
+        .route("/items/{id}/collection", get(collection))
         .route_layer(axum::middleware::from_fn(etag::revalidate))
 }
 
@@ -94,11 +97,12 @@ pub async fn list_items(
 ) -> Result<Response, Response> {
     let mut items = query(&state.db, move |pool| {
         let mut items = db::list_items(&pool, q.library.as_deref())?;
+        items.retain(|item| matches!(item.kind, crate::model::Kind::Movie | crate::model::Kind::Video | crate::model::Kind::Episode));
         db::localize::overlay_items(&pool, &mut items, locale)?;
         Ok(items)
     })
     .await?;
-    visibility::keep_items(&user, &mut items);
+    visibility::keep_items_certified(&state, &user, &mut items).await?;
     Ok(Json(items).into_response())
 }
 
@@ -120,6 +124,44 @@ pub async fn list_movies(
     .await?;
     visibility::keep_items(&user, &mut items);
     Ok(items_in_view(items, q.view))
+}
+
+/// `GET /api/photos?library=&month=YYYY-MM` → photo items ordered by EXIF capture
+/// time (falling back to file modification time during scanning).
+#[derive(Debug, Deserialize)]
+pub struct PhotosQuery {
+    pub library: Option<String>,
+    pub month: Option<String>,
+}
+
+pub async fn list_photos(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    Query(q): Query<PhotosQuery>,
+) -> Result<Response, Response> {
+    let mut items = query(&state.db, move |pool| {
+        let mut items = db::list_photos(&pool, q.library.as_deref())?;
+        if let Some(month) = q.month.filter(|month| {
+            month.len() == 7 && month.as_bytes().get(4) == Some(&b'-')
+        }) {
+            items.retain(|item| item.added_at.get(..7) == Some(month.as_str()));
+        }
+        Ok(items)
+    })
+    .await?;
+    visibility::keep_items(&user, &mut items);
+    Ok(Json(items).into_response())
+}
+
+/// `GET /api/other?library=` → unclassified entries from Other libraries.
+pub async fn list_other(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    Query(q): Query<LibraryQuery>,
+) -> Result<Response, Response> {
+    let mut items = query(&state.db, move |pool| db::list_other(&pool, q.library.as_deref())).await?;
+    visibility::keep_items(&user, &mut items);
+    Ok(Json(items).into_response())
 }
 
 /// `items` as JSON, each cut down to a [`MediaCard`] when the caller asked for
@@ -280,6 +322,39 @@ pub async fn get_show(
     })
     .await?;
     Ok(Json(detail).into_response())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CollectionView {
+    /// The series' own name, as the title was enriched. Absent for a group
+    /// known only by a provider id (not produced by the current lookups).
+    name: Option<String>,
+    items: Vec<MediaCard>,
+}
+
+/// `GET /api/items/:id/collection` → the other films of the same series, as a
+/// poster rail draws them, in release order. A title with no series answers
+/// with an empty rail, never an error: most titles belong to none.
+async fn collection(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    ContentLocale(locale): ContentLocale,
+    Path(id): Path<String>,
+) -> Result<Response, Response> {
+    visibility::gate_item(&state, &user, &id).await?;
+    let (name, mut items) = query(&state.db, move |pool| {
+        let (name, mut items) = db::collection_members(&pool, &id)?;
+        db::localize::overlay_items(&pool, &mut items, locale)?;
+        Ok((name, items))
+    })
+    .await?;
+    visibility::keep_items(&user, &mut items);
+    Ok(Json(CollectionView {
+        name,
+        items: items.into_iter().map(MediaCard::from).collect(),
+    })
+    .into_response())
 }
 
 /// `GET /api/items/:id` → `MediaItem`, whose subtitle list is the tracks inside

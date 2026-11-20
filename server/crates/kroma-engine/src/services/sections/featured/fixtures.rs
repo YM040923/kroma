@@ -25,6 +25,8 @@ pub(super) fn meta(rating: Option<f32>, backdrop: bool, overview: bool) -> Metad
         tmdb_genre_ids: Vec::new(),
         rating,
         certification: None,
+        collection_id: None,
+        collection_name: None,
         poster_url: None,
         backdrop_url: backdrop.then(|| "https://img/b.jpg".to_string()),
         logo_url: None,

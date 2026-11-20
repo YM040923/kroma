@@ -110,6 +110,16 @@ impl Fetch {
         self.send(Call::post(body.len() as u64), url, config)
     }
 
+    /// PUT a raw byte body (a cloud drive's object-storage part).
+    pub fn put_bytes(&self, url: &str, content_type: &str, body: &[u8]) -> Result<Response> {
+        let file = body_file(body)?;
+        let mut config = self.base_config();
+        config.push_str(&header_line("content-type", content_type));
+        config.push_str(&body_line(file.path()));
+        config.push_str(&option_line("url", url));
+        self.send(Call::put(body.len() as u64), url, config)
+    }
+
     /// `application/x-www-form-urlencoded` POST (qBittorrent login/actions).
     /// With no fields it is a POST with an empty body rather than a GET, which
     /// is what Roku's ECP wants: the arguments in the query string, nothing else.

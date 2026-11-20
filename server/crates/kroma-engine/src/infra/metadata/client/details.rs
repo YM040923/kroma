@@ -57,10 +57,29 @@ fn metadata_from(d: Details, target: Target, id: u64, lang2: &str, country: &str
         }
     }
 
+    // A collection name is the provider's, in the language this lookup asked
+    // for; an untitled collection is no collection.
+    let collection = d.belongs_to_collection.and_then(|c| {
+        let name = c.name.trim();
+        (!name.is_empty()).then(|| (Some(c.id), Some(name.to_string())))
+    });
+    let (collection_id, collection_name) = collection.unwrap_or((None, None));
+
+    let poster_path = d
+        .images
+        .as_ref()
+        .and_then(|images| super::details_json::pick_poster(&images.posters, lang2))
+        .or(d.poster_path);
+    let backdrop_path = d
+        .images
+        .as_ref()
+        .and_then(|images| super::details_json::pick_backdrop(&images.backdrops, lang2))
+        .or(d.backdrop_path);
+
     // Gallery artwork rides beside the primary backdrop: best-voted first, and
     // never the hero image itself, so a client can show the whole set without
     // repeating its first slide.
-    let backdrop_url = d.backdrop_path.map(|p| format!("{IMG}/w1280{p}"));
+    let backdrop_url = backdrop_path.map(|p| format!("{IMG}/w1280{p}"));
     let mut backdrops: Vec<String> = d
         .images
         .as_ref()
@@ -96,7 +115,9 @@ fn metadata_from(d: Details, target: Target, id: u64, lang2: &str, country: &str
             .release_dates
             .or(d.content_ratings)
             .and_then(|c| c.preferring(country)),
-        poster_url: d.poster_path.map(|p| format!("{IMG}/w500{p}")),
+        collection_id,
+        collection_name,
+        poster_url: poster_path.map(|p| format!("{IMG}/w500{p}")),
         backdrop_url,
         logo_url: d
             .images
@@ -132,6 +153,21 @@ mod tests {
 
         assert_eq!(meta.tmdb_genre_ids, vec![35, 18]);
         assert_eq!(meta.genres, vec!["Comedy", "Drama"]);
+    }
+
+    #[test]
+    fn a_movie_keeps_the_series_it_belongs_to() {
+        let raw = r#"{
+            "id": 11,
+            "title": "Star Wars",
+            "belongs_to_collection": {"id": 10, "name": "Star Wars Collection"}
+        }"#;
+        let d: Details = serde_json::from_str(raw).unwrap();
+
+        let meta = metadata_from(d, Target::Movie, 11, "en", "US");
+
+        assert_eq!(meta.collection_id, Some(10));
+        assert_eq!(meta.collection_name.as_deref(), Some("Star Wars Collection"));
     }
 
     #[test]
@@ -196,6 +232,23 @@ mod tests {
 
         assert!(meta.tmdb_genre_ids.is_empty());
         assert!(meta.genres.is_empty());
+    }
+
+    #[test]
+    fn a_poster_prefers_configured_language_then_votes_and_size() {
+        let raw = r#"{
+            "id": 1,
+            "title": "X",
+            "poster_path": "/fallback.jpg",
+            "images": {"posters": [
+                {"file_path": "/en.jpg", "iso_639_1": "en", "vote_average": 9.5, "width": 2000, "height": 3000},
+                {"file_path": "/zh-small.jpg", "iso_639_1": "zh", "vote_average": 3.0, "width": 500, "height": 750},
+                {"file_path": "/zh-large.jpg", "iso_639_1": "zh", "vote_average": 3.0, "width": 1000, "height": 1500}
+            ]}
+        }"#;
+        let details: Details = serde_json::from_str(raw).unwrap();
+        let meta = metadata_from(details, Target::Movie, 1, "zh", "CN");
+        assert_eq!(meta.poster_url.as_deref(), Some("https://image.tmdb.org/t/p/w500/zh-large.jpg"));
     }
 
     #[test]

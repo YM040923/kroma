@@ -34,6 +34,14 @@ export function artworkApi(ctx: RequestContext) {
     return `${ctx.baseUrl}${path}`;
   };
 
+  /** Ticketed URL for a photo item in a Photos library. */
+  const photoUrl = (id: ItemId, width = 0): string => {
+    let url = ctx.url('/items/:id/photo', { params: { id } });
+    if (width > 0) url = withParam(url, 'width', String(width));
+    const held = ctx.mediaTicket();
+    return held ? withParam(url, 't', held) : url;
+  };
+
   /** Generated SVG poster URL for a movie/episode. */
   const posterUrl = (id: ItemId) => ctx.url('/items/:id/poster', { params: { id } });
 
@@ -42,6 +50,7 @@ export function artworkApi(ctx: RequestContext) {
 
   return {
     resolve,
+    photoUrl,
     posterUrl,
     showPosterUrl,
 

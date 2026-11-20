@@ -22,6 +22,8 @@ pub(super) fn meta(title: &str) -> Metadata {
         tmdb_genre_ids: vec![878],
         rating: None,
         certification: None,
+        collection_id: None,
+        collection_name: None,
         poster_url: None,
         backdrop_url: None,
         logo_url: None,

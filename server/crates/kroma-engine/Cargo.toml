@@ -71,9 +71,15 @@ lzma-rust2 = { version = "0.24", default-features = false, features = ["std", "x
 notify = { workspace = true }
 sysinfo = { workspace = true }
 tantivy = { workspace = true }
+# Pinyin spellings of Chinese titles, indexed beside the text so the catalogue
+# is reachable from a Latin keyboard.
+pinyin = "0.11"
+# The Douban search page is HTML; a small set of patterns reads its list.
+regex = "1"
 rusty-chromaprint = { workspace = true }
 # The interfaces and addresses this machine holds, for the direct LAN route.
 if-addrs = "0.15"
+kamadak-exif = "0.6.1"
 
 [dev-dependencies]
 # The shared HostCtx doubles: `testing::Recording` taps a real app host's bus,

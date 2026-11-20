@@ -4,6 +4,7 @@ import type { DownloadProgressEvent, MediaRequest } from '@kromatv/client/reques
 import { useLocale, useT } from '@kromatv/ui';
 import { Box, Button, Dialog, EmptyState, Icon, IconButton, Row, Text } from '@kromatv/ui/kit';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { ViewProps } from 'react-native';
 import { apiBase } from '#web/shared/lib/api';
@@ -21,6 +22,7 @@ export function MyRequestsList() {
   const t = useT();
   const { client } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const requestsQuery = webRuntime.queries.userQueries.myRequests();
   const { data: requests, isPending } = useQuery({
     ...requestsQuery,
@@ -92,7 +94,7 @@ export function MyRequestsList() {
               req={req}
               progress={progress[req.id]}
               busy={busyId === req.id}
-              onCancel={() => cancel(req)}
+              onMenu={() => setMenu(req)}
             />
           </div>
         ))}
@@ -106,15 +108,35 @@ export function MyRequestsList() {
       >
         <Box gap={8}>
           <Button
-            variant="dangerGhost"
-            label={t('requests.cancel')}
-            disabled={!menu || busyId === menu.id}
+            variant="glass"
+            label={t('requests.edit')}
+            disabled={!menu}
             onPress={() => {
               if (menu) {
-                cancel(menu);
+                const target = menu;
+                setMenu(null);
+                void navigate({
+                  to: '/discover/$type/$tmdbId',
+                  params: {
+                    type: tmdbKindOf(target.kind),
+                    tmdbId: String(target.tmdbId),
+                  },
+                });
               }
             }}
           />
+          {menu && menu.status !== 'available' ? (
+            <Button
+              variant="dangerGhost"
+              label={t('requests.cancel')}
+              disabled={busyId === menu.id}
+              onPress={() => {
+                if (menu) {
+                  cancel(menu);
+                }
+              }}
+            />
+          ) : null}
           <Button variant="ghost" label={t('common.cancel')} onPress={() => setMenu(null)} />
         </Box>
       </Dialog.Root>
@@ -151,12 +173,12 @@ function RequestRow({
   req,
   progress,
   busy,
-  onCancel,
+  onMenu,
 }: Readonly<{
   req: MediaRequest;
   progress?: number;
   busy: boolean;
-  onCancel: () => void;
+  onMenu: () => void;
 }>) {
   const t = useT();
   const locale = useLocale();
@@ -209,15 +231,13 @@ function RequestRow({
         <RequestStatusChip status={req.status} progress={progress ?? req.progress ?? null} />
       }
       aside={
-        req.status === 'pending' ? (
-          <IconButton
-            control="sm"
-            icon="x"
-            label={t('requests.cancel')}
-            onPress={onCancel}
-            disabled={busy}
-          />
-        ) : null
+        <IconButton
+          control="sm"
+          icon="dots"
+          label={t('requests.actions')}
+          onPress={onMenu}
+          disabled={busy}
+        />
       }
       link={<RequestLink req={req} />}
     />

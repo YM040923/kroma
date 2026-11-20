@@ -14,9 +14,9 @@ pub(crate) fn parse_metadata(json: Option<String>) -> Option<Metadata> {
 }
 
 /// Map a row of
-/// `id,email,username,avatar_url,created_at,permissions,language,has_pin,audio_language,subtitle_language,libraries`
+/// `id,email,username,avatar_url,created_at,permissions,language,has_pin,audio_language,subtitle_language,libraries,max_age,allow_unrated`
 /// to a [`User`]. Column 7 is a boolean (`pin_hash IS NOT NULL`) every SELECT
-/// that feeds this must project cols 0..=10 (the password-hash lookups carry them
+/// that feeds this must project cols 0..=12 (the password-hash lookups carry them
 /// before their trailing `password_hash`). Column 6 is read as `language`; the
 /// admin members query repurposes it for `last_seen` (which the caller re-reads
 /// itself).
@@ -33,6 +33,8 @@ pub(crate) fn row_to_user(r: &Row) -> rusqlite::Result<User> {
         audio_language: r.get(8)?,
         subtitle_language: r.get(9)?,
         libraries: parse_library_scope(r.get::<_, Option<String>>(10)?),
+        max_age: r.get::<_, Option<i64>>(11)?.map(|age| age.clamp(0, 21) as u8),
+        allow_unrated: r.get::<_, Option<bool>>(12)?.unwrap_or(true),
     })
 }
 
@@ -183,6 +185,8 @@ pub(crate) fn parse_kind(s: &str) -> Kind {
     match s {
         "episode" => Kind::Episode,
         "video" => Kind::Video,
+        "photo" => Kind::Photo,
+        "other" => Kind::Other,
         _ => Kind::Movie,
     }
 }

@@ -17,6 +17,8 @@ pub(super) fn user_with(permissions: Vec<Permission>) -> User {
         subtitle_language: None,
         permissions,
         libraries: crate::model::LibraryScope::All,
+        max_age: None,
+        allow_unrated: true,
         created_at: "2024-01-01T00:00:00Z".into(),
         has_pin: false,
     }

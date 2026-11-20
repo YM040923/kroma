@@ -14,11 +14,11 @@ use crate::Pool;
 const MOVIE_CREDITS: &str = "\
     SELECT i.id, json_extract(c.value,'$.name'), json_extract(c.value,'$.tmdbId') \
       FROM items i, json_each(i.metadata,'$.cast') c \
-     WHERE i.kind != 'episode' AND i.metadata IS NOT NULL \
+     WHERE i.kind IN ('movie','video') AND i.metadata IS NOT NULL \
     UNION ALL \
     SELECT i.id, json_extract(c.value,'$.name'), json_extract(c.value,'$.tmdbId') \
       FROM items i, json_each(i.metadata,'$.crew') c \
-     WHERE i.kind != 'episode' AND i.metadata IS NOT NULL";
+     WHERE i.kind IN ('movie','video') AND i.metadata IS NOT NULL";
 
 const SHOW_CREDITS: &str = "\
     SELECT s.id, json_extract(c.value,'$.name'), json_extract(c.value,'$.tmdbId') \

@@ -27,6 +27,8 @@ pub(super) fn blank_metadata() -> Metadata {
         tmdb_genre_ids: Vec::new(),
         rating: None,
         certification: None,
+        collection_id: None,
+        collection_name: None,
         poster_url: None,
         backdrop_url: None,
         logo_url: None,

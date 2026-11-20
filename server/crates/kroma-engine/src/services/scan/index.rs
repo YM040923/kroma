@@ -10,9 +10,8 @@ pub(super) struct Indexed {
     pub show: Option<String>,
 }
 
-/// Fold one parsed video file into the shared item / show maps: a movie upserts a
-/// `Movie` item; an episode upserts its show (widening a missing year) then the
-/// episode item. Either way the file + its mtime are recorded.
+/// Fold one parsed file into the shared item / show maps. `item_kind` keeps
+/// Photos and Other libraries from being mistaken for TMDB movies.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn index_parsed(
     parsed: Parsed,
@@ -20,30 +19,44 @@ pub(super) fn index_parsed(
     added_at: &str,
     file: MediaFile,
     mtime: Option<i64>,
+    item_kind: Option<Kind>,
     items: &mut HashMap<String, MediaItem>,
     shows: &mut HashMap<String, Show>,
     mtimes: &mut HashMap<String, Option<i64>>,
     lib_item_ids: &mut HashSet<String>,
     movie_seen: &mut bool,
     episode_seen: &mut bool,
+    photo_seen: &mut bool,
+    other_seen: &mut bool,
 ) -> Indexed {
     match parsed {
         Parsed::Movie { title, year } => {
-            *movie_seen = true;
+            let kind = item_kind.clone().unwrap_or(Kind::Movie);
+            match kind {
+                Kind::Movie | Kind::Video => *movie_seen = true,
+                Kind::Photo => *photo_seen = true,
+                Kind::Other => *other_seen = true,
+                Kind::Episode => {}
+            }
             let title = if title.is_empty() {
                 "Untitled".into()
             } else {
                 title
             };
-            let logical = movie_logical_id(lib_id, &title, year);
+            let logical = match item_kind {
+                Some(Kind::Photo | Kind::Other) => file.id.clone(),
+                Some(Kind::Movie | Kind::Episode | Kind::Video) | None => {
+                    movie_logical_id(lib_id, &title, year)
+                }
+            };
             lib_item_ids.insert(logical.clone());
             let item = items.entry(logical.clone()).or_insert_with(|| MediaItem {
                 id: logical.clone(),
                 title: title.clone(),
-                kind: Kind::Movie,
+                kind: kind.clone(),
                 year,
                 duration_ms: None,
-                container: String::new(),
+                container: if kind == Kind::Photo { file.container.clone() } else { String::new() },
                 video: None,
                 audio: None,
                 audio_tracks: Vec::new(),
@@ -55,7 +68,7 @@ pub(super) fn index_parsed(
                 episode: None,
                 episode_end: None,
                 episode_title: None,
-                rel_path: None,
+                rel_path: file.rel_path.clone(),
                 added_at: added_at.to_string(),
                 metadata: None,
                 abs_path: None,

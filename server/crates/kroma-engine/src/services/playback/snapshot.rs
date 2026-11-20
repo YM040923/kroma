@@ -62,6 +62,8 @@ fn kind_str(k: &crate::model::Kind) -> &'static str {
         crate::model::Kind::Movie => "movie",
         crate::model::Kind::Episode => "episode",
         crate::model::Kind::Video => "video",
+        crate::model::Kind::Photo => "photo",
+        crate::model::Kind::Other => "other",
     }
 }
 

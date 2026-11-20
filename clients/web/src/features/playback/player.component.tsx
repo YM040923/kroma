@@ -1,5 +1,5 @@
 import type { MediaItem } from '@kromatv/client/media';
-import { audioSupport, playerSubtitle } from '@kromatv/core';
+import { audioSupport, canDecodeAudioCodec, playerSubtitle } from '@kromatv/core';
 import {
   Player as UnifiedPlayer,
   useCast,
@@ -91,7 +91,15 @@ export function Player({
     },
   });
 
-  const audio = audioSupport(item);
+  // Judge the track that will actually play, not the file's representative one.
+  const selectedAudio = pb.audioTracks.find((track) => track.index === pb.audioIndex);
+  const audio = selectedAudio
+    ? {
+        canPlay: canDecodeAudioCodec(selectedAudio.codec),
+        messageKey: 'player.audioUnsupported' as const,
+        messageVars: { codec: selectedAudio.codec },
+      }
+    : audioSupport(item);
   const warn =
     !audio.canPlay && wc.playbackMode === 'direct' && audio.messageKey
       ? t(audio.messageKey, audio.messageVars)

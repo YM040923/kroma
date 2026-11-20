@@ -228,6 +228,8 @@ fn kind_str(k: &Kind) -> &'static str {
         Kind::Movie => "movie",
         Kind::Episode => "episode",
         Kind::Video => "video",
+        Kind::Photo => "photo",
+        Kind::Other => "other",
     }
 }
 
@@ -236,6 +238,8 @@ fn library_kind_str(k: &LibraryKind) -> &'static str {
         LibraryKind::Movies => "movies",
         LibraryKind::Shows => "shows",
         LibraryKind::Mixed => "mixed",
+        LibraryKind::Photos => "photos",
+        LibraryKind::Other => "other",
     }
 }
 

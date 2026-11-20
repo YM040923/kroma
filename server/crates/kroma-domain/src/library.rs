@@ -8,6 +8,8 @@ pub enum LibraryKind {
     Movies,
     Shows,
     Mixed,
+    Photos,
+    Other,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

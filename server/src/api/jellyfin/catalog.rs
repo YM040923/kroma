@@ -30,16 +30,18 @@ fn page(mut items: Vec<Value>, params: &HashMap<String, String>) -> Value {
 async fn visible_catalog(
     state: &SharedState, user: &User, locale: &'static str,
 ) -> Result<(Vec<MediaItem>, Vec<Show>), Response> {
-    let user = user.clone();
-    query(&state.db, move |pool| {
+    let (mut items, mut shows) = query(&state.db, move |pool| {
         let mut items = db::list_items(&pool, None)?;
         let mut shows = db::list_shows(&pool, None)?;
-        visibility::keep_items(&user, &mut items);
-        visibility::keep_shows(&user, &mut shows);
         db::localize::overlay_items(&pool, &mut items, locale)?;
         db::localize::overlay_shows(&pool, &mut shows, locale)?;
         Ok((items, shows))
-    }).await
+    }).await?;
+    // Episodes inherit their show's rating, so the batch filter resolves the
+    // shows once rather than judging each episode on its own empty metadata.
+    visibility::keep_items_certified(state, user, &mut items).await?;
+    visibility::keep_shows(user, &mut shows);
+    Ok((items, shows))
 }
 
 /// ParentId is never allowed to fall back to the entire catalogue.

@@ -9,6 +9,8 @@
   "jobs.acquisition.ondemand.name": "Hand-started search",
   "jobs.acquisition.refresh.desc": "Re-reads requested and monitored titles from TMDB so newly announced episodes join their ledger.",
   "jobs.acquisition.refresh.name": "Title refresh",
+  "jobs.artwork.refresh.desc": "Re-reads provider posters and backdrops for shows whose library asks for a periodic artwork refresh. Manual artwork choices are locked and never overwritten.",
+  "jobs.artwork.refresh.name": "Artwork refresh",
   "jobs.acquisition.rss.desc": "Reads the indexers' latest releases and grabs those a monitored title is missing or would upgrade to.",
   "jobs.acquisition.rss.name": "RSS sync",
   "jobs.acquisition.search.desc": "Searches the indexers for what monitored titles are missing, then for better copies of what they hold, and starts the downloads.",

@@ -23,6 +23,15 @@ pub struct User {
     pub subtitle_language: Option<String>,
     pub permissions: Vec<Permission>,
     pub libraries: LibraryScope,
+    /// The oldest age a title this account may see can be rated for; `None`
+    /// means no age limit. Derived from the provider's certification, which is
+    /// a "not known" for many titles — see [`allow_unrated`](Self::allow_unrated).
+    #[serde(rename = "maxAge", skip_serializing_if = "Option::is_none")]
+    pub max_age: Option<u8>,
+    /// Whether a title the provider has not rated is shown to a limited
+    /// account. Ignored when `max_age` is `None`.
+    #[serde(rename = "allowUnrated", default = "default_allow_unrated")]
+    pub allow_unrated: bool,
     #[serde(rename = "createdAt")]
     pub created_at: String,
     #[serde(rename = "hasPin")]
@@ -66,6 +75,10 @@ impl From<LibraryScope> for Option<Vec<String>> {
             LibraryScope::Only(ids) => Some(ids),
         }
     }
+}
+
+fn default_allow_unrated() -> bool {
+    true
 }
 
 impl User {
@@ -170,6 +183,8 @@ mod tests {
             subtitle_language: None,
             permissions,
             libraries,
+            max_age: None,
+            allow_unrated: true,
             created_at: String::new(),
             has_pin: false,
         }

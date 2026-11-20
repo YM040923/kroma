@@ -96,6 +96,11 @@ pub struct UpdateUserBody {
     pub username: Option<String>,
     #[serde(default, deserialize_with = "nullable")]
     pub libraries: Option<Option<Vec<String>>>,
+    /// `null` lifts the age limit; a number imposes one.
+    #[serde(default, deserialize_with = "nullable", rename = "maxAge")]
+    pub max_age: Option<Option<u8>>,
+    #[serde(default, rename = "allowUnrated")]
+    pub allow_unrated: Option<bool>,
 }
 
 const MAX_GRANTED_LIBRARIES: usize = 256;
@@ -182,6 +187,15 @@ pub async fn update_user(
         let id3 = id.clone();
         query(&state.db, move |pool| {
             db::set_user_libraries(&pool, &id3, &scope)
+        })
+        .await?;
+    }
+    if body.max_age.is_some() || body.allow_unrated.is_some() {
+        let max_age = body.max_age.map(|age| age.map(|age| age.min(21)));
+        let allow_unrated = body.allow_unrated;
+        let id3 = id.clone();
+        query(&state.db, move |pool| {
+            db::set_user_content_limit(&pool, &id3, max_age, allow_unrated)
         })
         .await?;
     }

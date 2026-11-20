@@ -24,6 +24,10 @@ pub const PRO: &str = "https://proapi.115.com";
 /// agent that asked for it.
 pub const MODULE_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
+/// The upload endpoint wants its own Android-client agent and version.
+pub const APP_VERSION: &str = "36.2.28";
+pub const UPLOAD_UA: &str = "Mozilla/5.0 115disk/36.2.28 115Browser/36.2.28 115wangpan_android/36.2.28";
+
 const TIMEOUT_SECS: u32 = 30;
 
 /// One failed call, with the two numbers that decide what to do about it: the
@@ -48,7 +52,7 @@ impl std::fmt::Display for ApiError {
 }
 
 impl ApiError {
-    fn network(message: impl Into<String>) -> Self {
+    pub(crate) fn network(message: impl Into<String>) -> Self {
         Self {
             http: 0,
             errno: 0,
@@ -378,6 +382,66 @@ impl SignAnswer {
     }
 }
 
+/// The upload key the signed init request is built around.
+pub async fn upload_key(cookie: &str, ua: &str) -> Result<String, ApiError> {
+    pacer().acquire().await.map_err(ApiError::network)?;
+    let (status, body) = call("GET", &format!("{WEB}/files/uploadinfo"), cookie, ua, None)?;
+    pacer().note(status, errno_of(&body)).await;
+    let envelope = check(status, &body)?;
+    text_of(&envelope.data, "userkey").ok_or_else(|| ApiError {
+        http: status,
+        errno: envelope.errno,
+        message: "115 没有给出上传密钥".into(),
+    })
+}
+
+fn text_of(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+}
+
+/// POST the signed upload init. The answer is usually AES+LZ4 rather than
+/// JSON; both shapes are accepted.
+pub async fn upload_init(cookie: &str, k_ec: &str, body: &[u8]) -> Result<Value, ApiError> {
+    pacer().acquire().await.map_err(ApiError::network)?;
+    let url = format!(
+        "https://uplb.115.com/4.0/initupload.php?k_ec={k_ec}&app_ver={APP_VERSION}"
+    );
+    let response = Fetch::default()
+        .purpose("cloud-drive")
+        .header("Cookie", cookie)
+        .header("User-Agent", UPLOAD_UA)
+        .header("Referer", "https://115.com/")
+        .header("Origin", "https://115.com")
+        .max_time(60)
+        .post_bytes(&url, "application/x-www-form-urlencoded", body)
+        .map_err(|error| ApiError::network(error.to_string()))?;
+    pacer().note(response.status, 0).await;
+    if !(200..300).contains(&response.status) {
+        return Err(ApiError {
+            http: response.status,
+            errno: 0,
+            message: "上传初始化被拒绝".into(),
+        });
+    }
+    let trimmed = response.body.iter().position(|byte| !byte.is_ascii_whitespace());
+    let starts_json = trimmed.is_some_and(|at| matches!(response.body[at], b'{' | b'['));
+    let payload = if starts_json {
+        response.body.clone()
+    } else {
+        crate::crypto::upload_response(&response.body)
+    };
+    serde_json::from_slice(&payload).map_err(|error| ApiError {
+        http: response.status,
+        errno: 0,
+        message: format!("认不出 115 的上传初始化响应：{error}"),
+    })
+}
+
 /// One query parameter out of a URL, without pulling in a URL parser.
 fn query_flag(url: &str, key: &str) -> Option<String> {
     let query = url.split_once('?')?.1.split('#').next()?;
@@ -399,7 +463,7 @@ fn errno_of(body: &str) -> i64 {
 }
 
 /// `application/x-www-form-urlencoded`, which the drive's path lookup wants.
-fn form_encode(raw: &str) -> String {
+pub(crate) fn form_encode(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len() * 3);
     for byte in raw.as_bytes() {
         match byte {

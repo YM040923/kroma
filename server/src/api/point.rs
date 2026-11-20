@@ -49,6 +49,8 @@ mod tests {
             subtitle_language: None,
             permissions: Vec::new(),
             libraries: crate::model::LibraryScope::All,
+            max_age: None,
+            allow_unrated: true,
             created_at: "now".into(),
             has_pin: false,
         }

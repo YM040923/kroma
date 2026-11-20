@@ -23,7 +23,7 @@ pub use find_titles::*;
 // Every query below selects `FROM cat`. The trailing space is intentional:
 // the per-query `SELECT …` is concatenated directly after it.
 const CAT_CTE: &str = "WITH cat(id,title,year,kind,metadata) AS (\
-    SELECT id,title,year,'movie',metadata FROM items WHERE kind != 'episode' \
+    SELECT id,title,year,'movie',metadata FROM items WHERE kind IN ('movie','video') \
     UNION ALL SELECT id,title,year,'show',metadata FROM shows) ";
 
 const DIRECTING_JOBS_SQL: &str = "('Director','Creator')";

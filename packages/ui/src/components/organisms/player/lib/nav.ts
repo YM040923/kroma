@@ -53,13 +53,15 @@ export function controlOrder(
   hasNext: boolean,
   series: SeriesControls = {},
 ): ControlId[] {
-  const row: ControlId[] = ['rewind', 'play', 'forward'];
+  const row: ControlId[] = ['rewind'];
   if (series.previous) {
     row.push('previous');
   }
+  row.push('play');
   if (hasNext) {
     row.push('next');
   }
+  row.push('forward');
   if (series.episodes) {
     row.push('episodes');
   }

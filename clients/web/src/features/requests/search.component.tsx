@@ -29,6 +29,7 @@ import {
   type DiscoverSearch,
   type DiscoverSource,
 } from '#web/features/requests/discover-search';
+import { DoubanResults } from '#web/features/requests/douban-results.component';
 import { LocalResults, TmdbResults } from '#web/features/requests/search-results.component';
 import { TrendingBrowse } from '#web/features/requests/trending.component';
 import {
@@ -47,7 +48,7 @@ const SOURCES: {
 }[] = [
   { value: 'library', labelKey: 'discover.source.library' },
   { value: 'tmdb', labelKey: 'discover.source.tmdb' },
-  { value: 'douban', labelKey: 'discover.source.douban', disabled: true },
+  { value: 'douban', labelKey: 'discover.source.douban' },
 ];
 
 const GUTTER = { paddingLeft: 'var(--gutter-web)', paddingRight: 'var(--gutter-web)' } as const;
@@ -165,7 +166,15 @@ export function SearchPage({
   // the search endpoint (which can span both kinds), an empty query with a
   // kind uses discover, and an empty query on "all" keeps the trending browse.
   let body: ReactNode;
-  if (search.source === 'library') {
+  if (search.source === 'douban') {
+    body = searching ? (
+      <DoubanResults q={search.q} />
+    ) : (
+      <EmptyState.Root icon="search">
+        <EmptyState.Title>{t('discover.doubanHint')}</EmptyState.Title>
+      </EmptyState.Root>
+    );
+  } else if (search.source === 'library') {
     if (localState.loading) {
       body = <LocalResults results={[]} loading />;
     } else if (localState.results.length === 0) {

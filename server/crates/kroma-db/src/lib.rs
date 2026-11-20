@@ -51,6 +51,7 @@ pub mod pipeline;
 pub mod push_subs;
 mod reports;
 mod requests;
+pub mod share;
 mod suggest;
 mod taste;
 // Namespaced (`db::translations::…` / `db::metadata_core::…`) rather than

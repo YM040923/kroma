@@ -10,7 +10,7 @@ use crate::db;
 use crate::db::imports::Lead;
 use crate::infra::events::ServerEvent;
 use crate::infra::metadata::Target;
-use crate::model::{MediaItem, Show};
+use crate::model::{Kind, MediaItem, Show};
 use crate::services::activity::{self, Shared as Activity};
 use crate::services::search::SearchEngine;
 use crate::state::SharedState;
@@ -45,9 +45,11 @@ pub struct EnrichSummary {
 /// `pipeline.metadata` stage.
 pub fn maybe_spawn(state: &SharedState, changed_shows: &HashSet<String>) {
     let Some(api_key) = state.config.tmdb_api_key.clone() else {
+        apply_nfo_only(state);
         return;
     };
     if !state.config.tmdb_enrich {
+        apply_nfo_only(state);
         return;
     }
     let jobs = match jobs_after_scan(state, changed_shows) {
@@ -71,11 +73,42 @@ pub fn maybe_spawn(state: &SharedState, changed_shows: &HashSet<String>) {
     );
 }
 
+fn apply_nfo_only(state: &SharedState) {
+    let state = state.clone();
+    thread::spawn(move || {
+        let Ok(mut items) = db::list_items(&state.db, None) else {
+            return;
+        };
+        items.retain(|item| matches!(item.kind, Kind::Movie | Kind::Video));
+        let Ok(shows) = db::list_shows(&state.db, None) else {
+            return;
+        };
+        let jobs = build_jobs(
+            &items,
+            &shows,
+            &load_pins(&state.db),
+            &state.config.data_dir,
+        );
+        let eng = engine_for(&state, String::new());
+        let mut applied = false;
+        for job in jobs {
+            if super::nfo::read_existing(&eng, &job).is_some() {
+                super::process::apply_nfo_metadata(&eng, &job);
+                applied = true;
+            }
+        }
+        if applied {
+            crate::services::search::spawn_reindex(state);
+        }
+    });
+}
+
 pub(super) fn jobs_after_scan(
     state: &SharedState,
     changed_shows: &HashSet<String>,
 ) -> anyhow::Result<Vec<Job>> {
-    let items = db::list_items(&state.db, None)?;
+    let mut items = db::list_items(&state.db, None)?;
+    items.retain(|item| matches!(item.kind, Kind::Movie | Kind::Video));
     let shows = db::list_shows(&state.db, None)?;
     let mut jobs = build_jobs(&items, &shows, &load_pins(&state.db), &state.config.data_dir);
     jobs.retain(|job| job.fetches(changed_shows));

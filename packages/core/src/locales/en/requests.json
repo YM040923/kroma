@@ -14,6 +14,8 @@
   "requests.backToQueue": "Back to the queue",
   "requests.calendarEmpty": "Nothing on the horizon",
   "requests.cancel": "Cancel request",
+  "requests.actions": "Request actions",
+  "requests.edit": "Open title",
   "requests.colDate": "Date",
   "requests.colEpisode": "Episode",
   "requests.colEpisodeShort": "Episode",

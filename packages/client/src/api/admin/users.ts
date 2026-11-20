@@ -27,6 +27,8 @@ export const AdminUser = User.pick({
   invitation: InvitationState.nullish(),
   permissions: z.array(Permission),
   libraries: z.array(LibraryId).nullable(),
+  maxAge: z.number().nullish(),
+  allowUnrated: z.boolean(),
   role: z.string(),
   lastSeen: z.string().nullish(),
   online: z.boolean(),
@@ -48,6 +50,8 @@ export const AdminUserPatch = AdminUser.pick({
   permissions: true,
   username: true,
   libraries: true,
+  maxAge: true,
+  allowUnrated: true,
 }).exactPartial();
 export type AdminUserPatch = z.infer<typeof AdminUserPatch>;
 

@@ -11,7 +11,7 @@ const WEBP_EFFORT: &str = "6";
 // blurry 1280. The source is measured first and resize only added when it
 // would actually shrink. ffmpeg is the fallback (`min(iw,W)` expresses the
 // same rule) since some ffmpeg builds lack the libwebp encoder.
-pub(super) fn encode_webp_capped(src: &Path, out: &Path, max_width: u32) -> bool {
+pub(crate) fn encode_webp_capped(src: &Path, out: &Path, max_width: u32) -> bool {
     // `is_some_and`, not `is_none_or`: an unreadable width must mean "do not
     // resize", never "resize anyway" (which would upscale).
     let too_wide = probe_width(src).is_some_and(|w| w > max_width);

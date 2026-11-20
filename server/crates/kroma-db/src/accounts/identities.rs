@@ -76,7 +76,7 @@ pub fn identity_user(pool: &Pool, issuer: &str, subject: &str) -> Result<Option<
     let user = conn
         .query_row(
             "SELECT u.id,u.email,u.username,u.avatar_url,u.created_at,u.permissions,u.language,\
-             (u.pin_hash IS NOT NULL),u.audio_language,u.subtitle_language,u.libraries \
+             (u.pin_hash IS NOT NULL),u.audio_language,u.subtitle_language,u.libraries,u.max_age,u.allow_unrated \
              FROM identities i JOIN users u ON u.id = i.user_id \
              WHERE i.issuer = ?1 AND i.subject = ?2 AND u.waiting = 0",
             params![issuer, subject],

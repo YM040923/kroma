@@ -90,9 +90,10 @@ impl SearchEngine {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let (items, shows) = db::index_snapshot(pool)?;
-        let (episodes, movies): (Vec<MediaItem>, Vec<MediaItem>) = items
+        let (episodes, mut movies): (Vec<MediaItem>, Vec<MediaItem>) = items
             .into_iter()
             .partition(|i| matches!(i.kind, Kind::Episode));
+        movies.retain(|item| matches!(item.kind, Kind::Movie | Kind::Video));
         // Every stored language, so a query matches in any of them.
         let tr_movies =
             db::translations::all_for_kind(pool, db::metadata_core::ITEM).unwrap_or_default();

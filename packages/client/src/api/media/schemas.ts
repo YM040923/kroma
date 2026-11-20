@@ -3,10 +3,10 @@ import { CastMember, Metadata } from './credits';
 import { ItemId, LibraryId, MediaFileId, ShowId } from './ids';
 import { AudioAnalysis, Edition, Marker, MediaFile, Tracks, VideoTrack } from './tracks';
 
-export const MediaKind = z.enum(['movie', 'episode', 'video']);
+export const MediaKind = z.enum(['movie', 'episode', 'video', 'photo', 'other']);
 export type MediaKind = z.infer<typeof MediaKind>;
 
-export const LibraryKind = z.enum(['movies', 'shows', 'mixed']);
+export const LibraryKind = z.enum(['movies', 'shows', 'mixed', 'photos', 'other']);
 export type LibraryKind = z.infer<typeof LibraryKind>;
 
 /** One TMDB title offered by the "fix the match" picker. `score` is the
@@ -84,6 +84,15 @@ export const MediaCard = MediaItem.pick({
   metadata: true,
 }).extend({ showId: ShowId.nullish() });
 export type MediaCard = z.infer<typeof MediaCard>;
+
+/** `GET /api/items/:id/collection`: the other films of the same series, in
+ * release order. `name` is the series' own name (an NFO `<set>` or the
+ * provider's collection); a title in no series answers with an empty list. */
+export const CollectionView = z.object({
+  name: z.string().nullish(),
+  items: z.array(MediaCard),
+});
+export type CollectionView = z.infer<typeof CollectionView>;
 
 /** An episode the provider lists that the library does not hold: enough to show
  * the gap with a title, a still and the day it airs. */

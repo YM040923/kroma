@@ -81,15 +81,15 @@ pub fn admin_users(pool: &Pool) -> Result<Vec<kroma_domain::AdminUser>> {
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_default();
     let mut stmt = conn.prepare(
-        "SELECT users.id,email,username,avatar_url,users.created_at,permissions,last_seen,(pin_hash IS NOT NULL),audio_language,subtitle_language,libraries,(email_verified_at IS NOT NULL),(rr.created_at IS NOT NULL),waiting,\
+        "SELECT users.id,email,username,avatar_url,users.created_at,permissions,last_seen,(pin_hash IS NOT NULL),audio_language,subtitle_language,libraries,max_age,allow_unrated,(email_verified_at IS NOT NULL),(rr.created_at IS NOT NULL),waiting,\
          (SELECT expires_at FROM invites WHERE user_id = users.id AND used_at IS NULL) \
          FROM users LEFT JOIN reset_requests rr ON rr.user_id = users.id AND rr.created_at > ?1 \
          ORDER BY users.created_at",
     )?;
     let rows = stmt.query_map([cutoff], |r| {
         let invitation = r
-            .get::<_, bool>(13)?
-            .then_some(r.get::<_, Option<i64>>(14)?)
+            .get::<_, bool>(15)?
+            .then_some(r.get::<_, Option<i64>>(16)?)
             .map(|lapses| kroma_domain::InvitationState::at(lapses, now.unix_timestamp()));
         admin_user(row_to_admin_user(r)?, r, invitation)
     })?;
@@ -109,12 +109,14 @@ fn admin_user(
         avatar_url: u.avatar_url,
         permissions: u.permissions,
         libraries: u.libraries,
+        max_age: u.max_age,
+        allow_unrated: u.allow_unrated,
         created_at: u.created_at,
         last_seen: r.get(6)?,
         online: false,
-        email_verified: r.get(11)?,
+        email_verified: r.get(13)?,
         has_pin: u.has_pin,
-        reset_requested: r.get(12)?,
+        reset_requested: r.get(14)?,
         invitation,
     })
 }
@@ -129,7 +131,7 @@ pub fn get_user(pool: &Pool, id: &str) -> Result<Option<User>> {
     let conn = pool.get()?;
     let user = conn
         .query_row(
-            "SELECT id,email,username,avatar_url,created_at,permissions,language,(pin_hash IS NOT NULL),audio_language,subtitle_language,libraries FROM users WHERE id = ?1",
+            "SELECT id,email,username,avatar_url,created_at,permissions,language,(pin_hash IS NOT NULL),audio_language,subtitle_language,libraries,max_age,allow_unrated FROM users WHERE id = ?1",
             params![id],
             row_to_user,
         )
@@ -145,6 +147,30 @@ pub fn update_user_permissions(pool: &Pool, id: &str, permissions: &[Permission]
         "UPDATE users SET permissions = ?2 WHERE id = ?1",
         params![id, perms_json],
     )?;
+    Ok(())
+}
+
+/// Set a member's content limit. `max_age` is `None` for "no change",
+/// `Some(None)` to lift the limit, `Some(Some(age))` to impose one.
+pub fn set_user_content_limit(
+    pool: &Pool,
+    id: &str,
+    max_age: Option<Option<u8>>,
+    allow_unrated: Option<bool>,
+) -> Result<()> {
+    let conn = pool.get()?;
+    if let Some(age) = max_age {
+        conn.execute(
+            "UPDATE users SET max_age = ?2 WHERE id = ?1",
+            params![id, age.map(i64::from)],
+        )?;
+    }
+    if let Some(allow) = allow_unrated {
+        conn.execute(
+            "UPDATE users SET allow_unrated = ?2 WHERE id = ?1",
+            params![id, allow],
+        )?;
+    }
     Ok(())
 }
 

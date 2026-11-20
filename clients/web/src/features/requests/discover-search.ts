@@ -6,9 +6,8 @@
 
 import type { DiscoverType } from '@kromatv/client/discovery';
 
-/** Where results come from. Douban is deliberately absent: there is no data
- * source behind it yet, so the UI offers it as a disabled placeholder only. */
-export type DiscoverSource = 'library' | 'tmdb';
+/** Where results come from: this catalogue, TMDB, or Douban's own search. */
+export type DiscoverSource = 'library' | 'tmdb' | 'douban';
 
 /** TMDB discover ordering. */
 export type DiscoverSort = 'popularity' | 'release' | 'rating';
@@ -77,7 +76,7 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T | und
 }
 
 const TYPES: readonly DiscoverType[] = ['all', 'movie', 'tv'];
-const SOURCES: readonly DiscoverSource[] = ['library', 'tmdb'];
+const SOURCES: readonly DiscoverSource[] = ['library', 'tmdb', 'douban'];
 const SORTS: readonly DiscoverSort[] = ['popularity', 'release', 'rating'];
 const STATES: readonly AvailabilityFilter[] = ['any', 'in', 'out'];
 const WATCHED: readonly WatchedFilter[] = ['any', 'watched', 'unwatched'];

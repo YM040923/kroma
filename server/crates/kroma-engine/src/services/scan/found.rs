@@ -19,6 +19,8 @@ pub(super) struct LibraryWalk<'a> {
     pub item_ids: HashSet<String>,
     pub movie_seen: bool,
     pub episode_seen: bool,
+    pub photo_seen: bool,
+    pub other_seen: bool,
 }
 
 impl<'a> LibraryWalk<'a> {
@@ -29,19 +31,29 @@ impl<'a> LibraryWalk<'a> {
             item_ids: HashSet::new(),
             movie_seen: false,
             episode_seen: false,
+            photo_seen: false,
+            other_seen: false,
         }
     }
 
     pub(super) fn library(&self) -> Library {
-        let detected = match (self.movie_seen, self.episode_seen) {
-            (false, true) => LibraryKind::Shows,
-            (true, true) => LibraryKind::Mixed,
-            _ => LibraryKind::Movies,
+        let detected = if self.photo_seen {
+            LibraryKind::Photos
+        } else if self.other_seen {
+            LibraryKind::Other
+        } else {
+            match (self.movie_seen, self.episode_seen) {
+                (false, true) => LibraryKind::Shows,
+                (true, true) => LibraryKind::Mixed,
+                _ => LibraryKind::Movies,
+            }
         };
         let kind = match self.def.kind.as_str() {
             "movies" => LibraryKind::Movies,
             "shows" => LibraryKind::Shows,
             "mixed" => LibraryKind::Mixed,
+            "photos" | "photo" => LibraryKind::Photos,
+            "other" => LibraryKind::Other,
             _ => detected,
         };
         Library {

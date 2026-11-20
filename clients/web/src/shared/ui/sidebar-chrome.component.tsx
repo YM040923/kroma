@@ -1,5 +1,5 @@
 import { useT } from '@kromatv/ui';
-import { Box, Button, Drawer, IconButton, Row, styles, useStyles } from '@kromatv/ui/kit';
+import { Box, Drawer, IconButton, Row, styles, useStyles } from '@kromatv/ui/kit';
 import { useRouterState } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
 import type { ViewStyle } from 'react-native';
@@ -24,30 +24,23 @@ const sDefinition = styles({
   drawerHead: { pl: 20, pr: 12, pb: 12, ...safeAreaTop(20) },
 });
 
-/** Fold / unfold the rail, and dismiss it. In the rail the two stack so both
- *  stay reachable inside the folded column. */
+/** One control for the three states: full → rail → hidden → full. The glyph
+ *  and its fill change with the state, so the button always says what the next
+ *  press does instead of standing as three separate keys. */
 export function SidebarModeControls({
   compact,
   onChange,
 }: Readonly<{ compact: boolean; onChange: (mode: SidebarMode) => void }>) {
   const t = useT();
+  const next: SidebarMode = compact ? 'hidden' : 'rail';
   return (
-    <Box row={!compact} gap={compact ? 4 : 2} align="center">
-      <IconButton
-        variant="ghost"
-        diameter={compact ? 28 : undefined}
-        icon={compact ? 'chevron-right' : 'chevron-left'}
-        label={t(compact ? 'nav.expandSidebar' : 'nav.collapseSidebar')}
-        onPress={() => onChange(compact ? 'expanded' : 'rail')}
-      />
-      <IconButton
-        variant="ghost"
-        diameter={compact ? 28 : undefined}
-        icon="arrow-bar-to-left"
-        label={t('nav.hideSidebar')}
-        onPress={() => onChange('hidden')}
-      />
-    </Box>
+    <IconButton
+      variant={compact ? 'glass' : 'ghost'}
+      diameter={compact ? 30 : undefined}
+      icon={compact ? 'arrow-bar-to-left' : 'chevron-left'}
+      label={t(compact ? 'nav.hideSidebar' : 'nav.collapseSidebar')}
+      onPress={() => onChange(next)}
+    />
   );
 }
 
@@ -102,7 +95,6 @@ interface LauncherProps {
  *  top-left corner, and the navigation it opens as an overlay sheet. The sheet
  *  closes itself on navigation and never reflows the page behind it. */
 export function HiddenSidebarLauncher({ brand, panelStyle, onExpand, children }: LauncherProps) {
-  const t = useT();
   const [open, setOpen] = useState(false);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [openedAt, setOpenedAt] = useState(pathname);
@@ -129,15 +121,6 @@ export function HiddenSidebarLauncher({ brand, panelStyle, onExpand, children }:
       >
         <SheetHeader brand={brand} onExpand={expand} />
         <Drawer.Panel>{children}</Drawer.Panel>
-        <Drawer.Footer>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon="chevron-right"
-            label={t('nav.expandSidebar')}
-            onPress={expand}
-          />
-        </Drawer.Footer>
       </Drawer.Root>
     </>
   );

@@ -5,6 +5,7 @@ import type { ItemId, LibraryId, ShowId } from './ids';
 import { rematchApi } from './rematch';
 import {
   CardSection,
+  CollectionView,
   Health,
   Library,
   MediaCard,
@@ -94,6 +95,14 @@ export default function mediaApi(ctx: RequestContext) {
     items: (library?: LibraryId) =>
       ctx.get('/items', MediaItem.array(), { query: { library }, concurrency: 'share' }),
 
+    /** Photos, ordered by EXIF capture date (or filesystem modification time). */
+    photos: (opts?: { library?: LibraryId; month?: string }) =>
+      ctx.get('/photos', MediaItem.array(), { query: opts, concurrency: 'share' }),
+
+    /** Unclassified items in an Other library; their filenames are kept as-is. */
+    other: (library?: LibraryId) =>
+      ctx.get('/other', MediaItem.array(), { query: { library }, concurrency: 'share' }),
+
     /** Movies only (excludes episodes). */
     movies: (library?: LibraryId) =>
       ctx.get('/movies', MediaItem.array(), { query: { library }, concurrency: 'share' }),
@@ -130,6 +139,11 @@ export default function mediaApi(ctx: RequestContext) {
     /** `similar()` as a poster rail draws it: a fraction of the full items. */
     similarCards: (id: ItemId) =>
       ctx.get('/items/:id/similar', MediaCard.array(), { params: { id }, query: { view: 'card' } }),
+
+    /** The other films of the same series (a provider collection or an NFO
+     * `<set>`), in release order. Empty for a title in no series. */
+    collection: (id: ItemId) =>
+      ctx.get('/items/:id/collection', CollectionView, { params: { id }, concurrency: 'share' }),
 
     /** Zero-shot themed row: titles matching a free-text phrase (e.g. "christmas
      * movie", "action"), ranked by content-embedding similarity (public). */

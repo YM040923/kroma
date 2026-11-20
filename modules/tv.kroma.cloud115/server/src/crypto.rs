@@ -180,6 +180,181 @@ fn xor(src: &[u8], key: &[u8]) -> Vec<u8> {
     out
 }
 
+// ---------------------------------------------------------------------------
+// Upload handshake (`uplb.115.com/4.0/initupload.php`). The wire formats are
+// 115's; this is a clean reimplementation, no reference code is linked.
+//
+// AES-CBC with a fixed key and IV; the padding is only the short form (a full
+// 16-byte block is never appended), and a response body is AES followed by LZ4
+// chunks, each prefixed with its little-endian length.
+
+use aes::Aes128;
+use cbc::cipher::{block_padding::NoPadding, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use md5::Md5;
+use sha1::Sha1;
+use sha1::Digest as _;
+
+const UP_AES_KEY: [u8; 16] = [
+    0xfb, 0x1a, 0x19, 0xd6, 0x52, 0xf5, 0xaa, 0xf7, 0xbc, 0x65, 0x1d, 0x0f, 0x69, 0xbf, 0x42, 0x2f,
+];
+const UP_AES_IV: [u8; 16] = [
+    0x69, 0xbf, 0x42, 0x2f, 0x49, 0x96, 0x05, 0x50, 0xa0, 0xad, 0x44, 0xec, 0x34, 0x46, 0xcb, 0x4c,
+];
+const UP_PUBKEY: [u8; 30] = [
+    0x1d, 0x03, 0x0e, 0x80, 0xa1, 0x78, 0xdc, 0xee, 0xce, 0xcd, 0xa3, 0x77, 0xde, 0x12, 0x8d, 0x8e,
+    0xd9, 0xdd, 0xcf, 0x55, 0xae, 0x61, 0xed, 0x46, 0xea, 0x12, 0x1a, 0x1c, 0xfc, 0x81,
+];
+const CRC_SALT: &[u8] = b"^j>WD3Kr?J2gLFjD4W2y@";
+const MD5_SALT: &[u8] = b"Qclm8MGWUv59TnrR0XPg";
+
+fn upload_pad(data: &[u8]) -> Vec<u8> {
+    let short = (16 - data.len() % 16) % 16;
+    let mut out = data.to_vec();
+    out.extend(std::iter::repeat(short as u8).take(short));
+    out
+}
+
+fn upload_unpad(mut data: Vec<u8>) -> Vec<u8> {
+    if let Some(&last) = data.last() {
+        let size = last as usize;
+        if (1..16).contains(&size)
+            && data.len() >= size
+            && data[data.len() - size..].iter().all(|byte| *byte == last)
+        {
+            data.truncate(data.len() - size);
+        }
+    }
+    data
+}
+
+type Aes128CbcEnc = cbc::Encryptor<Aes128>;
+type Aes128CbcDec = cbc::Decryptor<Aes128>;
+
+pub(crate) fn aes_encrypt(data: &[u8]) -> Vec<u8> {
+    Aes128CbcEnc::new((&UP_AES_KEY).into(), (&UP_AES_IV).into())
+        .encrypt_padded_vec_mut::<NoPadding>(&upload_pad(data))
+}
+
+pub(crate) fn aes_decrypt(data: &[u8]) -> Vec<u8> {
+    let whole = data.len() & !15;
+    Aes128CbcDec::new((&UP_AES_KEY).into(), (&UP_AES_IV).into())
+        .decrypt_padded_vec_mut::<NoPadding>(&data[..whole])
+        .map(upload_unpad)
+        .unwrap_or_default()
+}
+
+/// AES then the chunked LZ4 the upload endpoint answers with.
+pub(crate) fn upload_response(data: &[u8]) -> Vec<u8> {
+    let plain = aes_decrypt(data);
+    let mut src = plain.as_slice();
+    let mut out: Vec<u8> = Vec::new();
+    while src.len() > 2 {
+        let length = u16::from_le_bytes([src[0], src[1]]) as usize;
+        if length == 0 || src.len() < length + 2 {
+            break;
+        }
+        let mut chunk = vec![0u8; 0x2000];
+        if let Ok(written) = lz4_flex::block::decompress_into(&src[2..2 + length], &mut chunk) {
+            out.extend_from_slice(&chunk[..written]);
+        }
+        src = &src[2 + length..];
+    }
+    out
+}
+
+/// The `k_ec` query value: 115's public key around the timestamp, with a CRC.
+pub(crate) fn ec_token(timestamp: u32) -> String {
+    let mut token: Vec<u8> = Vec::with_capacity(46);
+    token.extend_from_slice(&UP_PUBKEY[..15]);
+    token.extend_from_slice(&[0x00, 0x73, 0x00, 0x00, 0x00]);
+    token.extend_from_slice(&timestamp.to_le_bytes());
+    token.extend_from_slice(&UP_PUBKEY[15..]);
+    token.extend_from_slice(&[0x00, 0x01, 0x00, 0x00, 0x00]);
+    let crc = crc32fast::hash(&[CRC_SALT, token.as_slice()].concat());
+    token.extend_from_slice(&crc.to_le_bytes());
+    base64::engine::general_purpose::STANDARD.encode(token)
+}
+
+pub(crate) struct UploadInit<'a> {
+    pub userkey: &'a str,
+    pub userid: &'a str,
+    pub fileid: &'a str,
+    pub filename: &'a str,
+    pub filesize: u64,
+    pub target: &'a str,
+    pub sign_key: &'a str,
+    pub sign_val: &'a str,
+    pub appversion: &'a str,
+}
+
+/// The signed, encrypted request: `(k_ec, body)`.
+pub(crate) fn upload_payload(init: &UploadInit<'_>) -> (String, Vec<u8>) {
+    let t = now_secs().to_string();
+    let filesize = init.filesize.to_string();
+    let mut sig = Sha1::new();
+    sig.update(init.userkey.as_bytes());
+    sig.update(
+        hex::encode(Sha1::digest(
+            format!("{}{}{}0", init.userid, init.fileid, init.target).as_bytes(),
+        ))
+        .as_bytes(),
+    );
+    sig.update(b"000000");
+    let signature = hex::encode(sig.finalize()).to_uppercase();
+
+    let mut token = Md5::new();
+    token.update(MD5_SALT);
+    token.update(
+        format!(
+            "{}{}{}{}{}{}",
+            init.fileid, filesize, init.sign_key, init.sign_val, init.userid, t
+        )
+        .as_bytes(),
+    );
+    token.update(hex::encode(Md5::digest(init.userid.as_bytes())).as_bytes());
+    token.update(init.appversion.as_bytes());
+    let token = hex::encode(token.finalize());
+
+    // Empty fields (and the numeric 0 appid) are omitted, then sorted by key.
+    let mut fields: Vec<(String, String)> = vec![
+        ("appversion".into(), init.appversion.into()),
+        ("topupload".into(), "true".into()),
+        ("target".into(), init.target.into()),
+        ("sign_key".into(), init.sign_key.into()),
+        ("sign_val".into(), init.sign_val.into()),
+        ("fileid".into(), init.fileid.into()),
+        ("filename".into(), init.filename.into()),
+        ("filesize".into(), filesize),
+        ("path".into(), String::new()),
+        ("userid".into(), init.userid.into()),
+        ("userkey".into(), init.userkey.into()),
+        ("t".into(), t),
+        ("sig".into(), signature),
+        ("token".into(), token),
+    ];
+    fields.retain(|(_, value)| !value.is_empty() && value != "0");
+    fields.sort_by(|a, b| a.0.cmp(&b.0));
+    let body = fields
+        .iter()
+        .map(|(key, value)| {
+            format!(
+                "{}={}",
+                crate::client::form_encode(key),
+                crate::client::form_encode(value)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("&");
+    (ec_token(now_secs() as u32), aes_encrypt(body.as_bytes()))
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_secs())
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

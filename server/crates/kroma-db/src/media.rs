@@ -41,7 +41,7 @@ pub fn counts(pool: &Pool) -> Result<(usize, usize, usize)> {
 pub fn movie_count(pool: &Pool) -> Result<i64> {
     let conn = pool.get()?;
     Ok(conn.query_row(
-        "SELECT COUNT(*) FROM items WHERE kind != 'episode'",
+        "SELECT COUNT(*) FROM items WHERE kind IN ('movie','video')",
         [],
         |r| r.get(0),
     )?)
@@ -51,9 +51,29 @@ pub fn movie_count(pool: &Pool) -> Result<i64> {
 pub fn list_movies(pool: &Pool, library: Option<&str>) -> Result<Vec<MediaItem>> {
     query_items(
         pool,
-        &format!("SELECT {ITEM_COLS} FROM items WHERE kind != 'episode'"),
+        &format!("SELECT {ITEM_COLS} FROM items WHERE kind IN ('movie','video')"),
         library,
         "ORDER BY title COLLATE NOCASE",
+    )
+}
+
+/// Photos indexed in capture-date order.
+pub fn list_photos(pool: &Pool, library: Option<&str>) -> Result<Vec<MediaItem>> {
+    query_items(
+        pool,
+        &format!("SELECT {ITEM_COLS} FROM items WHERE kind = 'photo'"),
+        library,
+        "ORDER BY added_at DESC, id",
+    )
+}
+
+/// Unclassified, playable items from Other libraries.
+pub fn list_other(pool: &Pool, library: Option<&str>) -> Result<Vec<MediaItem>> {
+    query_items(
+        pool,
+        &format!("SELECT {ITEM_COLS} FROM items WHERE kind = 'other'"),
+        library,
+        "ORDER BY added_at DESC, title COLLATE NOCASE",
     )
 }
 
@@ -61,10 +81,102 @@ pub fn list_movies(pool: &Pool, library: Option<&str>) -> Result<Vec<MediaItem>>
 pub fn list_items(pool: &Pool, library: Option<&str>) -> Result<Vec<MediaItem>> {
     query_items(
         pool,
-        &format!("SELECT {ITEM_COLS} FROM items"),
+        &format!("SELECT {ITEM_COLS} FROM items WHERE kind IN ('movie','video','episode')"),
         library,
         "ORDER BY title COLLATE NOCASE",
     )
+}
+
+/// The age rating that governs `id`: an episode inherits its show's, a movie
+/// carries its own. `None` when neither mentions one.
+pub fn item_certification(pool: &Pool, id: &str) -> Result<Option<String>> {
+    let conn = pool.get()?;
+    Ok(conn.query_row(
+        "SELECT COALESCE( \
+             NULLIF(json_extract(i.metadata,'$.certification'), ''), \
+             NULLIF(json_extract(s.metadata,'$.certification'), '')) \
+         FROM items i LEFT JOIN shows s ON s.id = i.show_id WHERE i.id = ?1",
+        params![id],
+        |r| r.get::<_, Option<String>>(0),
+    )?)
+}
+
+pub fn show_certification(pool: &Pool, id: &str) -> Result<Option<String>> {
+    let conn = pool.get()?;
+    Ok(conn.query_row(
+        "SELECT NULLIF(json_extract(metadata,'$.certification'), '') FROM shows WHERE id = ?1",
+        params![id],
+        |r| r.get::<_, Option<String>>(0),
+    )?)
+}
+
+/// The ratings of `ids`, for filtering a batch of episodes by their show.
+pub fn show_certifications(
+    pool: &Pool,
+    ids: &[String],
+) -> Result<std::collections::HashMap<String, Option<String>>> {
+    let mut out = std::collections::HashMap::new();
+    if ids.is_empty() {
+        return Ok(out);
+    }
+    let conn = pool.get()?;
+    let placeholders = (1..=ids.len())
+        .map(|at| format!("?{at}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut stmt = conn.prepare(&format!(
+        "SELECT id, NULLIF(json_extract(metadata,'$.certification'), '') \
+         FROM shows WHERE id IN ({placeholders})"
+    ))?;
+    let params: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+    let rows = stmt.query_map(params.as_slice(), |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+    })?;
+    for row in rows {
+        let (id, certification) = row?;
+        out.insert(id, certification);
+    }
+    Ok(out)
+}
+
+/// The other films of the series `id` belongs to, in release order, with the
+/// series' name. A title that names no series answers with none.
+///
+/// A provider id groups precisely; an NFO `<set>` carries only a name, so its
+/// films group by that name.
+pub fn collection_members(pool: &Pool, id: &str) -> Result<(Option<String>, Vec<MediaItem>)> {
+    let conn = pool.get()?;
+    let names: Option<(Option<String>, Option<i64>)> = conn
+        .query_row(
+            "SELECT json_extract(metadata,'$.collectionName'), \
+                    json_extract(metadata,'$.collectionId') \
+             FROM items WHERE id = ?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let Some((name, tmdb)) = names else {
+        return Ok((None, Vec::new()));
+    };
+    let name = name
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty());
+    if name.is_none() && tmdb.is_none() {
+        return Ok((None, Vec::new()));
+    }
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {ITEM_COLS} FROM items \
+         WHERE kind IN ('movie','video') AND id != ?1 \
+           AND ((?2 IS NOT NULL AND json_extract(metadata,'$.collectionId') = ?2) \
+             OR (?2 IS NULL AND json_extract(metadata,'$.collectionName') = ?3)) \
+         ORDER BY COALESCE(NULLIF(json_extract(metadata,'$.releaseDate'), ''), \
+                           CAST(year AS TEXT), ''), \
+                  title COLLATE NOCASE"
+    ))?;
+    let items = stmt
+        .query_map(params![id, tmdb, name.as_deref()], row_to_item)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok((name, items))
 }
 
 pub fn get_item(pool: &Pool, id: &str) -> Result<Option<MediaItem>> {
@@ -85,7 +197,9 @@ pub fn get_item(pool: &Pool, id: &str) -> Result<Option<MediaItem>> {
 /// representative-video lookups, so a full reindex is two table scans.
 pub fn index_snapshot(pool: &Pool) -> Result<(Vec<MediaItem>, Vec<Show>)> {
     let conn = pool.get()?;
-    let mut stmt = conn.prepare(&format!("SELECT {ITEM_COLS} FROM items"))?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {ITEM_COLS} FROM items WHERE kind IN ('movie','video','episode')"
+    ))?;
     let items: Vec<MediaItem> = stmt
         .query_map([], row_to_item)?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -236,6 +350,74 @@ mod tests {
         assert_eq!(item.files.len(), 1);
 
         assert!(get_item(&p, "missing").unwrap().is_none());
+    }
+
+    #[test]
+    fn a_collection_groups_by_provider_id_in_release_order() {
+        let p = pool();
+        {
+            let conn = p.get().unwrap();
+            conn.execute(
+                "INSERT INTO libraries (id,name,kind,path,added_at) VALUES ('lib','L','movies','/x','t')",
+                [],
+            )
+            .unwrap();
+            seed_movie(&conn, "m1", "Saga II", "lib");
+            seed_movie(&conn, "m2", "Saga I", "lib");
+            seed_movie(&conn, "m3", "Saga III", "lib");
+            seed_movie(&conn, "m4", "Same Name, Other Series", "lib");
+            // Release dates out of title order, so the order can only be the date's.
+            let set = |id: &str, tmdb: Option<i64>, name: &str, date: &str| {
+                let id_part = tmdb.map(|t| format!(r#","collectionId":{t}"#)).unwrap_or_default();
+                let meta = format!(
+                    r#"{{"tmdbId":1,"collectionName":"{name}","tmdbUrl":"x","releaseDate":"{date}"{id_part}}}"#
+                );
+                conn.execute(
+                    "UPDATE items SET metadata=?2 WHERE id=?1",
+                    params![id, meta],
+                )
+                .unwrap();
+            };
+            set("m1", Some(10), "Saga", "2001-05-01");
+            set("m2", Some(10), "Saga", "1999-05-01");
+            set("m3", Some(10), "Saga", "2019-12-20");
+            // Same name, no provider id: a namesake, not this series.
+            set("m4", None, "Saga", "1990-01-01");
+        }
+        let (name, items) = collection_members(&p, "m2").unwrap();
+        assert_eq!(name.as_deref(), Some("Saga"));
+        let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(ids, ["m1", "m3"]);
+        assert!(collection_members(&p, "ghost").unwrap().1.is_empty());
+    }
+
+    #[test]
+    fn an_nfo_named_set_without_an_id_groups_by_its_name() {
+        let p = pool();
+        {
+            let conn = p.get().unwrap();
+            conn.execute(
+                "INSERT INTO libraries (id,name,kind,path,added_at) VALUES ('lib','L','movies','/x','t')",
+                [],
+            )
+            .unwrap();
+            seed_movie(&conn, "m1", "Local I", "lib");
+            seed_movie(&conn, "m2", "Local II", "lib");
+            seed_movie(&conn, "m3", "Elsewhere", "lib");
+            let set = |id: &str, name: &str| {
+                conn.execute(
+                    "UPDATE items SET metadata=?2 WHERE id=?1",
+                    params![id, format!(r#"{{"tmdbId":0,"collectionName":"{name}","tmdbUrl":"x"}}"#)],
+                )
+                .unwrap();
+            };
+            set("m1", "Local Set");
+            set("m2", "Local Set");
+            set("m3", "Other Set");
+        }
+        let (name, items) = collection_members(&p, "m1").unwrap();
+        assert_eq!(name.as_deref(), Some("Local Set"));
+        assert_eq!(items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), ["m2"]);
     }
 
     #[test]
