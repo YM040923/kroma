@@ -386,7 +386,22 @@ fn wanted_of(preference: &str) -> Option<Option<&str>> {
 }
 
 fn matches(image: &metadata::ArtImage, preference: &str) -> bool {
-    wanted_of(preference).is_none_or(|wanted| image.language.as_deref() == wanted)
+    match wanted_of(preference) {
+        // "auto"
+        None => true,
+        // "textless"
+        Some(None) => image.language.is_none(),
+        // TMDB reports ISO 639-1 ("zh"), settings carry regioned tags
+        // ("zh-CN"); compare the language part, not the whole tag.
+        Some(Some(tag)) => image
+            .language
+            .as_deref()
+            .is_some_and(|held| language_part(held).eq_ignore_ascii_case(language_part(tag))),
+    }
+}
+
+fn language_part(tag: &str) -> &str {
+    tag.split(['-', '_']).next().unwrap_or(tag)
 }
 
 fn pick_image(

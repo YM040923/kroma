@@ -93,7 +93,7 @@ pub async fn list_libraries(
     let defaults = settings::scrape_defaults(&state.settings, &state.config);
     Ok(Json(json!({
         "libraries": libraries,
-        "scrapeDefaults": { "languagePriority": defaults.language_priority.unwrap_or_default() },
+        "scrapeDefaults": serde_json::to_value(&defaults).unwrap_or_default(),
         "languages": settings::language_tags(),
     }))
     .into_response())
