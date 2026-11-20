@@ -19,8 +19,8 @@ pub(super) struct Engine {
     /// Per-library scrape choices, by library id. A missing entry follows the
     /// global language and leaves NFO/art preferences alone.
     pub(super) scrape: BTreeMap<String, crate::services::settings::ScrapeOptions>,
-    /// The household language list a library follows until it overrides it.
-    pub(super) default_priority: Vec<String>,
+    /// The household scraping choices a library follows until it overrides them.
+    pub(super) defaults: crate::services::settings::ScrapeOptions,
     /// Library id -> scan folders, to find a `.strm` whose stored path is the
     /// stream URL rather than the file on disk.
     pub(super) folders: BTreeMap<String, Vec<String>>,
@@ -31,13 +31,54 @@ pub(super) struct Engine {
 }
 
 impl Engine {
-    /// The ordered languages for one library: its own list, else the household
-    /// default. Never empty once the engine has been built.
+    /// The effective choices for one library: the household defaults with the
+    /// library's own values laid over them. A field the library left unset
+    /// keeps following the defaults.
+    pub(super) fn options_for(&self, library: &str) -> crate::services::settings::ScrapeOptions {
+        let mut merged = self.defaults.clone();
+        let Some(held) = self.scrape.get(library) else {
+            return merged;
+        };
+        if held.language_priority.is_some() {
+            merged.language_priority = held.language_priority.clone();
+            merged.language = held.language.clone();
+        }
+        merged.nfo = held.nfo;
+        if held.poster_languages.is_some() {
+            merged.poster_languages = held.poster_languages.clone();
+            merged.poster_language = held.poster_language.clone();
+        }
+        if held.backdrop_languages.is_some() {
+            merged.backdrop_languages = held.backdrop_languages.clone();
+            merged.backdrop_language = held.backdrop_language.clone();
+        }
+        if held.poster_min_width.is_some() {
+            merged.poster_min_width = held.poster_min_width;
+        }
+        if held.backdrop_min_width.is_some() {
+            merged.backdrop_min_width = held.backdrop_min_width;
+        }
+        if held.poster_size.is_some() {
+            merged.poster_size = held.poster_size.clone();
+        }
+        if held.backdrop_size.is_some() {
+            merged.backdrop_size = held.backdrop_size.clone();
+        }
+        if held.artwork_size.is_some() {
+            merged.artwork_size = held.artwork_size.clone();
+        }
+        if held.backdrop_count.is_some() {
+            merged.backdrop_count = held.backdrop_count;
+        }
+        if held.artwork_refresh_days.is_some() {
+            merged.artwork_refresh_days = held.artwork_refresh_days;
+        }
+        merged
+    }
+
+    /// The ordered text languages for one library. Never empty.
     pub(super) fn priority_for(&self, library: &str) -> Vec<String> {
-        self.scrape
-            .get(library)
-            .and_then(|options| options.language_priority.clone())
-            .unwrap_or_else(|| self.default_priority.clone())
+        self.options_for(library).language_priority.unwrap_or_default()
     }
 }
 
@@ -50,18 +91,43 @@ pub(super) struct Counters {
     pub(super) finished: AtomicUsize,
 }
 
+fn default_options(state: &SharedState) -> crate::services::settings::ScrapeOptions {
+    let defaults = crate::services::settings::scrape_defaults(&state.settings, &state.config);
+    crate::services::settings::ScrapeOptions {
+        language: defaults
+            .language_priority
+            .as_ref()
+            .and_then(|list| list.first())
+            .cloned(),
+        language_priority: defaults.language_priority,
+        poster_language: defaults
+            .poster_languages
+            .as_ref()
+            .and_then(|list| list.first())
+            .cloned(),
+        backdrop_language: defaults
+            .backdrop_languages
+            .as_ref()
+            .and_then(|list| list.first())
+            .cloned(),
+        poster_languages: defaults.poster_languages,
+        backdrop_languages: defaults.backdrop_languages,
+        poster_min_width: defaults.poster_min_width,
+        backdrop_min_width: defaults.backdrop_min_width,
+        poster_size: defaults.poster_size,
+        backdrop_size: defaults.backdrop_size,
+        write_images: defaults.write_images,
+        ..Default::default()
+    }
+}
+
 pub(super) fn engine_for(state: &SharedState, api_key: String) -> Engine {
     Engine {
         pool: state.db.clone(),
         cache: state.metadata_cache.clone(),
         api_key,
         language: crate::services::settings::metadata_language(&state.settings, &state.config),
-        default_priority: crate::services::settings::scrape_defaults(
-            &state.settings,
-            &state.config,
-        )
-        .language_priority
-        .unwrap_or_default(),
+        defaults: default_options(state),
         scrape: crate::services::settings::all_library_scrape(&state.settings),
         folders: crate::services::settings::library_defs(&state.settings, &state.config)
             .unwrap_or_default()

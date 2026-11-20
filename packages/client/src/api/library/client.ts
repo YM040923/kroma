@@ -43,9 +43,9 @@ export default function libraryApi(ctx: RequestContext) {
     /** The household language list (requires `settings.manage`). */
     scrapeDefaults: () => ctx.get('/admin/scrape', ScrapeState),
 
-    /** Replace the household language list; the first tag is the primary one. */
-    setScrapeDefaults: (languagePriority: string[]) =>
-      ctx.patch('/admin/scrape', ScrapeState, { body: { languagePriority } }),
+    /** Replace the household scraping defaults; the first language tag is primary. */
+    setScrapeDefaults: (patch: Partial<ScrapeDefaults>) =>
+      ctx.patch('/admin/scrape', ScrapeState, { body: patch }),
 
     /** Browse server-side directories for the folder picker. An empty or absent
      * `path` returns the roots (NAS volumes, or `/` in dev). */

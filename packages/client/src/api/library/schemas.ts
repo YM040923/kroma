@@ -9,6 +9,12 @@ export const ScrapeOptions = z.object({
   nfo: z.boolean(),
   posterLanguage: z.string().nullable(),
   backdropLanguage: z.string().nullable(),
+  posterLanguages: z.array(z.string()).nullable().optional(),
+  backdropLanguages: z.array(z.string()).nullable().optional(),
+  posterMinWidth: z.number().nullable().optional(),
+  backdropMinWidth: z.number().nullable().optional(),
+  posterSize: z.string().nullable().optional(),
+  backdropSize: z.string().nullable().optional(),
   /** Gallery backdrops kept per title; null keeps the provider's full set. */
   backdropCount: z.number().nullable().optional(),
   /** TMDB image size stored for provider URLs: w500, w780, w1280 or original. */
@@ -37,6 +43,13 @@ export type AdminLibrary = z.infer<typeof AdminLibrary>;
 /** Household scraping defaults every library follows until it overrides them. */
 export const ScrapeDefaults = z.object({
   languagePriority: z.array(z.string()),
+  posterLanguages: z.array(z.string()).nullable().optional(),
+  backdropLanguages: z.array(z.string()).nullable().optional(),
+  posterMinWidth: z.number().nullable().optional(),
+  backdropMinWidth: z.number().nullable().optional(),
+  posterSize: z.string().nullable().optional(),
+  backdropSize: z.string().nullable().optional(),
+  writeImages: z.boolean().optional(),
 });
 export type ScrapeDefaults = z.infer<typeof ScrapeDefaults>;
 

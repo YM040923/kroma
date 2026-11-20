@@ -174,6 +174,20 @@ pub struct ScrapeOptions {
     pub nfo: bool,
     pub poster_language: Option<String>,
     pub backdrop_language: Option<String>,
+    /// Ordered artwork languages: "textless" picks the clean plate, a tag
+    /// picks that language, "auto" accepts any. None = follow the default.
+    pub poster_languages: Option<Vec<String>>,
+    pub backdrop_languages: Option<Vec<String>>,
+    /// Smallest candidate accepted before falling back to a relaxed pass.
+    pub poster_min_width: Option<u16>,
+    pub backdrop_min_width: Option<u16>,
+    /// Per-artwork provider size; None falls back to `artwork_size`.
+    pub poster_size: Option<String>,
+    pub backdrop_size: Option<String>,
+    /// Write the chosen poster/backdrop beside the media as poster.jpg /
+    /// fanart.jpg. Existing files are never replaced; the household default
+    /// carries this, a library does not override it yet.
+    pub write_images: bool,
     /// How many gallery backdrops to keep per title. `None` keeps the
     /// provider's full set (capped by the metadata client).
     pub backdrop_count: Option<u8>,
@@ -186,6 +200,10 @@ pub struct ScrapeOptions {
 /// Trim, dedupe and cap an ordered language list. The cap is what the UI
 /// promises: a primary plus at most two fallbacks.
 pub fn clean_language_priority(values: Vec<String>) -> Vec<String> {
+    clean_languages(values, 3)
+}
+
+fn clean_languages(values: Vec<String>, cap: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for tag in values {
         let tag = tag.trim();
@@ -195,11 +213,22 @@ pub fn clean_language_priority(values: Vec<String>) -> Vec<String> {
         if !out.iter().any(|held| held.eq_ignore_ascii_case(tag)) {
             out.push(tag.to_string());
         }
-        if out.len() == 3 {
+        if out.len() == cap {
             break;
         }
     }
     out
+}
+
+/// Artwork preferences accept the same tags as text plus the two special
+/// values: "textless" and "auto".
+fn clean_art_languages(values: Vec<String>) -> Vec<String> {
+    clean_languages(values, 4)
+}
+
+fn valid_art_size(size: &str) -> Option<String> {
+    let size = size.trim();
+    matches!(size, "w500" | "w780" | "w1280" | "original").then(|| size.to_string())
 }
 
 impl ScrapeOptions {
@@ -218,13 +247,48 @@ impl ScrapeOptions {
         if let Some(first) = self.language_priority.as_ref().and_then(|list| list.first()) {
             self.language = Some(first.clone());
         }
+        self.poster_languages = self
+            .poster_languages
+            .map(clean_art_languages)
+            .filter(|list| !list.is_empty());
+        if self.poster_languages.is_none() {
+            self.poster_languages = self
+                .poster_language
+                .as_deref()
+                .map(str::trim)
+                .filter(|tag| !tag.is_empty() && !tag.eq_ignore_ascii_case("auto"))
+                .map(|tag| clean_art_languages(vec![tag.to_string()]))
+                .filter(|list| !list.is_empty());
+        }
+        if let Some(first) = self.poster_languages.as_ref().and_then(|list| list.first()) {
+            self.poster_language = Some(first.clone());
+        }
+        self.backdrop_languages = self
+            .backdrop_languages
+            .map(clean_art_languages)
+            .filter(|list| !list.is_empty());
+        if self.backdrop_languages.is_none() {
+            self.backdrop_languages = self
+                .backdrop_language
+                .as_deref()
+                .map(str::trim)
+                .filter(|tag| !tag.is_empty() && !tag.eq_ignore_ascii_case("auto"))
+                .map(|tag| clean_art_languages(vec![tag.to_string()]))
+                .filter(|list| !list.is_empty());
+        }
+        if let Some(first) = self
+            .backdrop_languages
+            .as_ref()
+            .and_then(|list| list.first())
+        {
+            self.backdrop_language = Some(first.clone());
+        }
+        self.poster_size = self.poster_size.as_deref().and_then(valid_art_size);
+        self.backdrop_size = self.backdrop_size.as_deref().and_then(valid_art_size);
+        self.poster_min_width = self.poster_min_width.filter(|width| *width > 0);
+        self.backdrop_min_width = self.backdrop_min_width.filter(|width| *width > 0);
         self.backdrop_count = self.backdrop_count.map(|count| count.min(8));
-        self.artwork_size = self
-            .artwork_size
-            .as_deref()
-            .map(str::trim)
-            .filter(|size| matches!(*size, "w500" | "w780" | "w1280" | "original"))
-            .map(str::to_string);
+        self.artwork_size = self.artwork_size.as_deref().and_then(valid_art_size);
         self.artwork_refresh_days = self
             .artwork_refresh_days
             .filter(|days| *days > 0)
@@ -286,29 +350,56 @@ pub fn set_library_scrape(
 #[serde(rename_all = "camelCase", default)]
 pub struct ScrapeDefaults {
     pub language_priority: Option<Vec<String>>,
+    pub poster_languages: Option<Vec<String>>,
+    pub backdrop_languages: Option<Vec<String>>,
+    pub poster_min_width: Option<u16>,
+    pub backdrop_min_width: Option<u16>,
+    pub poster_size: Option<String>,
+    pub backdrop_size: Option<String>,
+    pub write_images: bool,
 }
 
-pub fn scrape_defaults(settings: &Settings, config: &crate::config::Config) -> ScrapeDefaults {
-    let mut defaults: ScrapeDefaults =
-        serde_json::from_value(settings.get("scrapeDefaults")).unwrap_or_default();
+fn clean_defaults(mut defaults: ScrapeDefaults) -> ScrapeDefaults {
     defaults.language_priority = defaults
         .language_priority
         .map(clean_language_priority)
         .filter(|list| !list.is_empty());
+    defaults.poster_languages = defaults
+        .poster_languages
+        .map(clean_art_languages)
+        .filter(|list| !list.is_empty());
+    defaults.backdrop_languages = defaults
+        .backdrop_languages
+        .map(clean_art_languages)
+        .filter(|list| !list.is_empty());
+    defaults.poster_size = defaults.poster_size.as_deref().and_then(valid_art_size);
+    defaults.backdrop_size = defaults.backdrop_size.as_deref().and_then(valid_art_size);
+    defaults.poster_min_width = defaults.poster_min_width.filter(|width| *width > 0);
+    defaults.backdrop_min_width = defaults.backdrop_min_width.filter(|width| *width > 0);
+    defaults
+}
+
+pub fn scrape_defaults(settings: &Settings, config: &crate::config::Config) -> ScrapeDefaults {
+    let mut defaults =
+        clean_defaults(serde_json::from_value(settings.get("scrapeDefaults")).unwrap_or_default());
     if defaults.language_priority.is_none() {
-        defaults.language_priority = Some(vec![metadata_language(settings, config)]);
+        defaults.language_priority = Some(vec![super::metadata_language(settings, config)]);
     }
     defaults
 }
 
-pub fn set_scrape_defaults(settings: &Settings, pool: &Pool, priority: Vec<String>) {
-    let priority = clean_language_priority(priority);
+pub fn set_scrape_defaults(settings: &Settings, pool: &Pool, defaults: &ScrapeDefaults) {
+    let stored = clean_defaults(defaults.clone());
     let mut patch = BTreeMap::new();
     patch.insert(
         "scrapeDefaults".to_string(),
-        json!({ "languagePriority": priority }),
+        serde_json::to_value(&stored).unwrap_or_default(),
     );
-    if let Some(first) = priority.first() {
+    if let Some(first) = stored
+        .language_priority
+        .as_ref()
+        .and_then(|list| list.first())
+    {
         patch.insert("tmdbLanguage".to_string(), json!(first));
     }
     settings.set_patch(pool, patch);
@@ -787,6 +878,13 @@ mod tests {
             nfo: true,
             poster_language: Some("textless".to_string()),
             backdrop_language: None,
+            poster_languages: Some(vec!["textless".to_string()]),
+            backdrop_languages: None,
+            poster_min_width: None,
+            backdrop_min_width: None,
+            poster_size: None,
+            backdrop_size: None,
+            write_images: false,
             backdrop_count: Some(4),
             artwork_size: Some("w780".to_string()),
             artwork_refresh_days: Some(30),

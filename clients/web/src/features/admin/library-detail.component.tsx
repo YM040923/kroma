@@ -1,4 +1,4 @@
-import type { AdminLibrary } from '@kromatv/client/library';
+import type { AdminLibrary, ScrapeDefaults } from '@kromatv/client/library';
 import { useFormat, useT } from '@kromatv/ui';
 import {
   Box,
@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { ArtworkButton } from '#web/features/catalog/artwork-picker.component';
+import { ArtRuleEditor, type ArtRuleValue } from '#web/features/admin/scrape-art.component';
 import { LanguagePriorityEditor } from '#web/features/admin/scrape-language.component';
 import { Denied, PageHeader, useCap } from '#web/features/admin/shell';
 import { FolderListEditor } from '#web/shared/ui/folder-field.component';
@@ -30,6 +31,17 @@ const KIND_LABEL = {
   photos: 'admin.typePhotos',
   other: 'admin.typeOther',
 } as const;
+
+interface ScrapeDraft {
+  priority: string[] | null;
+  nfo: boolean;
+  posterLanguages: string[] | null;
+  posterMinWidth: number | null;
+  posterSize: string | null;
+  backdropLanguages: string[] | null;
+  backdropMinWidth: number | null;
+  backdropSize: string | null;
+}
 
 function normalizedKind(kind: string): keyof typeof KIND_LABEL {
   if (kind === 'shows' || kind === 'tv') {
@@ -84,7 +96,7 @@ function LibraryDetailInner({ id }: Readonly<{ id: string }>) {
     <LibraryDetail
       key={lib.id}
       lib={lib}
-      defaults={data?.scrapeDefaults?.languagePriority ?? []}
+      defaults={data?.scrapeDefaults ?? { languagePriority: [] }}
       languages={data?.languages ?? []}
       onChanged={() => void query.refetch()}
     />
@@ -98,7 +110,7 @@ function LibraryDetail({
   onChanged,
 }: Readonly<{
   lib: AdminLibrary;
-  defaults: string[];
+  defaults: ScrapeDefaults;
   languages: string[];
   onChanged: () => void;
 }>) {
@@ -110,10 +122,16 @@ function LibraryDetail({
   const [name, setName] = useState(lib.name);
   const [folders, setFolders] = useState(lib.folders);
   const [autoScan, setAutoScan] = useState(lib.autoScan);
-  const [priority, setPriority] = useState<string[] | null>(
-    lib.scrape.languagePriority ?? null,
-  );
-  const [nfo, setNfo] = useState(lib.scrape.nfo);
+  const [draft, setDraft] = useState<ScrapeDraft>(() => ({
+    priority: lib.scrape.languagePriority ?? null,
+    nfo: lib.scrape.nfo,
+    posterLanguages: lib.scrape.posterLanguages ?? null,
+    posterMinWidth: lib.scrape.posterMinWidth ?? null,
+    posterSize: lib.scrape.posterSize ?? null,
+    backdropLanguages: lib.scrape.backdropLanguages ?? null,
+    backdropMinWidth: lib.scrape.backdropMinWidth ?? null,
+    backdropSize: lib.scrape.backdropSize ?? null,
+  }));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
@@ -136,15 +154,22 @@ function LibraryDetail({
     }
   };
 
-  const persistScrape = async (next: string[] | null, nextNfo: boolean) => {
+  const persistScrape = async (next: ScrapeDraft) => {
+    setDraft(next);
     setSaving(true);
     try {
       await client.library.update(lib.id, {
         scrape: {
           ...lib.scrape,
-          language: next?.[0] ?? null,
-          languagePriority: next,
-          nfo: nextNfo,
+          language: next.priority?.[0] ?? null,
+          languagePriority: next.priority,
+          nfo: next.nfo,
+          posterLanguages: next.posterLanguages,
+          posterMinWidth: next.posterMinWidth,
+          posterSize: next.posterSize,
+          backdropLanguages: next.backdropLanguages,
+          backdropMinWidth: next.backdropMinWidth,
+          backdropSize: next.backdropSize,
         },
       });
       setPending(true);
@@ -156,18 +181,34 @@ function LibraryDetail({
   };
 
   const changeLanguage = (next: string[]) => {
-    const value = next.length > 0 ? next : null;
-    setPriority(value);
-    void persistScrape(value, nfo);
+    void persistScrape({ ...draft, priority: next.length > 0 ? next : null });
   };
 
   const changeNfo = (next: boolean) => {
-    setNfo(next);
-    void persistScrape(priority, next);
+    void persistScrape({ ...draft, nfo: next });
   };
 
-  const effective = priority ?? defaults;
-  const overridden = priority !== null && priority.length > 0;
+  const effective = draft.priority ?? defaults.languagePriority;
+  const overridden = draft.priority !== null && draft.priority.length > 0;
+  const poster: ArtRuleValue = {
+    languages: draft.posterLanguages ?? defaults.posterLanguages ?? null,
+    minWidth: draft.posterMinWidth ?? defaults.posterMinWidth ?? null,
+    size: draft.posterSize ?? defaults.posterSize ?? null,
+  };
+  const backdrop: ArtRuleValue = {
+    languages: draft.backdropLanguages ?? defaults.backdropLanguages ?? null,
+    minWidth: draft.backdropMinWidth ?? defaults.backdropMinWidth ?? null,
+    size: draft.backdropSize ?? defaults.backdropSize ?? null,
+  };
+  const posterOverridden =
+    draft.posterLanguages !== null ||
+    draft.posterMinWidth !== null ||
+    draft.posterSize !== null;
+  const backdropOverridden =
+    draft.backdropLanguages !== null ||
+    draft.backdropMinWidth !== null ||
+    draft.backdropSize !== null;
+  const anyOverridden = overridden || posterOverridden || backdropOverridden;
   const kind = normalizedKind(lib.kind);
 
   const remove = async () => {
@@ -302,10 +343,8 @@ function LibraryDetail({
             <Row between gap={16} wrap>
               <Row gap={10} align="center">
                 <Text variant="title">{t('admin.scrapeSettings')}</Text>
-                <Text variant="meta" color={overridden ? 'accentText' : 'textDim'}>
-                  {overridden
-                    ? t('admin.overridden')
-                    : t('admin.followGlobal')}
+                <Text variant="meta" color={anyOverridden ? 'accentText' : 'textDim'}>
+                  {anyOverridden ? t('admin.overridden') : t('admin.followGlobal')}
                 </Text>
               </Row>
               <Row gap={10} align="center">
@@ -318,6 +357,17 @@ function LibraryDetail({
                     {t('admin.scrapeSaved')}
                   </Text>
                 ) : null}
+              </Row>
+            </Row>
+
+            <Box gap={10}>
+              <Row between gap={12}>
+                <Box>
+                  <Text variant="label">{t('admin.scrapeLanguageTitle')}</Text>
+                  <Text variant="meta" color="textDim" mt={2}>
+                    {t('admin.scrapeLanguageDesc')}
+                  </Text>
+                </Box>
                 {overridden ? (
                   <Button
                     variant="ghost"
@@ -327,13 +377,6 @@ function LibraryDetail({
                   />
                 ) : null}
               </Row>
-            </Row>
-
-            <Box gap={10}>
-              <Text variant="label">{t('admin.scrapeLanguageTitle')}</Text>
-              <Text variant="meta" color="textDim">
-                {t('admin.scrapeLanguageDesc')}
-              </Text>
               <LanguagePriorityEditor
                 value={effective}
                 languages={languages}
@@ -348,8 +391,73 @@ function LibraryDetail({
                   {t('admin.nfoFilesHint')}
                 </Text>
               </Box>
-              <Switch checked={nfo} onCheckedChange={changeNfo} label={t('admin.nfoFiles')} />
+              <Switch
+                checked={draft.nfo}
+                onCheckedChange={changeNfo}
+                label={t('admin.nfoFiles')}
+              />
             </Row>
+
+            <ArtRuleEditor
+              title={t('admin.posterPreference')}
+              hint={t('admin.posterRuleHint')}
+              value={poster}
+              languages={languages}
+              overridden={posterOverridden}
+              onFollow={() =>
+                void persistScrape({
+                  ...draft,
+                  posterLanguages: null,
+                  posterMinWidth: null,
+                  posterSize: null,
+                })
+              }
+              onChange={(patch) =>
+                void persistScrape({
+                  ...draft,
+                  posterLanguages:
+                    patch.languages !== undefined
+                      ? patch.languages
+                      : draft.posterLanguages,
+                  posterMinWidth:
+                    patch.minWidth !== undefined ? patch.minWidth : draft.posterMinWidth,
+                  posterSize:
+                    patch.size !== undefined ? patch.size : draft.posterSize,
+                })
+              }
+            />
+
+            <ArtRuleEditor
+              title={t('admin.backdropPreference')}
+              hint={t('admin.backdropRuleHint')}
+              value={backdrop}
+              languages={languages}
+              minWidthPlaceholder="1920"
+              overridden={backdropOverridden}
+              onFollow={() =>
+                void persistScrape({
+                  ...draft,
+                  backdropLanguages: null,
+                  backdropMinWidth: null,
+                  backdropSize: null,
+                })
+              }
+              onChange={(patch) =>
+                void persistScrape({
+                  ...draft,
+                  backdropLanguages:
+                    patch.languages !== undefined
+                      ? patch.languages
+                      : draft.backdropLanguages,
+                  backdropMinWidth:
+                    patch.minWidth !== undefined
+                      ? patch.minWidth
+                      : draft.backdropMinWidth,
+                  backdropSize:
+                    patch.size !== undefined ? patch.size : draft.backdropSize,
+                })
+              }
+            />
 
             {pending ? (
               <Surface pad="none" radius="lg" border="border" px={16} py={12}>

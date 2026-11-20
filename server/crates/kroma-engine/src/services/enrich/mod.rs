@@ -35,9 +35,7 @@ pub(crate) fn refresh_artwork(
             break;
         }
         progress(at + 1, total);
-        let Some(options) = eng.scrape.get(&show.library) else {
-            continue;
-        };
+        let options = eng.options_for(&show.library);
         let days = options.artwork_refresh_days.unwrap_or(0);
         if days == 0 {
             continue;
@@ -82,7 +80,7 @@ pub(crate) fn refresh_artwork(
             refetch: None,
             unasked: None,
         };
-        if process::refresh_art(&local, &job, options) {
+        if process::refresh_art(&local, &job, &options) {
             refreshed += 1;
         }
     }

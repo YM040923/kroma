@@ -75,12 +75,11 @@ pub(super) fn fill_langs(eng: &Engine, job: &Job, tmdb_id: u64, missing: &[Strin
 }
 
 pub(super) fn post_process(eng: &Engine, job: &Job) {
-    if let Some(options) = eng.scrape.get(&job.library) {
-        if options.nfo {
-            super::nfo::write(eng, job);
-        }
-        apply_art_preference(eng, job, options);
+    let options = eng.options_for(&job.library);
+    if options.nfo {
+        super::nfo::write(eng, job);
     }
+    apply_art_preference(eng, job, &options);
     apply_nfo_metadata(eng, job);
 }
 
@@ -190,35 +189,31 @@ fn apply_art_policy(
     options: &crate::services::settings::ScrapeOptions,
     force: bool,
 ) -> bool {
-    let poster = options
-        .poster_language
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("auto"));
-    let backdrop = options
-        .backdrop_language
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("auto"));
-    let poster = if force && poster.is_none() {
-        Some("auto")
-    } else {
-        poster
-    };
-    let backdrop = if force && backdrop.is_none() {
-        Some("auto")
-    } else {
-        backdrop
-    };
+    let mut poster = art_prefs(options.poster_languages.as_ref(), options.poster_language.as_deref());
+    let mut backdrop =
+        art_prefs(options.backdrop_languages.as_ref(), options.backdrop_language.as_deref());
+    if force && poster.is_empty() {
+        poster.push("auto".to_string());
+    }
+    if force && backdrop.is_empty() {
+        backdrop.push("auto".to_string());
+    }
     let backdrop_count = options.backdrop_count.map(usize::from);
-    let size = options.artwork_size.as_deref().filter(|size| {
-        matches!(*size, "w500" | "w780" | "w1280" | "original")
-    });
+    let poster_size = options
+        .poster_size
+        .as_deref()
+        .or(options.artwork_size.as_deref());
+    let backdrop_size = options
+        .backdrop_size
+        .as_deref()
+        .or(options.artwork_size.as_deref());
     if !force
-        && poster.is_none()
-        && backdrop.is_none()
+        && poster.is_empty()
+        && backdrop.is_empty()
         && backdrop_count.is_none()
-        && size.is_none()
+        && poster_size.is_none()
+        && backdrop_size.is_none()
+        && !options.write_images
     {
         return false;
     }
@@ -261,30 +256,51 @@ fn apply_art_policy(
     if force && poster_locked && backdrop_locked {
         return false;
     }
+    let poster_min = options.poster_min_width.unwrap_or(500);
+    let backdrop_min = options.backdrop_min_width.unwrap_or(1920);
     let needs_images = force
         || backdrop_count.is_some()
-        || size.is_some()
-        || (!poster_locked && poster.is_some())
-        || (!backdrop_locked && backdrop.is_some());
+        || poster_size.is_some()
+        || backdrop_size.is_some()
+        || (!poster_locked && !poster.is_empty())
+        || (!backdrop_locked && !backdrop.is_empty());
+    let wanted_languages: Vec<String> = poster
+        .iter()
+        .chain(&backdrop)
+        .filter(|tag| !tag.eq_ignore_ascii_case("auto") && !tag.eq_ignore_ascii_case("textless"))
+        .cloned()
+        .collect();
     let (posters, gallery) = if needs_images {
-        match metadata::images(&eng.api_key, &eng.language, job.target, tmdb_id) {
+        match metadata::images(
+            &eng.api_key,
+            &eng.language,
+            &wanted_languages,
+            job.target,
+            tmdb_id,
+        ) {
             Ok(images) => images,
             Err(()) => return false,
         }
     } else {
         (Vec::new(), Vec::new())
     };
-    if !poster_locked {
-        if let Some(pref) = poster {
-            if let Some(url) = pick_image(&posters, pref, size) {
-                meta.poster_url = Some(url);
-            }
+    if !poster_locked && !poster.is_empty() {
+        if let Some(url) = pick_image(&posters, &poster, poster_size, poster_min) {
+            meta.poster_url = Some(url);
         }
     }
-    let backdrop_policy = force || backdrop.is_some() || backdrop_count.is_some() || size.is_some();
-    let preference = backdrop.unwrap_or("auto");
+    let backdrop_policy = force
+        || !backdrop.is_empty()
+        || backdrop_count.is_some()
+        || backdrop_size.is_some();
     let selected_backdrops = if backdrop_policy {
-        selected_images(&gallery, preference, size, backdrop_count)
+        selected_images(
+            &gallery,
+            &backdrop,
+            backdrop_size,
+            backdrop_count,
+            backdrop_min,
+        )
     } else {
         Vec::new()
     };
@@ -305,12 +321,14 @@ fn apply_art_policy(
     } else if let Some(limit) = backdrop_count {
         meta.backdrops.truncate(limit);
     }
-    if let Some(size) = size {
+    if let Some(size) = poster_size {
         if !poster_locked {
             if let Some(url) = meta.poster_url.as_mut() {
                 *url = sized_url(url, size);
             }
         }
+    }
+    if let Some(size) = backdrop_size {
         if !backdrop_locked {
             if let Some(url) = meta.backdrop_url.as_mut() {
                 *url = sized_url(url, size);
@@ -319,6 +337,9 @@ fn apply_art_policy(
         for url in &mut meta.backdrops {
             *url = sized_url(url, size);
         }
+    }
+    if options.write_images {
+        write_art_files(eng, job, &meta);
     }
     let meta = image::localize(&eng.data_dir, meta);
     let kind = if is_show {
@@ -340,20 +361,72 @@ fn apply_art_policy(
     }
 }
 
-fn pick_image(images: &[metadata::ArtImage], preference: &str, size: Option<&str>) -> Option<String> {
-    // `None` means any language; `Some(None)` is textless; `Some(Some(tag))`
-    // is an exact language.
-    let wanted = if preference.eq_ignore_ascii_case("textless") {
+/// The ordered artwork preferences: the list when present, else the legacy
+/// single tag, else empty (any language, best voted).
+fn art_prefs(list: Option<&Vec<String>>, legacy: Option<&str>) -> Vec<String> {
+    if let Some(list) = list {
+        return list.clone();
+    }
+    legacy
+        .map(str::trim)
+        .filter(|tag| !tag.is_empty() && !tag.eq_ignore_ascii_case("auto"))
+        .map(|tag| vec![tag.to_string()])
+        .unwrap_or_default()
+}
+
+/// `None` = any language, `Some(None)` = textless, `Some(Some(tag))` = exact.
+fn wanted_of(preference: &str) -> Option<Option<&str>> {
+    if preference.eq_ignore_ascii_case("textless") {
         Some(None)
     } else if preference.is_empty() || preference.eq_ignore_ascii_case("auto") {
         None
     } else {
         Some(Some(preference))
+    }
+}
+
+fn matches(image: &metadata::ArtImage, preference: &str) -> bool {
+    wanted_of(preference).is_none_or(|wanted| image.language.as_deref() == wanted)
+}
+
+fn pick_image(
+    images: &[metadata::ArtImage],
+    preferences: &[String],
+    size: Option<&str>,
+    min_width: u16,
+) -> Option<String> {
+    let prefer: &[String] = if preferences.is_empty() {
+        &[]
+    } else {
+        preferences
     };
+    for relaxed in [false, true] {
+        if prefer.is_empty() {
+            if let Some(best) = best_of(images, None, min_width, relaxed) {
+                return Some(fit(best, size));
+            }
+            continue;
+        }
+        for preference in prefer {
+            if let Some(best) = best_of(images, Some(preference), min_width, relaxed) {
+                return Some(fit(best, size));
+            }
+        }
+    }
+    None
+}
+
+fn best_of<'a>(
+    images: &'a [metadata::ArtImage],
+    preference: Option<&str>,
+    min_width: u16,
+    relaxed: bool,
+) -> Option<&'a metadata::ArtImage> {
     let mut seen = std::collections::HashSet::new();
     images
         .iter()
-        .filter(|image| wanted.is_none_or(|wanted| image.language.as_deref() == wanted))
+        .filter(|image| preference.is_none_or(|preference| matches(image, preference)))
+        .filter(|image| relaxed || image.width >= u32::from(min_width))
         .filter(|image| seen.insert(image_key(&image.url)))
         .max_by(|a, b| {
             a.votes
@@ -361,41 +434,121 @@ fn pick_image(images: &[metadata::ArtImage], preference: &str, size: Option<&str
                 .then((a.width * a.height).cmp(&(b.width * b.height)))
                 .then(a.url.cmp(&b.url))
         })
-        .map(|image| size.map_or_else(|| image.url.clone(), |size| sized_url(&image.url, size)))
+}
+
+fn fit(image: &metadata::ArtImage, size: Option<&str>) -> String {
+    size.map_or_else(|| image.url.clone(), |size| sized_url(&image.url, size))
 }
 
 fn selected_images(
     images: &[metadata::ArtImage],
-    preference: &str,
+    preferences: &[String],
     size: Option<&str>,
     limit: Option<usize>,
+    min_width: u16,
 ) -> Vec<String> {
-    let wanted = if preference.eq_ignore_ascii_case("textless") {
-        Some(None)
-    } else if preference.is_empty() || preference.eq_ignore_ascii_case("auto") {
-        None
+    let limit = limit.unwrap_or(8).min(8);
+    let prefer: &[String] = if preferences.is_empty() {
+        &[]
     } else {
-        Some(Some(preference))
+        preferences
     };
-    let mut seen = std::collections::HashSet::new();
-    let mut ranked: Vec<_> = images
-        .iter()
-        .filter(|image| wanted.is_none_or(|wanted| image.language.as_deref() == wanted))
-        .filter(|image| seen.insert(image_key(&image.url)))
-        .collect();
-    ranked.sort_by(|a, b| {
-        b.votes
-            .total_cmp(&a.votes)
-            .then((b.width * b.height).cmp(&(a.width * a.height)))
-            .then(a.url.cmp(&b.url))
-    });
-    ranked
+    let mut ordered: Vec<&metadata::ArtImage> = Vec::new();
+    for relaxed in [false, true] {
+        ordered.clear();
+        let mut seen = std::collections::HashSet::new();
+        for preference in prefer {
+            let mut batch: Vec<_> = images
+                .iter()
+                .filter(|image| matches(image, preference))
+                .filter(|image| relaxed || image.width >= u32::from(min_width))
+                .filter(|image| seen.insert(image_key(&image.url)))
+                .collect();
+            batch.sort_by(|a, b| {
+                b.votes
+                    .total_cmp(&a.votes)
+                    .then((b.width * b.height).cmp(&(a.width * a.height)))
+                    .then(a.url.cmp(&b.url))
+            });
+            ordered.extend(batch);
+        }
+        if prefer.is_empty() || ordered.len() < limit {
+            let mut rest: Vec<_> = images
+                .iter()
+                .filter(|image| relaxed || image.width >= u32::from(min_width))
+                .filter(|image| !ordered.iter().any(|held| held.url == image.url))
+                .collect();
+            rest.sort_by(|a, b| {
+                b.votes
+                    .total_cmp(&a.votes)
+                    .then((b.width * b.height).cmp(&(a.width * a.height)))
+                    .then(a.url.cmp(&b.url))
+            });
+            ordered.extend(rest);
+        }
+        if !ordered.is_empty() || relaxed {
+            break;
+        }
+    }
+    ordered
         .into_iter()
-        .take(limit.unwrap_or(8).min(8))
-        .map(|image| {
-            size.map_or_else(|| image.url.clone(), |size| sized_url(&image.url, size))
-        })
+        .take(limit)
+        .map(|image| fit(image, size))
         .collect()
+}
+
+/// Write the chosen poster/backdrop beside the media for readers that read
+/// files rather than this catalogue. Existing files are never replaced, and a
+/// show's files land at the show root rather than inside its season folder.
+fn write_art_files(eng: &Engine, job: &Job, meta: &crate::model::Metadata) {
+    let Some(dir) = art_directory(eng, job) else {
+        return;
+    };
+    for (url, name) in [
+        (meta.poster_url.as_deref(), "poster.jpg"),
+        (meta.backdrop_url.as_deref(), "fanart.jpg"),
+    ] {
+        let Some(url) = url else {
+            continue;
+        };
+        let target = dir.join(name);
+        if target.exists() {
+            continue;
+        }
+        if !image::fetch_to(url, &target) {
+            warn!(id = %job.id, file = %target.display(), "artwork file was not written");
+        }
+    }
+}
+
+fn art_directory(eng: &Engine, job: &Job) -> Option<std::path::PathBuf> {
+    let files = if job.is_show {
+        db::local_paths::show_file_paths(&eng.pool, &job.id).ok()?
+    } else {
+        db::local_paths::item_file_paths(&eng.pool, &job.id).ok()?
+    };
+    let first = files.first()?;
+    let path = if !first.abs_path.trim().is_empty() && !first.abs_path.starts_with("http") {
+        std::path::PathBuf::from(first.abs_path.trim())
+    } else {
+        let folders = eng.folders.get(&job.library)?;
+        let rel = first.rel_path.trim();
+        folders
+            .iter()
+            .map(|folder| std::path::Path::new(folder).join(rel))
+            .find(|path| path.exists())
+            .or_else(|| folders.first().map(|folder| std::path::Path::new(folder).join(rel)))?
+    };
+    let parent = path.parent()?;
+    let in_season = parent
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.to_lowercase().starts_with("season"));
+    if job.is_show && in_season {
+        parent.parent().map(std::path::Path::to_path_buf)
+    } else {
+        Some(parent.to_path_buf())
+    }
 }
 
 fn image_key(url: &str) -> String {

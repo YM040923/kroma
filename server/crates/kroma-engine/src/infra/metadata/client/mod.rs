@@ -51,13 +51,31 @@ struct RawArt {
 pub fn images(
     api_key: &str,
     language: &str,
+    languages: &[String],
     target: Target,
     id: u64,
 ) -> Result<(Vec<ArtImage>, Vec<ArtImage>), ()> {
-    let lang2 = language.split('-').next().unwrap_or("en");
+    // The list must carry every language the artwork rules can ask for; TMDB
+    // otherwise answers only for the primary one.
+    let mut include: Vec<String> = Vec::new();
+    for tag in languages.iter().map(String::as_str).chain([language]) {
+        let lang2 = tag
+            .split('-')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        if !lang2.is_empty() && !include.iter().any(|held| held == &lang2) {
+            include.push(lang2);
+        }
+    }
+    if !include.iter().any(|held| held == "en") {
+        include.push("en".to_string());
+    }
+    include.push("null".to_string());
     let params = vec![
         ("language", language.to_string()),
-        ("include_image_language", format!("{lang2},en,null")),
+        ("include_image_language", include.join(",")),
     ];
     let block: ImagesBlock = tmdb_json(
         "metadata.images",

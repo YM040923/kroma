@@ -185,7 +185,7 @@ async fn get_artwork(
     let target = page.target;
     let tmdb_id = page.tmdb_id;
     let lists = service(move || {
-        images(&api_key, &language, target, tmdb_id)
+        images(&api_key, &language, &[], target, tmdb_id)
             .map_err(|()| anyhow::anyhow!("TMDB 图片列表读取失败"))
     })
     .await;

@@ -56,7 +56,11 @@ impl ExternalSubtitles {
             if !file.probed {
                 continue;
             }
-            let abs = disk_path(&file.abs_path, file.rel_path.as_deref(), folders);
+            let abs = disk_path(
+                file.abs_path.as_deref().unwrap_or_default(),
+                file.rel_path.as_deref(),
+                folders,
+            );
             if let Some(abs) = abs {
                 file.subtitles.extend(self.tracks_of(&abs.to_string_lossy()));
             }

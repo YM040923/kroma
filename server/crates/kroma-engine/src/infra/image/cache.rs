@@ -29,6 +29,32 @@ pub(super) fn cache_verbatim(data_dir: &Path, remote_url: &str, ext: &str) -> Op
     Some(format!("{PUBLIC_PREFIX}{name}"))
 }
 
+/// Downloads a remote image straight to `target`, through a temp file so a
+/// failed transfer never lands as a poster. Refuses to touch an existing file:
+/// the artwork writer never replaces a file somebody else put there.
+pub fn fetch_to(remote_url: &str, target: &Path) -> bool {
+    if !remote_url.starts_with("http") || target.exists() {
+        return false;
+    }
+    let Some(dir) = target.parent() else {
+        return false;
+    };
+    if std::fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+    let tmp = unique_tmp(target);
+    if !download(remote_url, &tmp) {
+        let _ = std::fs::remove_file(&tmp);
+        return false;
+    }
+    if std::fs::rename(&tmp, target).is_ok() {
+        return true;
+    }
+    let copied = std::fs::copy(&tmp, target).is_ok();
+    let _ = std::fs::remove_file(&tmp);
+    copied
+}
+
 /// Ensures a remote image is cached as WebP and returns its public path, or
 /// `None` on failure (the caller keeps the provider URL). The entry point for
 /// art that arrives outside title enrichment, e.g. a person's portrait.

@@ -10,15 +10,21 @@ export function LanguagePriorityEditor({
   value,
   languages,
   min = 0,
+  max = MAX_SCRAPE_LANGUAGES,
+  labelOf,
   onChange,
 }: Readonly<{
   value: string[];
   languages: string[];
   /** How many selections must remain; the last ones cannot be removed. */
   min?: number;
+  max?: number;
+  /** Display label override; artwork rules use it for "textless". */
+  labelOf?: (tag: string) => string;
   onChange: (next: string[]) => void;
 }>) {
   const t = useT();
+  const label = (tag: string) => labelOf?.(tag) ?? langName(t, tag) ?? tag;
 
   const toggle = (tag: string) => {
     if (value.includes(tag)) {
@@ -28,7 +34,7 @@ export function LanguagePriorityEditor({
       onChange(value.filter((held) => held !== tag));
       return;
     }
-    if (value.length < MAX_SCRAPE_LANGUAGES) {
+    if (value.length < max) {
       onChange([...value, tag]);
     }
   };
@@ -53,10 +59,9 @@ export function LanguagePriorityEditor({
               key={tag}
               variant="surface"
               active={active}
-              label={langName(t, tag) ?? tag}
+              label={label(tag)}
               disabled={
-                (!active && value.length >= MAX_SCRAPE_LANGUAGES) ||
-                (active && value.length <= min)
+                (!active && value.length >= max) || (active && value.length <= min)
               }
               onPress={() => toggle(tag)}
             />
@@ -80,7 +85,7 @@ export function LanguagePriorityEditor({
               <Text variant="meta" color={index === 0 ? 'accentText' : 'textDim'}>
                 {index === 0 ? t('admin.scrapePrimary') : String(index + 1)}
               </Text>
-              <Text variant="label">{langName(t, tag) ?? tag}</Text>
+              <Text variant="label">{label(tag)}</Text>
               <IconButton
                 variant="ghost"
                 diameter={24}

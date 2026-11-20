@@ -9,7 +9,7 @@ mod rendition;
 mod scratch;
 mod upload;
 
-pub use cache::{cache_local_capped, cache_remote, local_art_missing};
+pub use cache::{cache_local_capped, cache_remote, fetch_to, local_art_missing};
 pub(crate) use encode::encode_webp_quality;
 pub use localize::{localize, localize_title_art};
 pub use rendition::{card_base_png, card_logo_png, jpeg_rendition, sized_rendition};
