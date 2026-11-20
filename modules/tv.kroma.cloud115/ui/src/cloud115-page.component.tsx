@@ -1974,12 +1974,7 @@ export default function Cloud115Page() {
         <PageHeader.Title>{t('cloud115.title')}</PageHeader.Title>
         <PageHeader.Subtitle>{t('cloud115.subtitle')}</PageHeader.Subtitle>
         <PageHeader.Actions>
-          <Row gap={8} center>
-            <Button label={t('nav.cloud115Files')} size="sm" variant="glass" icon="folder" asChild>
-              <a href="/admin/cloud115-files" />
-            </Button>
-            <StatusChip running={running} report={report} />
-          </Row>
+          <StatusChip running={running} report={report} />
         </PageHeader.Actions>
       </PageHeader.Root>
 
