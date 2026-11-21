@@ -25,7 +25,11 @@ struct Draft {
 }
 
 impl<'a> Indexer<'a> {
-    pub(super) fn new(writer: &'a mut IndexWriter, fields: &'a Fields, analyzer: TextAnalyzer) -> Self {
+    pub(super) fn new(
+        writer: &'a mut IndexWriter,
+        fields: &'a Fields,
+        analyzer: TextAnalyzer,
+    ) -> Self {
         Self {
             writer,
             fields,
@@ -35,7 +39,12 @@ impl<'a> Indexer<'a> {
         }
     }
 
-    pub(super) fn add_item(&mut self, item: &MediaItem, kind: HitKind, tr: Option<&Vec<TransData>>) {
+    pub(super) fn add_item(
+        &mut self,
+        item: &MediaItem,
+        kind: HitKind,
+        tr: Option<&Vec<TransData>>,
+    ) {
         if item.id.is_empty() {
             return;
         }

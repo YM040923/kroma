@@ -45,7 +45,9 @@ impl Engine {
             merged.language_priority = held.language_priority.clone();
             merged.language = held.language.clone();
         }
-        merged.nfo = held.nfo;
+        if let Some(nfo) = held.nfo_override {
+            merged.nfo = nfo;
+        }
         if held.poster_languages.is_some() {
             merged.poster_languages = held.poster_languages.clone();
             merged.poster_language = held.poster_language.clone();
@@ -102,21 +104,14 @@ impl Engine {
         if held.season_sources.is_some() {
             merged.season_sources = held.season_sources.clone();
         }
-        if held.artwork_size.is_some() {
-            merged.artwork_size = held.artwork_size.clone();
-        }
-        if held.backdrop_count.is_some() {
-            merged.backdrop_count = held.backdrop_count;
-        }
-        if held.artwork_refresh_days.is_some() {
-            merged.artwork_refresh_days = held.artwork_refresh_days;
-        }
         merged
     }
 
     /// The ordered text languages for one library. Never empty.
     pub(super) fn priority_for(&self, library: &str) -> Vec<String> {
-        self.options_for(library).language_priority.unwrap_or_default()
+        self.options_for(library)
+            .language_priority
+            .unwrap_or_default()
     }
 }
 
@@ -138,6 +133,7 @@ fn default_options(state: &SharedState) -> crate::services::settings::ScrapeOpti
             .and_then(|list| list.first())
             .cloned(),
         language_priority: defaults.language_priority,
+        nfo: defaults.nfo,
         poster_language: defaults
             .poster_languages
             .as_ref()

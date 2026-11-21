@@ -1,8 +1,8 @@
 use crate::model::RequestKind;
 
-use super::super::{IMG, api, tmdb_json};
+use super::super::{api, tmdb_json, IMG};
 use super::wire::{PageResp, RawHit};
-use super::{DiscoverHit, DiscoverPage, DiscoverScope, FilterQuery, FilterSort, year_of};
+use super::{year_of, DiscoverHit, DiscoverPage, DiscoverScope, FilterQuery, FilterSort};
 
 /// Search TMDB. `All` uses multi-search (drops `person` hits); the scoped
 /// variants hit the movie/tv endpoints directly.

@@ -3,7 +3,7 @@
 
 use kroma_domain::imports::KeptFolder;
 
-use crate::{Pool, Result, params};
+use crate::{params, Pool, Result};
 
 /// Keeps where each of `folders` is on this machine. A folder kept before
 /// takes the newer answer.

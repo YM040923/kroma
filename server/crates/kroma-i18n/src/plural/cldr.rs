@@ -14,7 +14,9 @@ fn language(tag: &str) -> &str {
 }
 
 fn is(tag: &str, codes: &[&str]) -> bool {
-    codes.iter().any(|code| language(tag).eq_ignore_ascii_case(code))
+    codes
+        .iter()
+        .any(|code| language(tag).eq_ignore_ascii_case(code))
 }
 
 fn european_portuguese(tag: &str) -> bool {
@@ -145,13 +147,21 @@ fn filipino(n: u64) -> Category {
 /// and another way on screen.
 pub fn cldr(locale: &str, count: i64) -> Category {
     let n = count.unsigned_abs();
-    if is(locale, &["id", "ja", "km", "ko", "lo", "ms", "my", "th", "vi", "yue", "zh"]) {
+    if is(
+        locale,
+        &[
+            "id", "ja", "km", "ko", "lo", "ms", "my", "th", "vi", "yue", "zh",
+        ],
+    ) {
         Category::Other
     } else if european_portuguese(locale) || is(locale, &["ca", "es", "it"]) {
         many_at_millions(n, n == 1)
     } else if is(locale, &["fr", "pt"]) {
         many_at_millions(n, n <= 1)
-    } else if is(locale, &["am", "bn", "fa", "gu", "hi", "hy", "kn", "pa", "si", "zu"]) {
+    } else if is(
+        locale,
+        &["am", "bn", "fa", "gu", "hi", "hy", "kn", "pa", "si", "zu"],
+    ) {
         one_at_one(n.max(1))
     } else if is(locale, &["be", "ru", "uk"]) {
         east_slavic(n)

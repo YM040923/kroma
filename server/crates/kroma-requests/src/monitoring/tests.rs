@@ -1,7 +1,7 @@
 pub(super) use serde_json::json;
 
-pub(super) use kroma_module_host::HostStorage;
 pub(super) use kroma_module_host::testing::StubHost;
+pub(super) use kroma_module_host::HostStorage;
 
 pub(super) use super::*;
 pub(super) use crate::model::{

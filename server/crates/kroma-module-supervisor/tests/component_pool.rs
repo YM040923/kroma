@@ -10,7 +10,7 @@ use kroma_module_supervisor::Endpoint;
 mod component_support;
 
 use component_support::wasm::guest_component;
-use component_support::{DECLARES, GUEST, Server, wait_until};
+use component_support::{wait_until, Server, DECLARES, GUEST};
 
 const TWO_INSTANCES: &str = r#", "storage": {}, "component": { "instances": 2 }"#;
 const THREE_INSTANCES: &str = r#", "storage": {}, "component": { "instances": 3 }"#;
@@ -41,14 +41,12 @@ fn a_component_that_panics_is_reported_and_the_next_call_gets_a_fresh_one() {
 
     assert_ne!(exploded.map(|response| response.status).unwrap_or(500), 200);
     assert_eq!(after.text(), "still here");
-    assert!(
-        server
-            .said
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|line| line.contains("component stopped"))
-    );
+    assert!(server
+        .said
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line.contains("component stopped")));
     assert!(server.supervisor.is_running(GUEST));
 }
 
@@ -109,8 +107,14 @@ fn an_idle_worker_is_dropped_after_its_lifetime_while_another_instance_keeps_run
     let after = instances_answering(&server, &endpoint);
 
     assert_eq!(before.len(), 3, "{before:?}");
-    assert!(after.difference(&before).next().is_some(), "{before:?} {after:?}");
-    assert!(after.intersection(&before).next().is_some(), "{before:?} {after:?}");
+    assert!(
+        after.difference(&before).next().is_some(),
+        "{before:?} {after:?}"
+    );
+    assert!(
+        after.intersection(&before).next().is_some(),
+        "{before:?} {after:?}"
+    );
 }
 
 #[test]

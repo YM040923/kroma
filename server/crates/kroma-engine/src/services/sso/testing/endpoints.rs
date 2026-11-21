@@ -76,7 +76,11 @@ fn client_credentials(headers: &HeaderMap, form: &HashMap<String, String>) -> (S
     }
 }
 
-pub(super) async fn token(State(shared): State<Arc<Shared>>, headers: HeaderMap, body: String) -> Response {
+pub(super) async fn token(
+    State(shared): State<Arc<Shared>>,
+    headers: HeaderMap,
+    body: String,
+) -> Response {
     let form: HashMap<String, String> = form_urlencoded::parse(body.as_bytes())
         .into_owned()
         .collect();
@@ -112,10 +116,26 @@ pub(super) async fn token(State(shared): State<Arc<Shared>>, headers: HeaderMap,
     } else {
         grant.claims
     };
-    let aud = if forgery == Forgery::WrongAudience { "another-app" } else { CLIENT_ID };
-    let iss = if forgery == Forgery::WrongIssuer { "https://evil.test" } else { &shared.issuer };
-    let nonce = if forgery == Forgery::WrongNonce { "someone-elses" } else { &grant.nonce };
-    let exp = if forgery == Forgery::Expired { now() - 3600 } else { now() + 300 };
+    let aud = if forgery == Forgery::WrongAudience {
+        "another-app"
+    } else {
+        CLIENT_ID
+    };
+    let iss = if forgery == Forgery::WrongIssuer {
+        "https://evil.test"
+    } else {
+        &shared.issuer
+    };
+    let nonce = if forgery == Forgery::WrongNonce {
+        "someone-elses"
+    } else {
+        &grant.nonce
+    };
+    let exp = if forgery == Forgery::Expired {
+        now() - 3600
+    } else {
+        now() + 300
+    };
     claims.insert("sub".into(), subject);
     claims.insert("iss".into(), json!(iss));
     claims.insert("aud".into(), json!(aud));
@@ -135,7 +155,11 @@ pub(super) async fn token(State(shared): State<Arc<Shared>>, headers: HeaderMap,
                 .to_public_key()
                 .to_public_key_pem(Default::default())
                 .expect("the public key as PEM");
-            sign_hs256(public.as_bytes(), &json!({ "alg": "HS256", "kid": KEY_ID }), &claims)
+            sign_hs256(
+                public.as_bytes(),
+                &json!({ "alg": "HS256", "kid": KEY_ID }),
+                &claims,
+            )
         }
         Forgery::StrangerKey => sign_rs256(stranger_rsa_key(), &header, &claims),
         _ => sign_rs256(rsa_key(), &header, &claims),

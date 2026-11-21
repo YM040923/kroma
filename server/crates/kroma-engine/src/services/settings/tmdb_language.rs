@@ -4,8 +4,8 @@
 use crate::config::Config;
 use crate::i18n;
 
-use super::TMDB_LANGUAGE_AUTO;
 use super::store::Settings;
+use super::TMDB_LANGUAGE_AUTO;
 
 /// The TMDB metadata language used when enriching the catalog (e.g. `fr-FR`)
 /// the persisted `tmdbLanguage` setting, falling back to the env-configured
@@ -104,8 +104,8 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::db::Pool;
     use crate::db::testing::TempPool;
+    use crate::db::Pool;
 
     fn test_pool() -> TempPool {
         crate::db::testing::temp_pool("settings-tmdb-language")

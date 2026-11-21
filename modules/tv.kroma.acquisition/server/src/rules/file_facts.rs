@@ -99,6 +99,7 @@ mod tests {
                 hdr_format: Some(ProbedHdr::DolbyVision),
                 dolby_vision_profile: Some(8),
                 color: None,
+                technical: None,
             }),
             audio: None,
             audio_tracks: vec![
@@ -110,6 +111,7 @@ mod tests {
                     title: None,
                     default: true,
                     region: None,
+                    technical: None,
                 },
                 AudioStream {
                     index: 1,
@@ -119,10 +121,12 @@ mod tests {
                     title: Some("VFQ".into()),
                     default: false,
                     region: Some("CA".into()),
+                    technical: None,
                 },
             ],
             subtitles: Vec::new(),
             edition_id: None,
+            probe_version: None,
         }
     }
 

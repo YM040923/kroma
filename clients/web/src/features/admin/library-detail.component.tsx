@@ -7,6 +7,7 @@ import {
   Field,
   Icon,
   Row,
+  SegmentGroup,
   Surface,
   Switch,
   Text,
@@ -32,9 +33,13 @@ const KIND_LABEL = {
   other: 'admin.typeOther',
 } as const;
 
+function messageOf(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
 interface ScrapeDraft {
   priority: string[] | null;
-  nfo: boolean;
+  nfo: boolean | null;
   posterLanguages: string[] | null;
   posterMinWidth: number | null;
   posterMinVotes: number | null;
@@ -49,7 +54,33 @@ interface ScrapeDraft {
   seasonLanguages: string[] | null;
   seasonMinWidth: number | null;
   seasonSize: string | null;
+  posterSources: string[] | null;
+  backdropSources: string[] | null;
+  logoSources: string[] | null;
+  seasonSources: string[] | null;
 }
+
+const FOLLOW_GLOBAL_DRAFT: ScrapeDraft = {  priority: null,
+  nfo: null,
+  posterLanguages: null,
+  posterMinWidth: null,
+  posterMinVotes: null,
+  posterSize: null,
+  backdropLanguages: null,
+  backdropMinWidth: null,
+  backdropMinVotes: null,
+  backdropSize: null,
+  logoLanguages: null,
+  logoMinWidth: null,
+  logoSize: null,
+  seasonLanguages: null,
+  seasonMinWidth: null,
+  seasonSize: null,
+  posterSources: null,
+  backdropSources: null,
+  logoSources: null,
+  seasonSources: null,
+};
 
 function normalizedKind(kind: string): keyof typeof KIND_LABEL {
   if (kind === 'shows' || kind === 'tv') {
@@ -80,6 +111,9 @@ function LibraryDetailInner({ id }: Readonly<{ id: string }>) {
   const query = useQuery({
     queryKey: ['admin', 'libraries'],
     queryFn: () => client.library.list(),
+    // Global scraping defaults live in the same response; a library page opened
+    // after the global page changed must not render the cached old rules.
+    refetchOnMount: 'always',
   });
   if (query.isPending) {
     return null;
@@ -106,6 +140,7 @@ function LibraryDetailInner({ id }: Readonly<{ id: string }>) {
       lib={lib}
       defaults={data?.scrapeDefaults ?? { languagePriority: [] }}
       languages={data?.languages ?? []}
+      fanartConfigured={data?.fanartConfigured === true}
       onChanged={() => void query.refetch()}
     />
   );
@@ -115,11 +150,13 @@ function LibraryDetail({
   lib,
   defaults,
   languages,
+  fanartConfigured,
   onChanged,
 }: Readonly<{
   lib: AdminLibrary;
   defaults: ScrapeDefaults;
   languages: string[];
+  fanartConfigured: boolean;
   onChanged: () => void;
 }>) {
   const t = useT();
@@ -130,9 +167,10 @@ function LibraryDetail({
   const [name, setName] = useState(lib.name);
   const [folders, setFolders] = useState(lib.folders);
   const [autoScan, setAutoScan] = useState(lib.autoScan);
+  const [acquisitionMode, setAcquisitionMode] = useState(lib.acquisitionMode);
   const [draft, setDraft] = useState<ScrapeDraft>(() => ({
     priority: lib.scrape.languagePriority ?? null,
-    nfo: lib.scrape.nfo,
+    nfo: lib.scrape.nfoOverride ?? null,
     posterLanguages: lib.scrape.posterLanguages ?? null,
     posterMinWidth: lib.scrape.posterMinWidth ?? null,
     posterMinVotes: lib.scrape.posterMinVotes ?? null,
@@ -147,9 +185,15 @@ function LibraryDetail({
     seasonLanguages: lib.scrape.seasonLanguages ?? null,
     seasonMinWidth: lib.scrape.seasonMinWidth ?? null,
     seasonSize: lib.scrape.seasonSize ?? null,
+    posterSources: lib.scrape.posterSources ?? null,
+    backdropSources: lib.scrape.backdropSources ?? null,
+    logoSources: lib.scrape.logoSources ?? null,
+    seasonSources: lib.scrape.seasonSources ?? null,
   }));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [customOpen, setCustomOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -161,25 +205,30 @@ function LibraryDetail({
 
   const update = async (patch: Parameters<typeof client.library.update>[1]) => {
     setSaving(true);
+    setError(null);
     try {
       await client.library.update(lib.id, patch);
       markSaved();
       onChanged();
+    } catch (reason) {
+      setError(messageOf(reason));
     } finally {
       setSaving(false);
     }
   };
 
-  const persistScrape = async (next: ScrapeDraft) => {
+  const persistScrape = async (next: ScrapeDraft): Promise<boolean> => {
     setDraft(next);
     setSaving(true);
+    setError(null);
     try {
       await client.library.update(lib.id, {
         scrape: {
           ...lib.scrape,
           language: next.priority?.[0] ?? null,
           languagePriority: next.priority,
-          nfo: next.nfo,
+          nfo: next.nfo ?? false,
+          nfoOverride: next.nfo,
           posterLanguages: next.posterLanguages,
           posterMinWidth: next.posterMinWidth,
           posterMinVotes: next.posterMinVotes,
@@ -194,11 +243,19 @@ function LibraryDetail({
           seasonLanguages: next.seasonLanguages,
           seasonMinWidth: next.seasonMinWidth,
           seasonSize: next.seasonSize,
+          posterSources: next.posterSources,
+          backdropSources: next.backdropSources,
+          logoSources: next.logoSources,
+          seasonSources: next.seasonSources,
         },
       });
       setPending(true);
       markSaved();
       onChanged();
+      return true;
+    } catch (reason) {
+      setError(messageOf(reason));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -208,12 +265,39 @@ function LibraryDetail({
     void persistScrape({ ...draft, priority: next.length > 0 ? next : null });
   };
 
-  const changeNfo = (next: boolean) => {
+  const followGlobal = async () => {
+    const ok = await confirm({
+      title: t('admin.followGlobal'),
+      message: t('admin.scrapeFollowConfirm'),
+      confirmLabel: t('admin.followGlobal'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (!ok) {
+      return;
+    }
+    const kept = await persistScrape({ ...FOLLOW_GLOBAL_DRAFT });
+    setCustomOpen(!kept);
+  };
+
+  const changeNfo = (next: boolean | null) => {
     void persistScrape({ ...draft, nfo: next });
   };
 
   const effective = draft.priority ?? defaults.languagePriority;
   const overridden = draft.priority !== null && draft.priority.length > 0;
+  const nfo = draft.nfo ?? defaults.nfo ?? false;
+  const nfoOverridden = draft.nfo !== null;
+  const sourceProps = (
+    key: 'posterSources' | 'backdropSources' | 'logoSources' | 'seasonSources',
+    fallback: string[],
+  ) =>
+    fanartConfigured
+      ? {
+          value: draft[key] ?? defaults[key] ?? fallback,
+          onChange: (next: string[]) => void persistScrape({ ...draft, [key]: next }),
+        }
+      : undefined;
   const poster: ArtRuleValue = {
     languages: draft.posterLanguages ?? defaults.posterLanguages ?? null,
     minWidth: draft.posterMinWidth ?? defaults.posterMinWidth ?? null,
@@ -230,7 +314,8 @@ function LibraryDetail({
     draft.posterLanguages !== null ||
     draft.posterMinWidth !== null ||
     draft.posterMinVotes !== null ||
-    draft.posterSize !== null;
+    draft.posterSize !== null ||
+    draft.posterSources !== null;
   const logo: ArtRuleValue = {
     languages: draft.logoLanguages ?? defaults.logoLanguages ?? null,
     minWidth: draft.logoMinWidth ?? defaults.logoMinWidth ?? null,
@@ -241,7 +326,8 @@ function LibraryDetail({
     draft.backdropLanguages !== null ||
     draft.backdropMinWidth !== null ||
     draft.backdropMinVotes !== null ||
-    draft.backdropSize !== null;
+    draft.backdropSize !== null ||
+    draft.backdropSources !== null;
   const season: ArtRuleValue = {
     languages: draft.seasonLanguages ?? defaults.seasonLanguages ?? null,
     minWidth: draft.seasonMinWidth ?? defaults.seasonMinWidth ?? null,
@@ -251,13 +337,21 @@ function LibraryDetail({
   const logoOverridden =
     draft.logoLanguages !== null ||
     draft.logoMinWidth !== null ||
-    draft.logoSize !== null;
+    draft.logoSize !== null ||
+    draft.logoSources !== null;
   const seasonOverridden =
     draft.seasonLanguages !== null ||
     draft.seasonMinWidth !== null ||
-    draft.seasonSize !== null;
+    draft.seasonSize !== null ||
+    draft.seasonSources !== null;
   const anyOverridden =
-    overridden || posterOverridden || backdropOverridden || logoOverridden || seasonOverridden;
+    overridden ||
+    nfoOverridden ||
+    posterOverridden ||
+    backdropOverridden ||
+    logoOverridden ||
+    seasonOverridden;
+  const showCustom = anyOverridden || customOpen;
   const kind = normalizedKind(lib.kind);
 
   const remove = async () => {
@@ -296,12 +390,10 @@ function LibraryDetail({
 
   return (
     <>
-      <RouteLink to="/admin/libraries">
-        <Text variant="meta" color="textDim">
-          ← {t('admin.backToLibraries')}
-        </Text>
-      </RouteLink>
       <PageHeader.Root>
+        <PageHeader.Back label={t('admin.backToLibraries')} asChild>
+          <RouteLink to="/admin/libraries" />
+        </PageHeader.Back>
         <PageHeader.Title>{lib.name}</PageHeader.Title>
         <PageHeader.Subtitle>
           {t(KIND_LABEL[kind])} · {t('admin.itemsCount', { count: lib.itemCount })} ·{' '}
@@ -317,6 +409,12 @@ function LibraryDetail({
           />
         </PageHeader.Actions>
       </PageHeader.Root>
+
+      {error ? (
+        <Text variant="meta" color="danger" mt={12}>
+          {error}
+        </Text>
+      ) : null}
 
       <Box gap={20} mt={24}>
         <Surface pad="none" radius="xl" border="border">
@@ -387,15 +485,64 @@ function LibraryDetail({
           </Box>
         </Surface>
 
+        {['film', 'mixed'].includes(lib.kind) ? (
+          <Surface pad="none" radius="xl" border="border">
+            <Box px={20} py={18} gap={12}>
+              <Box>
+                <Text variant="title">{t('admin.acquisitionPlacement')}</Text>
+                <Text variant="meta" color="textDim" mt={2}>
+                  {t('admin.acquisitionPlacementHint')}
+                </Text>
+              </Box>
+              <SegmentGroup.Root
+                value={acquisitionMode}
+                onValueChange={(next) => {
+                  if (
+                    next !== 'cloud_only_staged' &&
+                    next !== 'hybrid_local_first' &&
+                    next !== 'local_only'
+                  ) {
+                    return;
+                  }
+                  setAcquisitionMode(next);
+                  void update({ acquisitionMode: next });
+                }}
+                label={t('admin.acquisitionPlacement')}
+              >
+                <SegmentGroup.Item value="cloud_only_staged">
+                  <SegmentGroup.Label>{t('admin.acquisitionCloudStaged')}</SegmentGroup.Label>
+                </SegmentGroup.Item>
+                <SegmentGroup.Item value="hybrid_local_first">
+                  <SegmentGroup.Label>{t('admin.acquisitionHybridLocalFirst')}</SegmentGroup.Label>
+                </SegmentGroup.Item>
+                <SegmentGroup.Item value="local_only">
+                  <SegmentGroup.Label>{t('admin.acquisitionLocalOnly')}</SegmentGroup.Label>
+                </SegmentGroup.Item>
+              </SegmentGroup.Root>
+              {saving ? (
+                <Text variant="meta" color="textDim">{t('common.saving')}</Text>
+              ) : saved ? (
+                <Text variant="meta" color="success">{t('admin.scrapeSaved')}</Text>
+              ) : error ? (
+                <Text variant="meta" color="danger">{error}</Text>
+              ) : null}
+            </Box>
+          </Surface>
+        ) : null}
+
         <Surface pad="none" radius="xl" border="border">
           <Box px={20} py={18} gap={18}>
             <Row between gap={16} wrap>
-              <Row gap={10} align="center">
+              <Box>
                 <Text variant="title">{t('admin.scrapeSettings')}</Text>
-                <Text variant="meta" color={anyOverridden ? 'accentText' : 'textDim'}>
-                  {anyOverridden ? t('admin.overridden') : t('admin.followGlobal')}
+                <Text variant="meta" color="textDim" mt={2}>
+                  {showCustom
+                    ? anyOverridden
+                      ? t('admin.scrapeCustomHint')
+                      : t('admin.scrapeCustomDraft')
+                    : t('admin.scrapeFollowHint')}
                 </Text>
-              </Row>
+              </Box>
               <Row gap={10} align="center">
                 {saving ? (
                   <Text variant="meta" color="textDim">
@@ -406,9 +553,29 @@ function LibraryDetail({
                     {t('admin.scrapeSaved')}
                   </Text>
                 ) : null}
+                <SegmentGroup.Root
+                  value={showCustom ? 'custom' : 'global'}
+                  onValueChange={(next) => {
+                    if (next === 'custom') {
+                      setCustomOpen(true);
+                    } else {
+                      void followGlobal();
+                    }
+                  }}
+                  label={t('admin.scrapeSettings')}
+                >
+                  <SegmentGroup.Item value="global">
+                    <SegmentGroup.Label>{t('admin.followGlobal')}</SegmentGroup.Label>
+                  </SegmentGroup.Item>
+                  <SegmentGroup.Item value="custom">
+                    <SegmentGroup.Label>{t('admin.scrapeCustom')}</SegmentGroup.Label>
+                  </SegmentGroup.Item>
+                </SegmentGroup.Root>
               </Row>
             </Row>
 
+            {showCustom ? (
+              <>
             <Box gap={10}>
               <Row between gap={12}>
                 <Box>
@@ -440,11 +607,21 @@ function LibraryDetail({
                   {t('admin.nfoFilesHint')}
                 </Text>
               </Box>
-              <Switch
-                checked={draft.nfo}
-                onCheckedChange={changeNfo}
-                label={t('admin.nfoFiles')}
-              />
+              <Row gap={8} align="center">
+                {nfoOverridden ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    label={t('admin.followAction')}
+                    onPress={() => changeNfo(null)}
+                  />
+                ) : null}
+                <Switch
+                  checked={nfo}
+                  onCheckedChange={changeNfo}
+                  label={t('admin.nfoFiles')}
+                />
+              </Row>
             </Row>
 
             <ArtRuleEditor
@@ -454,16 +631,7 @@ function LibraryDetail({
               languages={languages}
               widthOptions={[300, 500, 780, 1000]}
               voteOptions={[10, 50, 100, 500]}
-              overridden={posterOverridden}
-              onFollow={() =>
-                void persistScrape({
-                  ...draft,
-                  posterLanguages: null,
-                  posterMinWidth: null,
-                  posterMinVotes: null,
-                  posterSize: null,
-                })
-              }
+              sources={sourceProps('posterSources', ['tmdb', 'fanart'])}
               onChange={(patch) =>
                 void persistScrape({
                   ...draft,
@@ -488,16 +656,7 @@ function LibraryDetail({
               languages={languages}
               widthOptions={[1280, 1920, 2560]}
               voteOptions={[10, 50, 100, 500]}
-              overridden={backdropOverridden}
-              onFollow={() =>
-                void persistScrape({
-                  ...draft,
-                  backdropLanguages: null,
-                  backdropMinWidth: null,
-                  backdropMinVotes: null,
-                  backdropSize: null,
-                })
-              }
+              sources={sourceProps('backdropSources', ['tmdb', 'fanart'])}
               onChange={(patch) =>
                 void persistScrape({
                   ...draft,
@@ -525,15 +684,7 @@ function LibraryDetail({
               value={logo}
               languages={languages}
               widthOptions={[200, 300, 500]}
-              overridden={logoOverridden}
-              onFollow={() =>
-                void persistScrape({
-                  ...draft,
-                  logoLanguages: null,
-                  logoMinWidth: null,
-                  logoSize: null,
-                })
-              }
+              sources={sourceProps('logoSources', ['fanart', 'tmdb'])}
               onChange={(patch) =>
                 void persistScrape({
                   ...draft,
@@ -555,15 +706,7 @@ function LibraryDetail({
                 value={season}
                 languages={languages}
                 widthOptions={[300, 500, 780]}
-                overridden={seasonOverridden}
-                onFollow={() =>
-                  void persistScrape({
-                    ...draft,
-                    seasonLanguages: null,
-                    seasonMinWidth: null,
-                    seasonSize: null,
-                  })
-                }
+                sources={sourceProps('seasonSources', ['fanart', 'tmdb'])}
                 onChange={(patch) =>
                   void persistScrape({
                     ...draft,
@@ -580,6 +723,8 @@ function LibraryDetail({
                   })
                 }
               />
+            ) : null}
+              </>
             ) : null}
 
             {pending ? (

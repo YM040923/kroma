@@ -1,5 +1,5 @@
 use super::super::session::testing::{keys, registry, seed, LIVE};
-use super::super::{AudioMode, Asked, Rung, StreamMode, VideoMode};
+use super::super::{Asked, AudioMode, Rung, StreamMode, VideoMode};
 use super::*;
 
 const TRANSCODE: &str = "itA:h264-1080-copy:0:a0";

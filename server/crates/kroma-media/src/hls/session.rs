@@ -19,7 +19,6 @@ use tokio::time::sleep;
 use tracing::{info, warn};
 
 use super::admission::{max_live_transcodes, Refusal};
-use super::Asked;
 use super::covered::Serving;
 use super::ffmpeg::{detect_burst, spawn_stream};
 use super::hwaccel::Pipeline;
@@ -28,6 +27,7 @@ use super::naming::{contains, content_type, is_safe_name, seg_index, session_dir
 use super::retime::{retimed, Shift};
 use super::start::{keyframe_before, seeks, Start};
 use super::window::Window;
+use super::Asked;
 use super::{StreamMode, VideoMode};
 use crate::ffmpeg_gate;
 
@@ -184,7 +184,11 @@ impl Sessions {
         }
     }
 
-    async fn ensure(self: &Arc<Self>, key: &str, asked: &Asked<'_>) -> Result<Arc<Session>, Refusal> {
+    async fn ensure(
+        self: &Arc<Self>,
+        key: &str,
+        asked: &Asked<'_>,
+    ) -> Result<Arc<Session>, Refusal> {
         let (input, mode, source) = (Path::new(asked.input), asked.mode, asked.source);
         let (audio, start_secs) = (asked.audio, asked.anchor as f64);
         // The anchor is part of the key, so an existing session is always the right one.

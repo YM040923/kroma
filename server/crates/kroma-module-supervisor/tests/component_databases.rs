@@ -8,7 +8,7 @@ use kroma_module_host::NetworkAction;
 mod component_support;
 
 use component_support::wasm::guest_component;
-use component_support::{GUEST, STORES, Server, seed_core};
+use component_support::{seed_core, Server, GUEST, STORES};
 
 const KEEPS_VPN: &str = r#", "storage": {}, "dataDirs": ["vpn"]"#;
 
@@ -43,7 +43,11 @@ fn links_a_module_plants_where_its_databases_used_to_be_reach_nothing() {
         ("module.sqlite-shm", "../../elsewhere"),
     ]
     .into_iter()
-    .map(|(name, target)| server.get(&endpoint, &format!("/plant/{name}?{target}")).text())
+    .map(|(name, target)| {
+        server
+            .get(&endpoint, &format!("/plant/{name}?{target}"))
+            .text()
+    })
     .collect();
     server.supervisor.stop(GUEST);
     let endpoint = server.supervisor.spawn(GUEST).unwrap();
@@ -63,8 +67,12 @@ fn a_module_reaches_none_of_the_files_its_databases_are_kept_in() {
     server.get(&endpoint, "/own");
     let kept = server.databases_dir(GUEST).join("module.sqlite");
 
-    let read = server.get(&endpoint, &format!("/read?{}", kept.display())).text();
-    let written = server.get(&endpoint, &format!("/write?{}", kept.display())).text();
+    let read = server
+        .get(&endpoint, &format!("/read?{}", kept.display()))
+        .text();
+    let written = server
+        .get(&endpoint, &format!("/write?{}", kept.display()))
+        .text();
 
     assert!(read.starts_with("Err("), "{read}");
     assert!(written.starts_with("Err("), "{written}");

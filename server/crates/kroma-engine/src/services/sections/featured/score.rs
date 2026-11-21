@@ -284,7 +284,10 @@ mod tests {
         let refs: Vec<&HeroCandidate> = vec![&c, &b, &a];
         // The partial sort keeps the same winners the full sort would, in order.
         let head = rank(&refs, &HashMap::new(), &HashMap::new(), NOW_MS, 2);
-        assert_eq!(head.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["a", "b"]);
+        assert_eq!(
+            head.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+            ["a", "b"]
+        );
         // Asking for more than the pool holds is capped, asking for none is empty.
         assert_eq!(
             rank(&refs, &HashMap::new(), &HashMap::new(), NOW_MS, 99).len(),

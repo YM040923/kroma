@@ -91,8 +91,12 @@ pub trait HostCtx: Send + Sync + 'static {
     // `(query, year)` by the same scoring the automatic path uses. `kind` is
     // `movie` | `show`. Empty when no provider is configured, so a caller
     // degrades to "nothing matched" rather than failing.
-    fn metadata_candidates(&self, query: &str, kind: &str, year: Option<u32>)
-        -> Vec<MatchCandidate>;
+    fn metadata_candidates(
+        &self,
+        query: &str,
+        kind: &str,
+        year: Option<u32>,
+    ) -> Vec<MatchCandidate>;
 
     // One season's episodes, as the provider names them. Best-effort: an empty
     // list is "nothing to add", never an error.
@@ -395,7 +399,9 @@ mod tests {
         assert!(host.library_folders().is_empty());
         assert_eq!(host.secret("tmdb").as_deref(), Some("key"));
         assert_eq!(host.metadata_language(), "fr-FR");
-        assert!(host.metadata_candidates("Dune", "movie", Some(2021)).is_empty());
+        assert!(host
+            .metadata_candidates("Dune", "movie", Some(2021))
+            .is_empty());
         assert!(host.metadata_episodes(1399, 2).is_empty());
         assert!(host.get_service(TypeId::of::<u8>()).is_none());
 

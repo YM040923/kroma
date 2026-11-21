@@ -95,7 +95,10 @@ pub(super) fn stopped(title: &str, position_ms: u64, at: i64) -> Value {
 }
 
 pub(super) fn of_ana(states: Vec<Value>) -> Vec<((&'static str, &'static str), Value)> {
-    states.into_iter().map(|state| (("42", "1"), state)).collect()
+    states
+        .into_iter()
+        .map(|state| (("42", "1"), state))
+        .collect()
 }
 
 fn a_source(disk: &TempDir, folder: &str, kind: &str) -> LibraryDef {

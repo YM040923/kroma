@@ -84,7 +84,10 @@ pub(super) fn enrich_episodes(
             })
             .collect();
         let needs_season = season.name.is_none()
-            || season.poster_url.as_deref().is_some_and(|url| image::local_art_missing(data_dir, url));
+            || season
+                .poster_url
+                .as_deref()
+                .is_some_and(|url| image::local_art_missing(data_dir, url));
         let needs_cast = match casts.get(&season.number) {
             None => true,
             Some(cast) => art_gone(data_dir, cast.iter().map(|m| m.profile_url.as_deref())),
@@ -103,7 +106,13 @@ pub(super) fn enrich_episodes(
         let stale_cast = !db::translations::stale_langs(pool, "season_cast", &cast_id, langs)
             .unwrap_or_default()
             .is_empty();
-        if missing.is_empty() && !needs_season && !needs_cast && !needs_guide && !stale_text && !stale_cast {
+        if missing.is_empty()
+            && !needs_season
+            && !needs_cast
+            && !needs_guide
+            && !stale_text
+            && !stale_cast
+        {
             continue;
         }
         let per_lang = season_by_locale(api_key, langs, tv_id, season.number);

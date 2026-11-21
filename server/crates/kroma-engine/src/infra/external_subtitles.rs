@@ -62,7 +62,8 @@ impl ExternalSubtitles {
                 folders,
             );
             if let Some(abs) = abs {
-                file.subtitles.extend(self.tracks_of(&abs.to_string_lossy()));
+                file.subtitles
+                    .extend(self.tracks_of(&abs.to_string_lossy()));
             }
         }
         if !item.files.iter().any(|file| file.probed) {
@@ -74,7 +75,8 @@ impl ExternalSubtitles {
             folders,
         );
         if let Some(abs) = abs {
-            item.subtitles.extend(self.tracks_of(&abs.to_string_lossy()));
+            item.subtitles
+                .extend(self.tracks_of(&abs.to_string_lossy()));
         }
     }
 
@@ -320,7 +322,10 @@ mod tests {
 
         ExternalSubtitles::default().attach(&mut item, &folders);
 
-        let external = item.subtitles.last().expect("a text track beside the .strm");
+        let external = item
+            .subtitles
+            .last()
+            .expect("a text track beside the .strm");
         assert_eq!(external.language.as_deref(), Some("zh"));
         assert_eq!(external.codec, "ass");
         assert_eq!(item.subtitles.len(), 2, "embedded first, then the sidecar");

@@ -53,7 +53,10 @@ pub fn merge_states(
             Place::File(path) => held::hold(&tx, account, path, brought),
         })
         .collect::<Result<Vec<_>>>()?;
-    if states.iter().any(|(place, _)| matches!(place, Place::File(_))) {
+    if states
+        .iter()
+        .any(|(place, _)| matches!(place, Place::File(_)))
+    {
         held::release(&tx)?;
     }
     tx.commit()?;

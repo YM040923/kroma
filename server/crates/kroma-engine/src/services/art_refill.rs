@@ -35,7 +35,9 @@ pub async fn refill(state: &SharedState, name: &str) -> bool {
     let Ok(Ok(Some(owner))) = found else {
         return false;
     };
-    let lock = state.art_refills.lock_for(&format!("{}:{}", owner.kind, owner.id));
+    let lock = state
+        .art_refills
+        .lock_for(&format!("{}:{}", owner.kind, owner.id));
     let _held = lock.lock().await;
     if path.exists() {
         return true;

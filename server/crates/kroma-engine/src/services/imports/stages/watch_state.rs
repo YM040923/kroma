@@ -12,7 +12,7 @@ mod bounded;
 use anyhow::Result;
 
 use self::bounded::bounded;
-use super::found::{Found, find};
+use super::found::{find, Found};
 use super::{Importing, Outcome, StatePage};
 use crate::db;
 use crate::db::imports::{Merged, Place};

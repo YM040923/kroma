@@ -7,8 +7,8 @@
 use crate::model::metadata::{CastMember, CrewMember};
 use crate::model::RequestKind;
 
-use super::{api, tmdb_json, IMG};
 use super::common::{build_cast, build_crew};
+use super::{api, tmdb_json, IMG};
 
 mod hits;
 mod release;
@@ -16,8 +16,8 @@ mod release;
 mod tests;
 mod wire;
 
-pub use hits::{filter, search, trending};
 use hits::hit_from;
+pub use hits::{filter, search, trending};
 use release::movie_dates;
 use wire::DetailResp;
 
@@ -162,19 +162,18 @@ pub fn detail(
         ("language", language.to_string()),
         ("append_to_response", append.to_string()),
     ];
-    let mut d: DetailResp =
-        match tmdb_json(
-            super::PURPOSE,
-            &format!("{}/{path}/{tmdb_id}", api()),
-            api_key,
-            &params,
-        ) {
-            Ok(d) => d,
-            // TMDB 404s arrive as an HTTP error status; treat any failure on the detail
-            // endpoint as "not found" only when the id namespace mismatched is
-            // indistinguishable, so callers surface a uniform not-found.
-            Err(()) => return Err(()),
-        };
+    let mut d: DetailResp = match tmdb_json(
+        super::PURPOSE,
+        &format!("{}/{path}/{tmdb_id}", api()),
+        api_key,
+        &params,
+    ) {
+        Ok(d) => d,
+        // TMDB 404s arrive as an HTTP error status; treat any failure on the detail
+        // endpoint as "not found" only when the id namespace mismatched is
+        // indistinguishable, so callers surface a uniform not-found.
+        Err(()) => return Err(()),
+    };
     let title = match d.title.or(d.name) {
         Some(t) => t,
         None => return Ok(None),

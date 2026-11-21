@@ -48,7 +48,12 @@ fn behind(tag: &str, rules: &str, middleware: Vec<(&str, StubFn)>) -> (Network, 
 }
 
 fn asked_of(heard: &Heard) -> Vec<String> {
-    heard.lock().unwrap().iter().map(|(who, _)| who.clone()).collect()
+    heard
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(who, _)| who.clone())
+        .collect()
 }
 
 #[test]
@@ -149,7 +154,11 @@ fn a_connection_a_rule_or_a_guard_blocked_is_never_put_to_a_middleware() {
 #[test]
 fn an_answer_that_would_send_a_tunnelled_connection_direct_is_no_answer() {
     let heard = Heard::default();
-    let relaxing = answering("tv.example.relaxing", &heard, json!({ "verdict": "direct" }));
+    let relaxing = answering(
+        "tv.example.relaxing",
+        &heard,
+        json!({ "verdict": "direct" }),
+    );
     let (network, _pool) = behind("middleware-relax", "vpn", vec![relaxing]);
 
     let ruling = network.rule_on("tv.kroma.indexer", "indexer", &target("tracker.example"));
@@ -182,7 +191,11 @@ fn a_slow_middleware_is_skipped_and_the_skip_is_on_record() {
 
 #[test]
 fn a_required_middleware_that_does_not_answer_blocks_the_connection() {
-    let (network, _pool) = behind("middleware-required", "direct", vec![slow("tv.example.slow")]);
+    let (network, _pool) = behind(
+        "middleware-required",
+        "direct",
+        vec![slow("tv.example.slow")],
+    );
     network
         .set_middleware_order(vec![Placed {
             module: "tv.example.slow".to_string(),
@@ -247,7 +260,11 @@ fn a_burst_of_the_same_connection_is_one_question() {
 #[test]
 fn a_middleware_is_not_asked_about_its_own_connections() {
     let heard = Heard::default();
-    let blocklist = answering("tv.example.blocklist", &heard, json!({ "verdict": "block" }));
+    let blocklist = answering(
+        "tv.example.blocklist",
+        &heard,
+        json!({ "verdict": "block" }),
+    );
     let (network, _pool) = behind("middleware-own", "direct", vec![blocklist]);
 
     let ruling = network.rule_on("tv.example.blocklist", "lists", &target("lists.example"));

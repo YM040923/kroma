@@ -85,7 +85,11 @@ fn an_es256_token_is_accepted_against_the_ec_key() {
 #[test]
 fn an_es384_token_is_accepted_against_the_p384_key() {
     let keys = KeySet::parse(&jwks(&[p384_jwk(p384_key(), "p384")])).unwrap();
-    let token = sign_es384(p384_key(), &json!({ "alg": "ES384", "kid": "p384" }), &claims());
+    let token = sign_es384(
+        p384_key(),
+        &json!({ "alg": "ES384", "kid": "p384" }),
+        &claims(),
+    );
 
     let verified = verify(&token, &keys, &expected());
 
@@ -95,7 +99,11 @@ fn an_es384_token_is_accepted_against_the_p384_key() {
 #[test]
 fn an_eddsa_token_is_accepted_against_the_ed25519_key() {
     let keys = KeySet::parse(&jwks(&[ed25519_jwk(ed25519_key(), "ed")])).unwrap();
-    let token = sign_eddsa(ed25519_key(), &json!({ "alg": "EdDSA", "kid": "ed" }), &claims());
+    let token = sign_eddsa(
+        ed25519_key(),
+        &json!({ "alg": "EdDSA", "kid": "ed" }),
+        &claims(),
+    );
 
     let verified = verify(&token, &keys, &expected());
 
@@ -110,13 +118,27 @@ fn a_signature_is_only_good_under_the_algorithm_its_key_is_for() {
         ed25519_jwk(ed25519_key(), "ed"),
     ]))
     .unwrap();
-    let crossed = sign_es384(p384_key(), &json!({ "alg": "ES256", "kid": "p384" }), &claims());
-    let renamed = sign_eddsa(ed25519_key(), &json!({ "alg": "ES384", "kid": "ed" }), &claims());
+    let crossed = sign_es384(
+        p384_key(),
+        &json!({ "alg": "ES256", "kid": "p384" }),
+        &claims(),
+    );
+    let renamed = sign_eddsa(
+        ed25519_key(),
+        &json!({ "alg": "ES384", "kid": "ed" }),
+        &claims(),
+    );
     let header = json!({ "alg": "EdDSA", "kid": "ed" });
     let honest = sign_eddsa(ed25519_key(), &header, &claims());
     let other = sign_eddsa(ed25519_key(), &header, &with(json!({ "sub": "sub-leo" })));
-    let (payload, signature) = (other.split('.').nth(1).unwrap(), honest.rsplit('.').next().unwrap());
-    let changed = format!("{}.{payload}.{signature}", honest.split('.').next().unwrap());
+    let (payload, signature) = (
+        other.split('.').nth(1).unwrap(),
+        honest.rsplit('.').next().unwrap(),
+    );
+    let changed = format!(
+        "{}.{payload}.{signature}",
+        honest.split('.').next().unwrap()
+    );
 
     assert!(verify(&crossed, &keys, &expected()).is_err());
     assert!(verify(&renamed, &keys, &expected()).is_err());
@@ -130,11 +152,25 @@ fn a_key_on_another_curve_than_its_algorithm_names_verifies_nothing() {
     let mut short = ed25519_jwk(ed25519_key(), "ed");
     short["crv"] = json!("Ed448");
     let keys = KeySet::parse(&jwks(&[odd, short])).unwrap();
-    let es384 = sign_es384(p384_key(), &json!({ "alg": "ES384", "kid": "p384" }), &claims());
-    let eddsa = sign_eddsa(ed25519_key(), &json!({ "alg": "EdDSA", "kid": "ed" }), &claims());
+    let es384 = sign_es384(
+        p384_key(),
+        &json!({ "alg": "ES384", "kid": "p384" }),
+        &claims(),
+    );
+    let eddsa = sign_eddsa(
+        ed25519_key(),
+        &json!({ "alg": "EdDSA", "kid": "ed" }),
+        &claims(),
+    );
 
-    assert_eq!(verify(&es384, &keys, &expected()), Err(TokenError::Signature));
-    assert_eq!(verify(&eddsa, &keys, &expected()), Err(TokenError::Signature));
+    assert_eq!(
+        verify(&es384, &keys, &expected()),
+        Err(TokenError::Signature)
+    );
+    assert_eq!(
+        verify(&eddsa, &keys, &expected()),
+        Err(TokenError::Signature)
+    );
 }
 
 #[test]

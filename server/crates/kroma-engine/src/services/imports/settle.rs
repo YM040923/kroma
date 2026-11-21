@@ -2,7 +2,7 @@
 //! dropped, a stage takes the rest, and what it answers is recorded, counted
 //! and, for a title that matched nothing, listed.
 
-use anyhow::{Result, ensure};
+use anyhow::{ensure, Result};
 use serde::Serialize;
 
 use super::passage::Passage;

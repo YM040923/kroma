@@ -1,7 +1,7 @@
 //! The body of the import job: it takes the import that waits, runs it, and
 //! ends it as completed, cancelled or failed. Whatever it brought stays.
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 
 use super::halt::Halt;
 use super::passage::Passage;
@@ -10,7 +10,7 @@ use crate::db;
 use crate::db::imports::Ending;
 use crate::model::imports::{Import, Report, Status};
 use crate::services::importers::Unanswered;
-use crate::services::jobs::{JobContext, now_ms};
+use crate::services::jobs::{now_ms, JobContext};
 
 const IMPORTS_KEPT: usize = 50;
 

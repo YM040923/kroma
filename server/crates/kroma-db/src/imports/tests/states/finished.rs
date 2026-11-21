@@ -13,7 +13,12 @@ fn held(pool: &Pool) -> Vec<String> {
 #[test]
 fn a_title_finished_there_after_the_person_stopped_in_it_here_loses_its_resume_point() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
-    merge(&pool, &ana, Place::Title("heat"), stopped(600_000, LAST_WEEK));
+    merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(600_000, LAST_WEEK),
+    );
 
     let merged = merge(&pool, &ana, Place::Title("heat"), watched(YESTERDAY));
 
@@ -25,7 +30,12 @@ fn a_title_finished_there_after_the_person_stopped_in_it_here_loses_its_resume_p
 #[test]
 fn a_watched_flag_older_than_the_resume_point_here_comes_and_leaves_it() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
-    merge(&pool, &ana, Place::Title("heat"), stopped(600_000, YESTERDAY));
+    merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(600_000, YESTERDAY),
+    );
 
     let merged = merge(&pool, &ana, Place::Title("heat"), watched(LAST_WEEK));
 
@@ -52,7 +62,12 @@ fn a_resume_point_a_player_saved_after_the_title_was_finished_there_stays() {
 #[test]
 fn a_title_started_again_there_after_it_was_finished_keeps_its_new_resume_point() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
-    merge(&pool, &ana, Place::Title("heat"), stopped(600_000, LAST_WEEK));
+    merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(600_000, LAST_WEEK),
+    );
 
     merge(
         &pool,
@@ -71,7 +86,12 @@ fn a_title_started_again_there_after_it_was_finished_keeps_its_new_resume_point(
 #[test]
 fn a_flag_this_server_already_holds_takes_no_resume_point_away() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
-    merge(&pool, &ana, Place::Title("heat"), stopped(600_000, LAST_WEEK));
+    merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(600_000, LAST_WEEK),
+    );
     crate::mark_finished(&pool, &ana, "heat").unwrap();
 
     let merged = merge(&pool, &ana, Place::Title("heat"), watched(YESTERDAY));

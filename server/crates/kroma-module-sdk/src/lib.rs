@@ -144,18 +144,18 @@ pub mod i18n {
 /// well.
 #[cfg(feature = "storage")]
 pub mod db {
-    #[cfg(feature = "core")]
-    pub use kroma_db::*;
-    pub use kroma_sqlite::{
-        apply_migrations, init_scoped, migrate_store, open, open_with, Grant, Pool, PoolInner,
-        PooledConn, Run, Step,
-    };
-    #[cfg(all(any(test, feature = "testing"), not(feature = "core")))]
-    pub use kroma_sqlite::testing;
     /// `temp_pool` stamps the core schema, for a grant test that has to run
     /// against the real tables rather than a copy of them.
     #[cfg(all(any(test, feature = "testing"), feature = "core"))]
     pub use kroma_db::testing;
+    #[cfg(feature = "core")]
+    pub use kroma_db::*;
+    #[cfg(all(any(test, feature = "testing"), not(feature = "core")))]
+    pub use kroma_sqlite::testing;
+    pub use kroma_sqlite::{
+        apply_migrations, init_scoped, migrate_store, open, open_with, Grant, Pool, PoolInner,
+        PooledConn, Run, Step,
+    };
 }
 
 /// Files a module downloads once and keeps, each pinned by the sha256 of its

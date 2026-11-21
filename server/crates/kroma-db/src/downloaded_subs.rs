@@ -130,10 +130,7 @@ mod tests {
         assert!(downloaded_sub(&conn, "other", "s1").unwrap().is_none());
         drop(conn);
 
-        assert_eq!(
-            delete_downloaded_sub(&p, "other", "s1").unwrap(),
-            None
-        );
+        assert_eq!(delete_downloaded_sub(&p, "other", "s1").unwrap(), None);
         assert_eq!(
             delete_downloaded_sub(&p, "m1", "s1").unwrap().as_deref(),
             Some("/data/subs/s1.vtt")

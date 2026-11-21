@@ -25,8 +25,8 @@ mod permissions;
 mod rules;
 mod summary;
 
-pub use decide::{decide, CORE, GUARD_LINK_LOCAL, GUARD_LOOPBACK};
 use decide::is_this_machine;
+pub use decide::{decide, CORE, GUARD_LINK_LOCAL, GUARD_LOOPBACK};
 pub use flow::{Flow, FlowFilter, FlowPage, FlowReport, FlowRoute, Verdict};
 pub use history::{CallerPurpose, CORE_PURPOSES, FLUSH_EVERY};
 pub use inbound::{via_of, Arrival, InboundJournal, InboundSummary, Via};

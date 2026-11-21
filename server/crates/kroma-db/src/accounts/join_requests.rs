@@ -201,7 +201,10 @@ mod tests {
         assert_eq!(waiting.len(), 1);
         assert_eq!(waiting[0].email, "lea@id.test");
         assert_eq!(waiting[0].name.as_deref(), Some("Léa"));
-        assert_eq!(join_request(&p, &waiting[0].id).unwrap(), Some(waiting[0].clone()));
+        assert_eq!(
+            join_request(&p, &waiting[0].id).unwrap(),
+            Some(waiting[0].clone())
+        );
     }
 
     #[test]
@@ -267,8 +270,7 @@ mod tests {
         let declined = list_join_requests(&p, false).unwrap().remove(1).id;
         block_join_request(&p, &declined).unwrap();
 
-        let filed =
-            file_join_request(&p, &applicant("new"), NOW + 10, NOW + 5, 1).unwrap();
+        let filed = file_join_request(&p, &applicant("new"), NOW + 10, NOW + 5, 1).unwrap();
 
         assert_eq!(filed, Filed::New);
         let waiting = list_join_requests(&p, false).unwrap();

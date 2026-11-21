@@ -25,7 +25,8 @@ pub trait Backend: Send + Sync {
     /// is refused here.
     fn open(&self, path: &str) -> Result<u32, Failure>;
     fn close(&self, connection: u32);
-    fn run(&self, connection: u32, statement: &str, params: Vec<Value>) -> Result<Outcome, Failure>;
+    fn run(&self, connection: u32, statement: &str, params: Vec<Value>)
+        -> Result<Outcome, Failure>;
     fn batch(&self, connection: u32, statements: &str) -> Result<(), Failure>;
     /// Keep a copy of this connection's database at `target`, before a migration.
     fn snapshot(&self, connection: u32, target: &str) -> Result<(), Failure>;

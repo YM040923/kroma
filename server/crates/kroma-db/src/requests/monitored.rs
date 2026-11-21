@@ -1,6 +1,6 @@
 //! The `monitored` table: the titles the server wants to hold.
 
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use kroma_domain::{MinAvailability, MonitoredSummary, MonitoredTitle, RequestKind};
 
@@ -157,8 +157,8 @@ mod tests {
     use super::*;
     use crate::requests::tests::*;
     use crate::requests::{
-        WantedRow, claim_wanted, insert_request, insert_wanted, set_request_status,
-        wanted_for_title,
+        claim_wanted, insert_request, insert_wanted, set_request_status, wanted_for_title,
+        WantedRow,
     };
     use kroma_domain::RequestStatus;
 
@@ -278,16 +278,12 @@ mod tests {
 
         let conn = p.get().unwrap();
         assert!(removed);
-        assert!(
-            get_monitored(&conn, RequestKind::Show, 1396)
-                .unwrap()
-                .is_none()
-        );
-        assert!(
-            wanted_for_title(&conn, RequestKind::Show, 1396)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(get_monitored(&conn, RequestKind::Show, 1396)
+            .unwrap()
+            .is_none());
+        assert!(wanted_for_title(&conn, RequestKind::Show, 1396)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             wanted_for_title(&conn, RequestKind::Show, 1400)
                 .unwrap()
@@ -323,10 +319,8 @@ mod tests {
         delete_monitored(&p, RequestKind::Show, 1396).unwrap();
 
         let conn = p.get().unwrap();
-        assert!(
-            wanted_for_title(&conn, RequestKind::Show, 1396)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(wanted_for_title(&conn, RequestKind::Show, 1396)
+            .unwrap()
+            .is_empty());
     }
 }

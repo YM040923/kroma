@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use kroma_module_wire::{LIFECYCLE_HEADER, LIFECYCLE_PATH, Lifecycle, Migrations};
+use kroma_module_wire::{Lifecycle, Migrations, LIFECYCLE_HEADER, LIFECYCLE_PATH};
 use kroma_sqlite::Migrated;
 use kroma_wasm_host::{Header, ModuleInstance, NetPolicy, Request, Response};
 

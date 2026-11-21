@@ -50,7 +50,12 @@ fn titles(entries: &[SplashEntry]) -> Vec<&str> {
 }
 
 fn held(trending: &WorldTrending) -> (i64, World) {
-    trending.held.lock().unwrap().clone().expect("a world is held")
+    trending
+        .held
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("a world is held")
 }
 
 fn provider_key() -> String {
@@ -67,12 +72,20 @@ fn trending_week(path: &str) -> (u16, Value) {
         }
         _ => return (404, json!({})),
     };
-    (200, json!({ "page": 1, "total_pages": 1, "results": results }))
+    (
+        200,
+        json!({ "page": 1, "total_pages": 1, "results": results }),
+    )
 }
 
 #[test]
 fn a_household_of_several_leads_with_its_own_plays_and_the_world_fills_the_rest() {
-    let row = blend(ids(&["home1", "home2"]), 3, &ids(&["home2", "world1", "world2"]), 4);
+    let row = blend(
+        ids(&["home1", "home2"]),
+        3,
+        &ids(&["home2", "world1", "world2"]),
+        4,
+    );
 
     assert_eq!(row, ["home1", "home2", "world1", "world2"]);
 }
@@ -114,7 +127,10 @@ fn what_is_held_is_answered_as_it_is() {
     let state = test_state();
     state.home.world.hold(vec![(false, 603), (true, 1396)]);
 
-    assert_eq!(*state.home.world.ranked(&state), [(false, 603), (true, 1396)]);
+    assert_eq!(
+        *state.home.world.ranked(&state),
+        [(false, 603), (true, 1396)]
+    );
 }
 
 #[test]
@@ -173,17 +189,32 @@ fn a_server_with_a_provider_key_reads_the_ranking_and_its_covers_in_the_backgrou
 
     let _provider = FakeTmdb::start_shared(trending_week);
 
-    state.home.world.refresh(&state).expect("a read starts").join().unwrap();
+    state
+        .home
+        .world
+        .refresh(&state)
+        .expect("a read starts")
+        .join()
+        .unwrap();
 
-    assert_eq!(*state.home.world.ranked(&state), [(false, 603), (true, 1396)]);
-    assert_eq!(titles(&state.home.world.covers(&state)), ["The Matrix", "Breaking Bad"]);
+    assert_eq!(
+        *state.home.world.ranked(&state),
+        [(false, 603), (true, 1396)]
+    );
+    assert_eq!(
+        titles(&state.home.world.covers(&state)),
+        ["The Matrix", "Breaking Bad"]
+    );
     assert!(!state.home.world.fetching.load(Ordering::Acquire));
 }
 
 #[test]
 fn a_sample_that_fills_the_cap_alone_is_kept_whole() {
     let state = test_state();
-    state.home.world.hold_world(Vec::new(), vec![splash("world1")]);
+    state
+        .home
+        .world
+        .hold_world(Vec::new(), vec![splash("world1")]);
     let sample = vec![splash("home1"), splash("home2"), splash("home3")];
 
     let filled = with_world(&state, sample, 2);

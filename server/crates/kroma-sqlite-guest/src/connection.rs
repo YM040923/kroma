@@ -87,7 +87,12 @@ impl Connection {
         Ok(())
     }
 
-    pub fn pragma_update<V: ToSql>(&self, _schema: Option<&str>, name: &str, value: V) -> Result<()> {
+    pub fn pragma_update<V: ToSql>(
+        &self,
+        _schema: Option<&str>,
+        name: &str,
+        value: V,
+    ) -> Result<()> {
         let literal = match value.to_sql()?.into_value() {
             Value::Integer(i) => i.to_string(),
             Value::Real(r) => r.to_string(),
@@ -108,7 +113,10 @@ impl Connection {
         self.transaction_with_behavior(TransactionBehavior::Deferred)
     }
 
-    pub fn transaction_with_behavior(&mut self, behavior: TransactionBehavior) -> Result<Transaction<'_>> {
+    pub fn transaction_with_behavior(
+        &mut self,
+        behavior: TransactionBehavior,
+    ) -> Result<Transaction<'_>> {
         Transaction::begin(self, behavior)
     }
 

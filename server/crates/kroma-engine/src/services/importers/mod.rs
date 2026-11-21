@@ -10,8 +10,8 @@
 mod asks;
 mod bounds;
 
-use serde::Serialize;
 use serde::de::{DeserializeOwned, IgnoredAny};
+use serde::Serialize;
 
 use crate::domain::import::{Connected, PlayPage, StatePage, Survey, TitlePage};
 use crate::point::{Allowance, Point, Silence};

@@ -167,7 +167,9 @@ fn client() -> &'static Client {
 fn claim_slot() {
     let gate = &client().gate;
     let start = {
-        let mut next = gate.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut next = gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let start = (*next).max(Instant::now());
         *next = start + INTERVAL;
         start
@@ -241,32 +243,124 @@ struct Spec {
 // The rows Douban's own movie page carries, in the order a browse page wants
 // them: what is hot now, then what is in cinemas, then the enduring lists.
 const MOVIE: &[Spec] = &[
-    Spec { collection: "movie_real_time_hotest", title: "豆瓣实时热门电影", ranked: true },
-    Spec { collection: "movie_showing", title: "影院热映", ranked: false },
-    Spec { collection: "movie_soon", title: "即将上映", ranked: false },
-    Spec { collection: "movie_hot_gaia", title: "豆瓣热门电影", ranked: false },
-    Spec { collection: "movie_weekly_best", title: "豆瓣一周口碑电影榜", ranked: true },
-    Spec { collection: "movie_high_score", title: "豆瓣高分电影", ranked: false },
-    Spec { collection: "movie_top250", title: "豆瓣电影 Top 250", ranked: true },
-    Spec { collection: "movie_classic", title: "经典电影", ranked: false },
-    Spec { collection: "movie_scifi", title: "高分经典科幻片榜", ranked: false },
-    Spec { collection: "movie_comedy", title: "高分经典喜剧片榜", ranked: false },
-    Spec { collection: "movie_action", title: "高分经典动作片榜", ranked: false },
-    Spec { collection: "movie_love", title: "高分经典爱情片榜", ranked: false },
+    Spec {
+        collection: "movie_real_time_hotest",
+        title: "豆瓣实时热门电影",
+        ranked: true,
+    },
+    Spec {
+        collection: "movie_showing",
+        title: "影院热映",
+        ranked: false,
+    },
+    Spec {
+        collection: "movie_soon",
+        title: "即将上映",
+        ranked: false,
+    },
+    Spec {
+        collection: "movie_hot_gaia",
+        title: "豆瓣热门电影",
+        ranked: false,
+    },
+    Spec {
+        collection: "movie_weekly_best",
+        title: "豆瓣一周口碑电影榜",
+        ranked: true,
+    },
+    Spec {
+        collection: "movie_high_score",
+        title: "豆瓣高分电影",
+        ranked: false,
+    },
+    Spec {
+        collection: "movie_top250",
+        title: "豆瓣电影 Top 250",
+        ranked: true,
+    },
+    Spec {
+        collection: "movie_classic",
+        title: "经典电影",
+        ranked: false,
+    },
+    Spec {
+        collection: "movie_scifi",
+        title: "高分经典科幻片榜",
+        ranked: false,
+    },
+    Spec {
+        collection: "movie_comedy",
+        title: "高分经典喜剧片榜",
+        ranked: false,
+    },
+    Spec {
+        collection: "movie_action",
+        title: "高分经典动作片榜",
+        ranked: false,
+    },
+    Spec {
+        collection: "movie_love",
+        title: "高分经典爱情片榜",
+        ranked: false,
+    },
 ];
 
 const TV: &[Spec] = &[
-    Spec { collection: "tv_real_time_hotest", title: "豆瓣实时热门剧集", ranked: true },
-    Spec { collection: "tv_hot", title: "近期热门剧集", ranked: false },
-    Spec { collection: "tv_chinese_best_weekly", title: "华语口碑剧集榜", ranked: true },
-    Spec { collection: "tv_global_best_weekly", title: "全球口碑剧集榜", ranked: true },
-    Spec { collection: "tv_domestic", title: "近期热门国产剧", ranked: false },
-    Spec { collection: "tv_american", title: "近期热门美剧", ranked: false },
-    Spec { collection: "tv_japanese", title: "近期热门日剧", ranked: false },
-    Spec { collection: "tv_korean", title: "近期热门韩剧", ranked: false },
-    Spec { collection: "tv_animation", title: "近期热门动画", ranked: false },
-    Spec { collection: "show_domestic", title: "近期热门国内综艺", ranked: false },
-    Spec { collection: "show_foreign", title: "近期热门国外综艺", ranked: false },
+    Spec {
+        collection: "tv_real_time_hotest",
+        title: "豆瓣实时热门剧集",
+        ranked: true,
+    },
+    Spec {
+        collection: "tv_hot",
+        title: "近期热门剧集",
+        ranked: false,
+    },
+    Spec {
+        collection: "tv_chinese_best_weekly",
+        title: "华语口碑剧集榜",
+        ranked: true,
+    },
+    Spec {
+        collection: "tv_global_best_weekly",
+        title: "全球口碑剧集榜",
+        ranked: true,
+    },
+    Spec {
+        collection: "tv_domestic",
+        title: "近期热门国产剧",
+        ranked: false,
+    },
+    Spec {
+        collection: "tv_american",
+        title: "近期热门美剧",
+        ranked: false,
+    },
+    Spec {
+        collection: "tv_japanese",
+        title: "近期热门日剧",
+        ranked: false,
+    },
+    Spec {
+        collection: "tv_korean",
+        title: "近期热门韩剧",
+        ranked: false,
+    },
+    Spec {
+        collection: "tv_animation",
+        title: "近期热门动画",
+        ranked: false,
+    },
+    Spec {
+        collection: "show_domestic",
+        title: "近期热门国内综艺",
+        ranked: false,
+    },
+    Spec {
+        collection: "show_foreign",
+        title: "近期热门国外综艺",
+        ranked: false,
+    },
 ];
 
 fn specs(kind: Kind) -> &'static [Spec] {
@@ -333,7 +427,10 @@ pub fn search(raw: &str) -> Result<Vec<SearchItem>, DoubanError> {
         return Ok(Vec::new());
     }
     let key = format!("search:{}", query.to_lowercase());
-    let url = format!("https://m.douban.com/search/?query={}&type=1002", percent_encode(query));
+    let url = format!(
+        "https://m.douban.com/search/?query={}&type=1002",
+        percent_encode(query)
+    );
     let data = cached_json(key, SEARCH_TTL, || {
         let html = fetch_text(&url)?;
         Ok(Value::Array(parse_search(&html)))
@@ -498,9 +595,7 @@ fn poster_of(raw: &Value) -> Option<String> {
 
 fn backdrop_of(raw: &Value) -> Option<String> {
     let photo = raw.get("photos").and_then(Value::as_array)?.first()?;
-    text(Some(photo)).or_else(|| {
-        text(photo.get("large")).or_else(|| text(photo.get("url")))
-    })
+    text(Some(photo)).or_else(|| text(photo.get("large")).or_else(|| text(photo.get("url"))))
 }
 
 fn rating_of(raw: &Value) -> f32 {
@@ -596,13 +691,10 @@ fn latin_tail_start(role: &str) -> Option<usize> {
             continue;
         }
         let rest = role[index..].trim_start();
-        let latin_tail = rest
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_alphabetic())
-            && rest.chars().all(|c| {
-                c.is_ascii_alphanumeric() || matches!(c, ' ' | '.' | '\'' | '’' | '-')
-            });
+        let latin_tail = rest.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+            && rest
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '.' | '\'' | '’' | '-'));
         if latin_tail {
             return Some(index);
         }
@@ -645,18 +737,14 @@ fn detail_from(data: &Value, celebrities: &Value) -> Result<Detail, DoubanError>
     } else {
         Kind::Movie
     };
-    let title = text(data.get("title")).ok_or_else(|| DoubanError::Unreadable("缺少标题".into()))?;
+    let title =
+        text(data.get("title")).ok_or_else(|| DoubanError::Unreadable("缺少标题".into()))?;
     let year = year_of(data.get("year").unwrap_or(&Value::Null), None)
         .ok_or_else(|| DoubanError::Unreadable("缺少年份".into()))?;
     let poster = poster_of(data).ok_or_else(|| DoubanError::Unreadable("缺少海报".into()))?;
     let aliases = array_of_strings(data.get("aka"));
     let original_title = text(data.get("original_title"))
-        .or_else(|| {
-            aliases
-                .iter()
-                .find(|alias| alias.is_ascii())
-                .cloned()
-        })
+        .or_else(|| aliases.iter().find(|alias| alias.is_ascii()).cloned())
         .unwrap_or_else(|| title.clone());
     let mut genres = array_of_strings(data.get("genres"));
     genres.truncate(3);
@@ -722,7 +810,10 @@ mod tests {
         assert_eq!(card.rating, 9.7);
         assert_eq!(card.genres, ["剧情", "犯罪"]);
         assert_eq!(card.poster_url, "https://img9.doubanio.com/x.jpg");
-        assert_eq!(card.backdrop_url.as_deref(), Some("https://img9.doubanio.com/b.jpg"));
+        assert_eq!(
+            card.backdrop_url.as_deref(),
+            Some("https://img9.doubanio.com/b.jpg")
+        );
     }
 
     #[test]
@@ -773,7 +864,10 @@ mod tests {
         let detail = detail_from(&data, &celebrities).expect("a detail");
 
         assert_eq!(detail.card.year, Some(1994));
-        assert_eq!(detail.directors[0].avatar_url.as_deref(), Some("https://img/d.jpg"));
+        assert_eq!(
+            detail.directors[0].avatar_url.as_deref(),
+            Some("https://img/d.jpg")
+        );
         assert_eq!(detail.cast[0].role.as_deref(), Some("安迪·杜佛兰"));
         assert_eq!(detail.country, "美国");
         assert_eq!(detail.aliases, ["The Shawshank Redemption"]);
@@ -783,7 +877,10 @@ mod tests {
     fn a_row_is_known_by_its_static_id_without_a_request() {
         let layout = layout(Kind::Movie);
 
-        assert!(layout.rows.iter().any(|row| row.id == "douban-movie_top250"));
+        assert!(layout
+            .rows
+            .iter()
+            .any(|row| row.id == "douban-movie_top250"));
         assert!(spec(Kind::Movie, "douban-movie_top250").is_some());
         assert!(spec(Kind::Movie, "douban-tv_hot").is_none());
         assert!(spec(Kind::Tv, "douban-tv_hot").is_some());

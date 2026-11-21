@@ -26,9 +26,9 @@ mod start;
 #[cfg(test)]
 mod tests;
 
-pub use review::{FoldersAsk, folders_here};
+pub use review::{folders_here, FoldersAsk};
 pub(crate) use run::run;
-pub use start::{Request, StartError, Started, start};
+pub use start::{start, Request, StartError, Started};
 
 use crate::services::jobs::JobKey;
 

@@ -89,7 +89,10 @@ impl Supervisor {
         tracing::info!(module = %id, "component changed; restarting the module");
         self.stop(id);
         if let Err(error) = self.accept_local_build(id) {
-            self.say(id, &format!("ERROR the rebuilt component could not be recorded: {error}"));
+            self.say(
+                id,
+                &format!("ERROR the rebuilt component could not be recorded: {error}"),
+            );
         }
         if let Err(e) = self.start_installed(id) {
             tracing::error!(
@@ -132,12 +135,18 @@ impl Supervisor {
                 proc.media
                     .as_ref()
                     .is_some_and(|held| !held.is_empty() && *held != media)
-                    || proc.downloads.as_ref().is_some_and(|held| *held != downloads)
+                    || proc
+                        .downloads
+                        .as_ref()
+                        .is_some_and(|held| *held != downloads)
             })
             .map(|(id, _)| id.clone())
             .collect();
         for id in moved {
-            self.say(&id, "INFO restarting: the library or download folders changed");
+            self.say(
+                &id,
+                "INFO restarting: the library or download folders changed",
+            );
             self.stop(&id);
             if let Err(e) = self.start_installed(&id) {
                 self.say(&id, &format!("ERROR restart failed: {e:#}"));

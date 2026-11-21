@@ -28,7 +28,8 @@ fn a_database_is_created_where_it_is_named() {
     let path = dir.path().join("module.sqlite");
 
     let conn = open_owned(&path).unwrap();
-    conn.execute_batch("CREATE TABLE mine (id INTEGER)").unwrap();
+    conn.execute_batch("CREATE TABLE mine (id INTEGER)")
+        .unwrap();
 
     assert_eq!(tables(&path), ["mine"]);
 }

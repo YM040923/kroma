@@ -147,7 +147,10 @@ fn image(line: &str) -> Option<HighlightImage> {
 }
 
 fn plain(text: &str) -> String {
-    unlink(text).replace("**", "").replace("__", "").replace('`', "")
+    unlink(text)
+        .replace("**", "")
+        .replace("__", "")
+        .replace('`', "")
 }
 
 fn unlink(text: &str) -> String {
@@ -262,7 +265,10 @@ mod tests {
 
         assert_eq!(notes.action, vec!["Sauvegardez avant de mettre à jour."]);
         assert_eq!(notes.highlights.len(), 1);
-        assert_eq!(notes.fixed, vec!["Un film en pause ne repart plus tout seul."]);
+        assert_eq!(
+            notes.fixed,
+            vec!["Un film en pause ne repart plus tout seul."]
+        );
         assert_eq!(notes.owner, vec!["Le journal aligne ses colonnes."]);
     }
 

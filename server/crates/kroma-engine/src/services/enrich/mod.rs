@@ -26,6 +26,12 @@ pub(crate) fn refresh_artwork(
         return Ok((0, 0));
     };
     let eng = engine::engine_for(state, api_key);
+    let days = crate::services::settings::scrape_defaults(&state.settings, &state.config)
+        .artwork_refresh_days
+        .unwrap_or(0);
+    if days == 0 {
+        return Ok((0, 0));
+    }
     let shows = crate::db::list_shows(&state.db, None)?;
     let total = shows.len();
     let mut refreshed = 0usize;
@@ -36,7 +42,6 @@ pub(crate) fn refresh_artwork(
         }
         progress(at + 1, total);
         let options = eng.options_for(&show.library);
-        let days = options.artwork_refresh_days.unwrap_or(0);
         if days == 0 {
             continue;
         }

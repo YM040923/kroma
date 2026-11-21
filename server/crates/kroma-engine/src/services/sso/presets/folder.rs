@@ -88,9 +88,11 @@ pub(super) fn svg_fault(svg: &str) -> Option<&'static str> {
     if svg.to_ascii_lowercase().contains("<script") {
         return Some("carries a script");
     }
-    let outward = svg
-        .match_indices("href=")
-        .any(|(at, found)| !svg[at + found.len()..].trim_start_matches(['"', '\'']).starts_with('#'));
+    let outward = svg.match_indices("href=").any(|(at, found)| {
+        !svg[at + found.len()..]
+            .trim_start_matches(['"', '\''])
+            .starts_with('#')
+    });
     outward.then_some("links outside itself")
 }
 
@@ -137,7 +139,10 @@ impl Folder<'_> {
             return Err("a colour is not six lower-case hex digits after a hash".into());
         }
         if self.file(&look.mark).is_none() {
-            return Err(format!("its look names `{}`, which is not in the folder", look.mark));
+            return Err(format!(
+                "its look names `{}`, which is not in the folder",
+                look.mark
+            ));
         }
         Ok(Look {
             fill: look.fill,
@@ -168,8 +173,8 @@ impl Folder<'_> {
             return Err("its folder is not named in lower-case letters, digits and dashes".into());
         }
         let manifest = self.file(MANIFEST).ok_or("it has no preset.json")?;
-        let manifest: Manifest =
-            serde_json::from_slice(manifest).map_err(|e| format!("its preset.json does not read: {e}"))?;
+        let manifest: Manifest = serde_json::from_slice(manifest)
+            .map_err(|e| format!("its preset.json does not read: {e}"))?;
         let mark = manifest.mark.unwrap_or_else(|| DEFAULT_MARK.to_string());
         if self.file(&mark).is_none() {
             return Err(format!("its mark `{mark}` is not in the folder"));
@@ -177,7 +182,11 @@ impl Folder<'_> {
         if manifest.name.trim().is_empty() || manifest.sources.mark.trim().is_empty() {
             return Err("it needs a name and the source of its mark".into());
         }
-        let links = [Some(&manifest.issuer), Some(&manifest.docs), manifest.console.as_ref()];
+        let links = [
+            Some(&manifest.issuer),
+            Some(&manifest.docs),
+            manifest.console.as_ref(),
+        ];
         if !links.into_iter().flatten().all(|url| is_web_address(url)) {
             return Err("its issuer, docs and console must be https addresses".into());
         }
@@ -231,7 +240,10 @@ pub fn read(files: &[(&'static str, &'static str, &'static [u8])]) -> (Catalog, 
     let mut catalog = Catalog::default();
     let mut problems = Vec::new();
     for folder in &folders {
-        match folder.preset().and_then(|preset| Ok((preset, folder.marks()?))) {
+        match folder
+            .preset()
+            .and_then(|preset| Ok((preset, folder.marks()?)))
+        {
             Ok((preset, marks)) => {
                 catalog.presets.push(preset);
                 catalog.marks.extend(marks);

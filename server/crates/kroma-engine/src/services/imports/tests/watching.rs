@@ -6,8 +6,8 @@ mod world;
 use std::sync::atomic::Ordering;
 
 use self::world::{
-    A_DAY, HEAT, LAST_WEEK, LAST_WEEK_STAMP, RONIN, World, a_household_that_holds, film_at,
-    folder, heat_and_ronin, of_ana, stopped,
+    a_household_that_holds, film_at, folder, heat_and_ronin, of_ana, stopped, World, A_DAY, HEAT,
+    LAST_WEEK, LAST_WEEK_STAMP, RONIN,
 };
 use super::*;
 use crate::db::imports::Window;
@@ -77,7 +77,10 @@ fn an_import_removes_no_watch_state() {
         .collect();
     assert_eq!(held_here.len(), 4);
     assert!(held_here.iter().all(|row| after.contains(row)));
-    assert_eq!(added, [&format!("watched|{}|{ronin}|{LAST_WEEK_STAMP}", world.ana)]);
+    assert_eq!(
+        added,
+        [&format!("watched|{}|{ronin}|{LAST_WEEK_STAMP}", world.ana)]
+    );
 }
 
 #[test]
@@ -195,5 +198,8 @@ fn two_users_attached_to_one_account_merge_into_it_and_the_newer_wins() {
         world.resume_point(HEAT).map(|(position, _)| position),
         Some(3_000_000)
     );
-    assert_eq!(db::list_watched(&world.state.db, &world.ana).unwrap(), [ronin]);
+    assert_eq!(
+        db::list_watched(&world.state.db, &world.ana).unwrap(),
+        [ronin]
+    );
 }

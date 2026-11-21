@@ -1,34 +1,47 @@
 //! Visible-library catalogue facets, recommendations and addressable people.
 use super::*;
 use crate::api::{util::blocking, visibility};
-use crate::model::Metadata;
 use crate::model::slugify;
+use crate::model::Metadata;
 use std::collections::{BTreeMap, BTreeSet};
 
 fn param<'a>(params: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
-    params.iter().find(|(k, _)| k.eq_ignore_ascii_case(key))
-        .map(|(_, value)| value.trim()).filter(|value| !value.is_empty())
+    params
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(key))
+        .map(|(_, value)| value.trim())
+        .filter(|value| !value.is_empty())
 }
 
 fn localized_role(role: &str) -> String {
-    role.replace("(voice)", "（配音）").replace("(Voice)", "（配音）")
+    role.replace("(voice)", "（配音）")
+        .replace("(Voice)", "（配音）")
 }
 
 fn parts(value: &str) -> impl Iterator<Item = &str> {
-    value.split([',', '|']).map(str::trim).filter(|s| !s.is_empty())
+    value
+        .split([',', '|'])
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
 }
 
 fn page(mut items: Vec<Value>, params: &HashMap<String, String>) -> Value {
     let total = items.len();
-    let start = param(params, "StartIndex").and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
-    let limit = param(params, "Limit").and_then(|v| v.parse::<usize>().ok()).unwrap_or(500);
+    let start = param(params, "StartIndex")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
+    let limit = param(params, "Limit")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(500);
     items = items.into_iter().skip(start).take(limit).collect();
     json!({ "Items": items, "TotalRecordCount": total, "StartIndex": start })
 }
 
 /// Read and localize only granted libraries before deriving any catalogue data.
 async fn visible_catalog(
-    state: &SharedState, user: &User, locale: &'static str,
+    state: &SharedState,
+    user: &User,
+    locale: &'static str,
 ) -> Result<(Vec<MediaItem>, Vec<Show>), Response> {
     let (mut items, mut shows) = query(&state.db, move |pool| {
         let mut items = db::list_items(&pool, None)?;
@@ -36,7 +49,8 @@ async fn visible_catalog(
         db::localize::overlay_items(&pool, &mut items, locale)?;
         db::localize::overlay_shows(&pool, &mut shows, locale)?;
         Ok((items, shows))
-    }).await?;
+    })
+    .await?;
     // Episodes inherit their show's rating, so the batch filter resolves the
     // shows once rather than judging each episode on its own empty metadata.
     visibility::keep_items_certified(state, user, &mut items).await?;
@@ -46,7 +60,9 @@ async fn visible_catalog(
 
 /// ParentId is never allowed to fall back to the entire catalogue.
 fn scoped_catalog(
-    state: &SharedState, mut items: Vec<MediaItem>, mut shows: Vec<Show>,
+    state: &SharedState,
+    mut items: Vec<MediaItem>,
+    mut shows: Vec<Show>,
     params: &HashMap<String, String>,
 ) -> (Vec<MediaItem>, Vec<Show>) {
     let mut episode_parent = false;
@@ -72,8 +88,10 @@ fn scoped_catalog(
                         item.metadata = show.metadata.clone();
                     }
                 }
-                items.retain(|i| i.show_id.as_deref() == Some(show_id)
-                    && season.is_none_or(|s| i.season == Some(s)));
+                items.retain(|i| {
+                    i.show_id.as_deref() == Some(show_id)
+                        && season.is_none_or(|s| i.season == Some(s))
+                });
                 shows.retain(|s| s.id == show_id && season.is_none());
             } else {
                 items.clear();
@@ -84,19 +102,30 @@ fn scoped_catalog(
     // Also inherit metadata for an explicit Episode query at library/root level.
     for item in &mut items {
         if item.metadata.is_none() {
-            if let Some(show) = shows.iter().find(|s| Some(s.id.as_str()) == item.show_id.as_deref()) {
+            if let Some(show) = shows
+                .iter()
+                .find(|s| Some(s.id.as_str()) == item.show_id.as_deref())
+            {
                 item.metadata = show.metadata.clone();
             }
         }
     }
     if let Some(include) = param(params, "IncludeItemTypes") {
         let has = |kind: &str| parts(include).any(|s| s.eq_ignore_ascii_case(kind));
-        items.retain(|i| if i.show_id.is_some() || matches!(i.kind, Kind::Episode) {
-            has("Episode")
-        } else {
-            match i.kind { Kind::Movie => has("Movie"), Kind::Video => has("Video"), _ => false }
+        items.retain(|i| {
+            if i.show_id.is_some() || matches!(i.kind, Kind::Episode) {
+                has("Episode")
+            } else {
+                match i.kind {
+                    Kind::Movie => has("Movie"),
+                    Kind::Video => has("Video"),
+                    _ => false,
+                }
+            }
         });
-        if !has("Series") { shows.clear(); }
+        if !has("Series") {
+            shows.clear();
+        }
     } else if !episode_parent {
         items.retain(|i| i.show_id.is_none() && matches!(i.kind, Kind::Movie | Kind::Video));
     }
@@ -126,17 +155,35 @@ fn credits(meta: &Metadata) -> Vec<Credit> {
     let mut out = Vec::new();
     for c in &meta.cast {
         if let Some(id) = person_id(&c.name, c.tmdb_id) {
-            out.push(Credit { id, name: c.name.clone(), tmdb_id: c.tmdb_id,
-                profile: c.profile_url.clone(), kind: "Actor", role: c.character.clone() });
+            out.push(Credit {
+                id,
+                name: c.name.clone(),
+                tmdb_id: c.tmdb_id,
+                profile: c.profile_url.clone(),
+                kind: "Actor",
+                role: c.character.clone(),
+            });
         }
     }
     for c in &meta.crew {
         if let Some(id) = person_id(&c.name, c.tmdb_id) {
-            let kind = if c.job.eq_ignore_ascii_case("director") { "Director" }
-                else if c.job.eq_ignore_ascii_case("writer") || c.job.eq_ignore_ascii_case("screenplay") { "Writer" }
-                else { "Person" };
-            out.push(Credit { id, name: c.name.clone(), tmdb_id: c.tmdb_id,
-                profile: c.profile_url.clone(), kind, role: Some(c.job.clone()) });
+            let kind = if c.job.eq_ignore_ascii_case("director") {
+                "Director"
+            } else if c.job.eq_ignore_ascii_case("writer")
+                || c.job.eq_ignore_ascii_case("screenplay")
+            {
+                "Writer"
+            } else {
+                "Person"
+            };
+            out.push(Credit {
+                id,
+                name: c.name.clone(),
+                tmdb_id: c.tmdb_id,
+                profile: c.profile_url.clone(),
+                kind,
+                role: Some(c.job.clone()),
+            });
         }
     }
     out
@@ -154,16 +201,26 @@ fn credit_value(c: &Credit, embedded: bool) -> Value {
 
 /// Embedded credits use exactly the same identity as /Persons and /Items/person:*.
 pub(super) fn people(meta: Option<&Metadata>) -> Value {
-    let Some(meta) = meta else { return json!([]); };
-    let addressable: HashSet<_> = unique_people(std::iter::once(meta)).into_iter().map(|c| c.id).collect();
-    json!(credits(meta).iter().filter(|c| addressable.contains(&c.id))
-        .map(|c| credit_value(c, true)).collect::<Vec<_>>())
+    let Some(meta) = meta else {
+        return json!([]);
+    };
+    let addressable: HashSet<_> = unique_people(std::iter::once(meta))
+        .into_iter()
+        .map(|c| c.id)
+        .collect();
+    json!(credits(meta)
+        .iter()
+        .filter(|c| addressable.contains(&c.id))
+        .map(|c| credit_value(c, true))
+        .collect::<Vec<_>>())
 }
 
 /// AND between filter dimensions, OR within each Jellyfin list parameter.
 /// Call after applying the request locale and the user's library visibility.
 pub(super) fn matches_metadata(
-    meta: Option<&Metadata>, year: Option<u32>, params: &HashMap<String, String>,
+    meta: Option<&Metadata>,
+    year: Option<u32>,
+    params: &HashMap<String, String>,
 ) -> bool {
     if let Some(years) = param(params, "Years") {
         if !parts(years).any(|s| s.parse::<u32>().ok().zip(year).is_some_and(|(a, b)| a == b)) {
@@ -171,22 +228,35 @@ pub(super) fn matches_metadata(
         }
     }
     if let Some(ratings) = param(params, "OfficialRatings") {
-        if !meta.and_then(|m| m.certification.as_deref()).is_some_and(|rating|
-            parts(ratings).any(|s| s.eq_ignore_ascii_case(rating))) { return false; }
+        if !meta
+            .and_then(|m| m.certification.as_deref())
+            .is_some_and(|rating| parts(ratings).any(|s| s.eq_ignore_ascii_case(rating)))
+        {
+            return false;
+        }
     }
     let ids = param(params, "PersonIds");
     let name = param(params, "Person");
-    if ids.is_none() && name.is_none() { return true; }
-    let Some(meta) = meta else { return false; };
+    if ids.is_none() && name.is_none() {
+        return true;
+    }
+    let Some(meta) = meta else {
+        return false;
+    };
     let all = credits(meta);
     if let Some(ids) = ids {
         if !parts(ids).any(|id| {
             let wanted = id.strip_prefix("person:").unwrap_or(id);
-            all.iter().any(|c| c.id.strip_prefix("person:") == Some(wanted))
-        }) { return false; }
+            all.iter()
+                .any(|c| c.id.strip_prefix("person:") == Some(wanted))
+        }) {
+            return false;
+        }
     }
     if let Some(name) = name {
-        if !all.iter().any(|c| c.name.eq_ignore_ascii_case(name)) { return false; }
+        if !all.iter().any(|c| c.name.eq_ignore_ascii_case(name)) {
+            return false;
+        }
     }
     true
 }
@@ -200,8 +270,10 @@ fn similarity(source: &Metadata, candidate: &Metadata) -> usize {
 }
 
 pub(super) async fn similar(
-    State(state): State<SharedState>, headers: HeaderMap,
-    Query(params): Query<HashMap<String, String>>, Path(path): Path<HashMap<String, String>>,
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+    Path(path): Path<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     let (user, _) = user_of(&state, &headers, &params).await?;
     let locale = metadata_locale(&state, &headers, &params);
@@ -212,22 +284,51 @@ pub(super) async fn similar(
     let source_show = shows.iter().find(|s| s.id == show_id);
     let mut ranked = Vec::new();
     if let Some(source) = source_show {
-        let meta = source.metadata.as_ref().ok_or_else(visibility::out_of_scope)?;
+        let meta = source
+            .metadata
+            .as_ref()
+            .ok_or_else(visibility::out_of_scope)?;
         for show in &shows {
-            if show.id == source.id || !matches_metadata(show.metadata.as_ref(), show.year, &params) { continue; }
-            let score = show.metadata.as_ref().map(|m| similarity(meta, m)).unwrap_or(0);
-            if score > 0 { ranked.push((score, show.id.clone(), series_dto(&state, show))); }
+            if show.id == source.id || !matches_metadata(show.metadata.as_ref(), show.year, &params)
+            {
+                continue;
+            }
+            let score = show
+                .metadata
+                .as_ref()
+                .map(|m| similarity(meta, m))
+                .unwrap_or(0);
+            if score > 0 {
+                ranked.push((score, show.id.clone(), series_dto(&state, show)));
+            }
         }
-    } else if let Some(source) = source_item.filter(|i| i.show_id.is_none() && matches!(i.kind, Kind::Movie | Kind::Video)) {
-        let meta = source.metadata.as_ref().ok_or_else(visibility::out_of_scope)?;
+    } else if let Some(source) =
+        source_item.filter(|i| i.show_id.is_none() && matches!(i.kind, Kind::Movie | Kind::Video))
+    {
+        let meta = source
+            .metadata
+            .as_ref()
+            .ok_or_else(visibility::out_of_scope)?;
         for item in &items {
-            if item.id == source.id || item.show_id.is_some()
+            if item.id == source.id
+                || item.show_id.is_some()
                 || std::mem::discriminant(&item.kind) != std::mem::discriminant(&source.kind)
-                || !matches_metadata(item.metadata.as_ref(), item.year, &params) { continue; }
-            let score = item.metadata.as_ref().map(|m| similarity(meta, m)).unwrap_or(0);
-            if score > 0 { ranked.push((score, item.id.clone(), movie_dto(&state, item))); }
+                || !matches_metadata(item.metadata.as_ref(), item.year, &params)
+            {
+                continue;
+            }
+            let score = item
+                .metadata
+                .as_ref()
+                .map(|m| similarity(meta, m))
+                .unwrap_or(0);
+            if score > 0 {
+                ranked.push((score, item.id.clone(), movie_dto(&state, item)));
+            }
         }
-    } else { return Err(visibility::out_of_scope()); }
+    } else {
+        return Err(visibility::out_of_scope());
+    }
     ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
     let mut payload = page(ranked.into_iter().map(|(_, _, dto)| dto).collect(), &params);
     if let Some(items) = payload["Items"].as_array_mut() {
@@ -237,17 +338,26 @@ pub(super) async fn similar(
 }
 
 async fn facets(
-    state: &SharedState, headers: &HeaderMap, params: &HashMap<String, String>, objects: bool,
+    state: &SharedState,
+    headers: &HeaderMap,
+    params: &HashMap<String, String>,
+    objects: bool,
 ) -> Result<Value, Response> {
     let (user, _) = user_of(state, headers, params).await?;
-    let (items, shows) = visible_catalog(state, &user, metadata_locale(state, headers, params)).await?;
+    let (items, shows) =
+        visible_catalog(state, &user, metadata_locale(state, headers, params)).await?;
     let (items, shows) = scoped_catalog(state, items, shows, params);
     let mut genres = BTreeSet::new();
     let mut years = BTreeSet::new();
     let mut ratings = BTreeSet::new();
-    for (meta, year) in items.iter().map(|i| (i.metadata.as_ref(), i.year))
-        .chain(shows.iter().map(|s| (s.metadata.as_ref(), s.year))) {
-        if let Some(year) = year { years.insert(year); }
+    for (meta, year) in items
+        .iter()
+        .map(|i| (i.metadata.as_ref(), i.year))
+        .chain(shows.iter().map(|s| (s.metadata.as_ref(), s.year)))
+    {
+        if let Some(year) = year {
+            years.insert(year);
+        }
         if let Some(meta) = meta {
             genres.extend(meta.genres.iter().filter(|s| !s.trim().is_empty()).cloned());
             if let Some(rating) = meta.certification.as_ref().filter(|s| !s.trim().is_empty()) {
@@ -256,29 +366,45 @@ async fn facets(
         }
     }
     let genres = if objects {
-        json!(genres.into_iter().map(|name| json!({"Id": name, "Name": name})).collect::<Vec<_>>())
-    } else { json!(genres) };
-    Ok(json!({"Genres": genres, "Years": years.into_iter().rev().collect::<Vec<_>>(),
-        "OfficialRatings": ratings, "Tags": []}))
+        json!(genres
+            .into_iter()
+            .map(|name| json!({"Id": name, "Name": name}))
+            .collect::<Vec<_>>())
+    } else {
+        json!(genres)
+    };
+    Ok(
+        json!({"Genres": genres, "Years": years.into_iter().rev().collect::<Vec<_>>(),
+        "OfficialRatings": ratings, "Tags": []}),
+    )
 }
 
 pub(super) async fn filters(
-    State(state): State<SharedState>, headers: HeaderMap, Query(params): Query<HashMap<String, String>>,
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     Ok(Json(facets(&state, &headers, &params, false).await?))
 }
 
 pub(super) async fn filters2(
-    State(state): State<SharedState>, headers: HeaderMap, Query(params): Query<HashMap<String, String>>,
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     Ok(Json(facets(&state, &headers, &params, true).await?))
 }
 
 pub(super) async fn genres(
-    State(state): State<SharedState>, headers: HeaderMap, Query(params): Query<HashMap<String, String>>,
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     let value = facets(&state, &headers, &params, true).await?;
-    Ok(Json(page(value["Genres"].as_array().cloned().unwrap_or_default(), &params)))
+    Ok(Json(page(
+        value["Genres"].as_array().cloned().unwrap_or_default(),
+        &params,
+    )))
 }
 
 fn unique_people<'a>(metas: impl Iterator<Item = &'a Metadata>) -> Vec<Credit> {
@@ -287,46 +413,78 @@ fn unique_people<'a>(metas: impl Iterator<Item = &'a Metadata>) -> Vec<Credit> {
     for c in metas.flat_map(credits) {
         if let Some(old) = unique.get_mut(&c.id) {
             // Slug collisions must not silently alias different credited names.
-            if c.tmdb_id.is_none() && c.name != old.name { ambiguous.insert(c.id.clone()); }
-            if old.profile.is_none() { old.profile = c.profile; }
-        } else { unique.insert(c.id.clone(), c); }
+            if c.tmdb_id.is_none() && c.name != old.name {
+                ambiguous.insert(c.id.clone());
+            }
+            if old.profile.is_none() {
+                old.profile = c.profile;
+            }
+        } else {
+            unique.insert(c.id.clone(), c);
+        }
     }
-    unique.into_iter().filter(|(id, _)| !ambiguous.contains(id)).map(|(_, c)| c).collect()
+    unique
+        .into_iter()
+        .filter(|(id, _)| !ambiguous.contains(id))
+        .map(|(_, c)| c)
+        .collect()
 }
 
 pub(super) async fn persons(
-    State(state): State<SharedState>, headers: HeaderMap, Query(params): Query<HashMap<String, String>>,
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     let (user, _) = user_of(&state, &headers, &params).await?;
-    let (items, shows) = visible_catalog(&state, &user, metadata_locale(&state, &headers, &params)).await?;
+    let (items, shows) =
+        visible_catalog(&state, &user, metadata_locale(&state, &headers, &params)).await?;
     let (items, shows) = scoped_catalog(&state, items, shows, &params);
-    let mut people = unique_people(items.iter().filter_map(|i| i.metadata.as_ref())
-        .chain(shows.iter().filter_map(|s| s.metadata.as_ref())));
+    let mut people = unique_people(
+        items
+            .iter()
+            .filter_map(|i| i.metadata.as_ref())
+            .chain(shows.iter().filter_map(|s| s.metadata.as_ref())),
+    );
     if let Some(search) = param(&params, "SearchTerm") {
         let search = search.to_lowercase();
         people.retain(|c| c.name.to_lowercase().contains(&search));
     }
     people.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
-    if param(&params, "SortOrder").is_some_and(|s| s.eq_ignore_ascii_case("Descending")) { people.reverse(); }
-    Ok(Json(page(people.iter().map(|c| credit_value(c, false)).collect(), &params)))
+    if param(&params, "SortOrder").is_some_and(|s| s.eq_ignore_ascii_case("Descending")) {
+        people.reverse();
+    }
+    Ok(Json(page(
+        people.iter().map(|c| credit_value(c, false)).collect(),
+        &params,
+    )))
 }
 
 /// Resolve using the native index, but choose identity/art only from visible credits.
 /// Name lookups that refer to multiple provider ids deliberately return 404.
 async fn visible_person(
-    state: &SharedState, user: &User, id: &str, locale: &'static str,
+    state: &SharedState,
+    user: &User,
+    id: &str,
+    locale: &'static str,
 ) -> Result<Credit, Response> {
     let lookup = id.strip_prefix("person:").unwrap_or(id).trim().to_string();
-    if lookup.is_empty() { return Err(visibility::out_of_scope()); }
+    if lookup.is_empty() {
+        return Err(visibility::out_of_scope());
+    }
     let wanted = lookup.clone();
-    query(&state.db, move |pool| db::resolve_person(&pool, &wanted)).await?
+    query(&state.db, move |pool| db::resolve_person(&pool, &wanted))
+        .await?
         .ok_or_else(visibility::out_of_scope)?;
     let (items, shows) = visible_catalog(state, user, locale).await?;
     // Do not use the global resolver's chosen name or title counts: hidden
     // libraries must neither select a namesake nor supply this person's art.
-    let all = unique_people(items.iter().filter(|i| i.show_id.is_none() && !matches!(i.kind, Kind::Episode))
-        .filter_map(|i| i.metadata.as_ref())
-        .chain(shows.iter().filter_map(|s| s.metadata.as_ref())));
+    let all = unique_people(
+        items
+            .iter()
+            .filter(|i| i.show_id.is_none() && !matches!(i.kind, Kind::Episode))
+            .filter_map(|i| i.metadata.as_ref())
+            .chain(shows.iter().filter_map(|s| s.metadata.as_ref())),
+    );
     select_person(all, &lookup).ok_or_else(visibility::out_of_scope)
 }
 
@@ -335,15 +493,22 @@ fn select_person(all: Vec<Credit>, lookup: &str) -> Option<Credit> {
         return all.into_iter().find(|c| c.tmdb_id == Some(id));
     }
     let slug = slugify(lookup);
-    let mut matches: Vec<_> = all.into_iter().filter(|c|
-        c.name.eq_ignore_ascii_case(lookup) || slugify(&c.name) == slug).collect();
+    let mut matches: Vec<_> = all
+        .into_iter()
+        .filter(|c| c.name.eq_ignore_ascii_case(lookup) || slugify(&c.name) == slug)
+        .collect();
     // A legacy slug addresses only legacy credits, never guesses a numeric identity.
-    if matches.len() != 1 { return None; }
+    if matches.len() != 1 {
+        return None;
+    }
     matches.pop()
 }
 
 async fn person_data(
-    state: &SharedState, user: &User, id: &str, locale: &'static str,
+    state: &SharedState,
+    user: &User,
+    id: &str,
+    locale: &'static str,
 ) -> Result<(Value, Option<String>), Response> {
     let mut credit = visible_person(state, user, id, locale).await?;
     let mut dto = credit_value(&credit, false);
@@ -354,63 +519,100 @@ async fn person_data(
         let name = credit.name.clone();
         let data_dir = state.config.data_dir.clone();
         let detail = blocking(move || {
-            let detail = crate::infra::metadata::person::detail(&api_key, locale, &name, Some(tmdb_id))
-                .map(|mut person| {
-                    if let Some(local) = person.profile_url.as_deref()
-                        .and_then(|url| crate::infra::image::cache_remote(&data_dir, url)) {
-                        person.profile_url = Some(local);
-                    }
-                    person
-                });
+            let detail =
+                crate::infra::metadata::person::detail(&api_key, locale, &name, Some(tmdb_id)).map(
+                    |mut person| {
+                        if let Some(local) = person
+                            .profile_url
+                            .as_deref()
+                            .and_then(|url| crate::infra::image::cache_remote(&data_dir, url))
+                        {
+                            person.profile_url = Some(local);
+                        }
+                        person
+                    },
+                );
             Ok(detail)
-        }).await?;
+        })
+        .await?;
         if let Some(detail) = detail.filter(|p| p.tmdb_id == tmdb_id) {
             dto["Name"] = json!(detail.name);
             dto["Overview"] = json!(detail.biography);
-            dto["PremiereDate"] = json!(detail.birthday.as_deref().map(|d| format!("{d}T00:00:00.0000000Z")));
-            dto["EndDate"] = json!(detail.deathday.as_deref().map(|d| format!("{d}T00:00:00.0000000Z")));
-            dto["ProductionLocations"] = json!(detail.place_of_birth.into_iter().collect::<Vec<_>>());
-            if detail.profile_url.is_some() { credit.profile = detail.profile_url; }
+            dto["PremiereDate"] = json!(detail
+                .birthday
+                .as_deref()
+                .map(|d| format!("{d}T00:00:00.0000000Z")));
+            dto["EndDate"] = json!(detail
+                .deathday
+                .as_deref()
+                .map(|d| format!("{d}T00:00:00.0000000Z")));
+            dto["ProductionLocations"] =
+                json!(detail.place_of_birth.into_iter().collect::<Vec<_>>());
+            if detail.profile_url.is_some() {
+                credit.profile = detail.profile_url;
+            }
         }
     }
-    let tag = credit.profile.as_ref().filter(|s| !s.is_empty()).map(|_| "1");
+    let tag = credit
+        .profile
+        .as_ref()
+        .filter(|s| !s.is_empty())
+        .map(|_| "1");
     dto["PrimaryImageTag"] = json!(tag);
-    dto["ImageTags"] = if tag.is_some() { json!({"Primary": tag}) } else { json!({}) };
+    dto["ImageTags"] = if tag.is_some() {
+        json!({"Primary": tag})
+    } else {
+        json!({})
+    };
     Ok((dto, credit.profile))
 }
 
-
 /// The item-detail caller can preserve its request's explicit metadata language.
 pub(super) async fn person_value_with_locale(
-    state: &SharedState, user: &User, id: &str, locale: &'static str,
+    state: &SharedState,
+    user: &User,
+    id: &str,
+    locale: &'static str,
 ) -> Result<Value, Response> {
     Ok(person_data(state, user, id, locale).await?.0)
 }
 
 pub(super) async fn person_art(
-    state: &SharedState, user: &User, id: &str,
+    state: &SharedState,
+    user: &User,
+    id: &str,
 ) -> Result<Option<String>, Response> {
     let locale = metadata_locale(state, &HeaderMap::new(), &HashMap::new());
     let credit = visible_person(state, user, id, locale).await?;
-    if let Some(art) = credit.profile.filter(|s| !s.is_empty()) { return Ok(Some(art)); }
+    if let Some(art) = credit.profile.filter(|s| !s.is_empty()) {
+        return Ok(Some(art));
+    }
     Ok(person_data(state, user, id, locale).await?.1)
 }
 
 pub(super) async fn person_detail(
-    State(state): State<SharedState>, headers: HeaderMap, Query(params): Query<HashMap<String, String>>,
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
     Path(name): Path<String>,
 ) -> Result<Json<Value>, Response> {
     let (user, _) = user_of(&state, &headers, &params).await?;
     let locale = metadata_locale(&state, &headers, &params);
-    Ok(Json(person_value_with_locale(&state, &user, &name, locale).await?))
+    Ok(Json(
+        person_value_with_locale(&state, &user, &name, locale).await?,
+    ))
 }
 
 pub(super) async fn person_image(
-    State(state): State<SharedState>, headers: HeaderMap, Query(params): Query<HashMap<String, String>>,
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
     Path((name, kind)): Path<(String, String)>,
 ) -> Result<Response, Response> {
     let (user, _) = user_of(&state, &headers, &params).await?;
-    if !kind.eq_ignore_ascii_case("Primary") { return Err(visibility::out_of_scope()); }
+    if !kind.eq_ignore_ascii_case("Primary") {
+        return Err(visibility::out_of_scope());
+    }
     let locale = metadata_locale(&state, &headers, &params);
     let credit = visible_person(&state, &user, &name, locale).await?;
     let art = match credit.profile.filter(|s| !s.is_empty()) {
@@ -423,11 +625,23 @@ pub(super) async fn person_image(
 
 fn studio_names(raw: &Value) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
-    for key in ["studios", "networks", "productionCompanies", "production_companies"] {
+    for key in [
+        "studios",
+        "networks",
+        "productionCompanies",
+        "production_companies",
+    ] {
         if let Some(entries) = raw.get(key).and_then(Value::as_array) {
             for entry in entries {
-                if let Some(name) = entry.as_str().or_else(|| entry.get("name").or_else(|| entry.get("Name")).and_then(Value::as_str)) {
-                    if !name.trim().is_empty() { names.insert(name.trim().to_string()); }
+                if let Some(name) = entry.as_str().or_else(|| {
+                    entry
+                        .get("name")
+                        .or_else(|| entry.get("Name"))
+                        .and_then(Value::as_str)
+                }) {
+                    if !name.trim().is_empty() {
+                        names.insert(name.trim().to_string());
+                    }
                 }
             }
         }
@@ -436,22 +650,37 @@ fn studio_names(raw: &Value) -> BTreeSet<String> {
 }
 
 pub(super) async fn studios(
-    State(state): State<SharedState>, headers: HeaderMap, Query(params): Query<HashMap<String, String>>,
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     let (user, _) = user_of(&state, &headers, &params).await?;
-    let (items, shows) = visible_catalog(&state, &user, metadata_locale(&state, &headers, &params)).await?;
+    let (items, shows) =
+        visible_catalog(&state, &user, metadata_locale(&state, &headers, &params)).await?;
     let (items, shows) = scoped_catalog(&state, items, shows, &params);
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
-    for meta in items.iter().filter_map(|i| i.metadata.as_ref())
-        .chain(shows.iter().filter_map(|s| s.metadata.as_ref())) {
+    for meta in items
+        .iter()
+        .filter_map(|i| i.metadata.as_ref())
+        .chain(shows.iter().filter_map(|s| s.metadata.as_ref()))
+    {
         if let Ok(raw) = serde_json::to_value(meta) {
-            for name in studio_names(&raw) { *counts.entry(name).or_default() += 1; }
+            for name in studio_names(&raw) {
+                *counts.entry(name).or_default() += 1;
+            }
         }
     }
-    let search = param(&params, "SearchTerm").unwrap_or_default().to_lowercase();
-    let values = counts.into_iter().filter(|(name, _)| name.to_lowercase().contains(&search))
-        .map(|(name, count)| json!({"Id": format!("studio:{name}"), "Name": name,
-            "Type": "Studio", "ChildCount": count, "IsFolder": true})).collect();
+    let search = param(&params, "SearchTerm")
+        .unwrap_or_default()
+        .to_lowercase();
+    let values = counts
+        .into_iter()
+        .filter(|(name, _)| name.to_lowercase().contains(&search))
+        .map(|(name, count)| {
+            json!({"Id": format!("studio:{name}"), "Name": name,
+            "Type": "Studio", "ChildCount": count, "IsFolder": true})
+        })
+        .collect();
     Ok(Json(page(values, &params)))
 }
 
@@ -461,13 +690,17 @@ mod tests {
 
     fn metadata(cast: Value, genres: &[&str]) -> Metadata {
         serde_json::from_value(json!({"tmdbId": 1, "tmdbUrl": "", "genres": genres,
-            "cast": cast, "certification": "PG-13"})).unwrap()
+            "cast": cast, "certification": "PG-13"}))
+        .unwrap()
     }
 
     #[test]
     fn same_name_provider_ids_do_not_alias() {
-        let meta = metadata(json!([{"name": "John Williams", "tmdbId": 1},
-            {"name": "John Williams", "tmdbId": 2}]), &[]);
+        let meta = metadata(
+            json!([{"name": "John Williams", "tmdbId": 1},
+            {"name": "John Williams", "tmdbId": 2}]),
+            &[],
+        );
         assert_eq!(people(Some(&meta))[0]["Id"], "person:1");
         assert_eq!(people(Some(&meta))[1]["Id"], "person:2");
         assert!(select_person(credits(&meta), "John Williams").is_none());
@@ -476,7 +709,10 @@ mod tests {
 
     #[test]
     fn legacy_slug_matches_native_resolver_and_keeps_image_tag() {
-        let meta = metadata(json!([{"name": "Timothée Chalamet", "profileUrl": "/api/images/a.jpg"}]), &[]);
+        let meta = metadata(
+            json!([{"name": "Timothée Chalamet", "profileUrl": "/api/images/a.jpg"}]),
+            &[],
+        );
         let value = people(Some(&meta));
         assert_eq!(value[0]["Id"], "person:timothee-chalamet");
         assert_eq!(value[0]["PrimaryImageTag"], "1");
@@ -493,8 +729,10 @@ mod tests {
     fn metadata_filters_are_conjunctive_and_reject_missing_values() {
         let meta = metadata(json!([{"name": "Actor", "tmdbId": 42}]), &[]);
         let mut params = HashMap::from([
-            ("Years".into(), "2023,2024".into()), ("OfficialRatings".into(), "PG|PG-13".into()),
-            ("PersonIds".into(), "person:42".into()), ("Person".into(), "actor".into()),
+            ("Years".into(), "2023,2024".into()),
+            ("OfficialRatings".into(), "PG|PG-13".into()),
+            ("PersonIds".into(), "person:42".into()),
+            ("Person".into(), "actor".into()),
         ]);
         assert!(matches_metadata(Some(&meta), Some(2024), &params));
         assert!(!matches_metadata(Some(&meta), None, &params));
@@ -507,7 +745,10 @@ mod tests {
     #[test]
     fn recommendation_score_counts_real_distinct_overlap() {
         let a = metadata(json!([{"name": "A", "tmdbId": 1}]), &["Drama"]);
-        let b = metadata(json!([{"name": "Renamed", "tmdbId": 1}]), &["Drama", "Drama"]);
+        let b = metadata(
+            json!([{"name": "Renamed", "tmdbId": 1}]),
+            &["Drama", "Drama"],
+        );
         let c = metadata(json!([{"name": "A", "tmdbId": 2}]), &["Comedy"]);
         assert_eq!(similarity(&a, &b), 5);
         assert_eq!(similarity(&a, &c), 0);
@@ -515,17 +756,29 @@ mod tests {
 
     #[test]
     fn pagination_keeps_total_and_honors_zero_limit() {
-        let params = HashMap::from([("StartIndex".into(), "1".into()), ("Limit".into(), "1".into())]);
+        let params = HashMap::from([
+            ("StartIndex".into(), "1".into()),
+            ("Limit".into(), "1".into()),
+        ]);
         let value = page(vec![json!(1), json!(2), json!(3)], &params);
         assert_eq!(value["TotalRecordCount"], 3);
         assert_eq!(value["Items"], json!([2]));
-        assert_eq!(page(vec![json!(1)], &HashMap::from([("Limit".into(), "0".into())]))["Items"], json!([]));
+        assert_eq!(
+            page(
+                vec![json!(1)],
+                &HashMap::from([("Limit".into(), "0".into())])
+            )["Items"],
+            json!([])
+        );
     }
 
     #[test]
     fn studios_use_only_supplied_metadata() {
         assert!(studio_names(&json!({})).is_empty());
-        assert_eq!(studio_names(&json!({"studios": ["Example", {"name": "Example"}],
-            "networks": [{"name": "Network"}]})), BTreeSet::from(["Example".into(), "Network".into()]));
+        assert_eq!(
+            studio_names(&json!({"studios": ["Example", {"name": "Example"}],
+            "networks": [{"name": "Network"}]})),
+            BTreeSet::from(["Example".into(), "Network".into()])
+        );
     }
 }

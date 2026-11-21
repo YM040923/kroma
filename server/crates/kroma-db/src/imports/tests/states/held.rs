@@ -23,12 +23,19 @@ fn held(pool: &Pool) -> Vec<String> {
 fn a_state_for_a_file_no_title_has_is_held_and_shows_nowhere() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
 
-    let merged = merge(&pool, &ana, Place::File(HEAT), stopped(5_025_000, LAST_WEEK));
+    let merged = merge(
+        &pool,
+        &ana,
+        Place::File(HEAT),
+        stopped(5_025_000, LAST_WEEK),
+    );
 
     assert_eq!(merged, Merged::Changed);
     assert_eq!(
         held(&pool),
-        [format!("{HEAT} watched - at 5025000 on {LAST_WEEK} listed 0")]
+        [format!(
+            "{HEAT} watched - at 5025000 on {LAST_WEEK} listed 0"
+        )]
     );
     assert_eq!(resume_points(&pool), Vec::<String>::new());
 }
@@ -69,10 +76,20 @@ fn a_scan_that_reaches_another_file_keeps_holding_the_state() {
 #[test]
 fn a_state_held_twice_is_held_once_and_changes_nothing_the_second_time() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
-    merge(&pool, &ana, Place::File(HEAT), stopped(5_025_000, LAST_WEEK));
+    merge(
+        &pool,
+        &ana,
+        Place::File(HEAT),
+        stopped(5_025_000, LAST_WEEK),
+    );
     let first = held(&pool);
 
-    let again = merge(&pool, &ana, Place::File(HEAT), stopped(5_025_000, LAST_WEEK));
+    let again = merge(
+        &pool,
+        &ana,
+        Place::File(HEAT),
+        stopped(5_025_000, LAST_WEEK),
+    );
 
     assert_eq!(again, Merged::Unchanged);
     assert_eq!(held(&pool), first);
@@ -83,7 +100,12 @@ fn two_states_held_for_one_account_and_one_file_keep_the_newer_of_each_part() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
     merge(&pool, &ana, Place::File(HEAT), stopped(600_000, YESTERDAY));
 
-    let older = merge(&pool, &ana, Place::File(HEAT), stopped(5_025_000, LAST_WEEK));
+    let older = merge(
+        &pool,
+        &ana,
+        Place::File(HEAT),
+        stopped(5_025_000, LAST_WEEK),
+    );
     let flag = merge(&pool, &ana, Place::File(HEAT), watched(LAST_WEEK));
 
     assert_eq!((older, flag), (Merged::Unchanged, Merged::Changed));

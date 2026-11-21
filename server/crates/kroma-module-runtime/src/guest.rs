@@ -35,8 +35,9 @@ mod sql;
 const TICK: std::time::Duration = std::time::Duration::from_millis(1);
 
 static ROUTER: OnceLock<axum::Router> = OnceLock::new();
-static STOP: OnceLock<Box<dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> + Send + Sync>> =
-    OnceLock::new();
+static STOP: OnceLock<
+    Box<dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> + Send + Sync>,
+> = OnceLock::new();
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 fn runtime() -> &'static tokio::runtime::Runtime {
@@ -92,7 +93,10 @@ fn fetch_through_the_host(call: &GuestCall) -> Result<HttpResponse> {
         .map_err(|reason| anyhow!(reason))
 }
 
-fn download_through_the_host(call: &GuestCall, destination: &std::path::Path) -> Result<HttpResponse> {
+fn download_through_the_host(
+    call: &GuestCall,
+    destination: &std::path::Path,
+) -> Result<HttpResponse> {
     net::download(&request_of(call), &destination.to_string_lossy())
         .map(response_of)
         .map_err(|reason| anyhow!(reason))
@@ -175,7 +179,9 @@ pub fn connect_to_host() {
     kroma_sqlite::guest::set_backend(&sql::THROUGH_THE_HOST);
 }
 
-pub(crate) fn on_stop(stop: impl Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> + Send + Sync + 'static) {
+pub(crate) fn on_stop(
+    stop: impl Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> + Send + Sync + 'static,
+) {
     let _ = STOP.set(Box::new(stop));
 }
 
@@ -214,7 +220,11 @@ pub fn declare(modules: Vec<Box<dyn ServerModule<RemoteHost>>>) -> Result<Lifecy
 /// What `export_component!` answers each call with: the host's request for the
 /// module's [`Lifecycle`] before it starts, and otherwise the module started on
 /// the first call, then the request through its router.
-pub fn handle(request: Request, start: fn() -> Result<()>, declare: fn() -> Result<Lifecycle>) -> Response {
+pub fn handle(
+    request: Request,
+    start: fn() -> Result<()>,
+    declare: fn() -> Result<Lifecycle>,
+) -> Response {
     if request.path == kroma_module_wire::LIFECYCLE_PATH {
         return lifecycle::answer(&request, declare);
     }

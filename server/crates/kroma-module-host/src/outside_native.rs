@@ -29,7 +29,8 @@ pub(crate) struct TheMachine;
 
 pub(crate) static THE_MACHINE: TheMachine = TheMachine;
 
-static CHILDREN: LazyLock<Mutex<HashMap<u64, Running>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static CHILDREN: LazyLock<Mutex<HashMap<u64, Running>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 static NEXT: Mutex<u64> = Mutex::new(0);
 
 fn collect(mut from: impl Read + Send + 'static) -> Arc<Captured> {
@@ -47,7 +48,9 @@ fn collect(mut from: impl Read + Send + 'static) -> Arc<Captured> {
                 .unwrap_or_else(PoisonError::into_inner)
                 .extend_from_slice(&chunk[..read]);
         }
-        filling.closed.store(true, std::sync::atomic::Ordering::Release);
+        filling
+            .closed
+            .store(true, std::sync::atomic::Ordering::Release);
     });
     captured
 }
@@ -84,11 +87,16 @@ impl Outside for TheMachine {
         let mut busy = 0;
         let mut child = loop {
             match command.spawn() {
-                Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy && busy < MAX_BUSY => {
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::ExecutableFileBusy
+                        && busy < MAX_BUSY =>
+                {
                     busy += 1;
                     std::thread::sleep(POLL);
                 }
-                spawned => break spawned.map_err(|error| format!("spawn {}: {error}", spec.program))?,
+                spawned => {
+                    break spawned.map_err(|error| format!("spawn {}: {error}", spec.program))?
+                }
             }
         };
         let stdout = child.stdout.take().map(collect).unwrap_or_default();
@@ -98,7 +106,14 @@ impl Outside for TheMachine {
         CHILDREN
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .insert(*next, Running { child, stdout, stderr });
+            .insert(
+                *next,
+                Running {
+                    child,
+                    stdout,
+                    stderr,
+                },
+            );
         Ok(*next)
     }
 
@@ -109,7 +124,13 @@ impl Outside for TheMachine {
                 let mut children = CHILDREN.lock().unwrap_or_else(PoisonError::into_inner);
                 let running = children.get_mut(&child).ok_or("no such child")?;
                 let streams = (Arc::clone(&running.stdout), Arc::clone(&running.stderr));
-                (running.child.try_wait().map_err(|error| error.to_string())?, streams)
+                (
+                    running
+                        .child
+                        .try_wait()
+                        .map_err(|error| error.to_string())?,
+                    streams,
+                )
             };
             if let Some(status) = status {
                 drained(&[&streams.0, &streams.1]);
@@ -125,7 +146,11 @@ impl Outside for TheMachine {
     fn read_program(&self, child: u64, stderr: bool, max_bytes: u32) -> Result<Vec<u8>, String> {
         let children = CHILDREN.lock().unwrap_or_else(PoisonError::into_inner);
         let running = children.get(&child).ok_or("no such child")?;
-        let buffer = if stderr { &running.stderr } else { &running.stdout };
+        let buffer = if stderr {
+            &running.stderr
+        } else {
+            &running.stdout
+        };
         let mut held = buffer.bytes.lock().unwrap_or_else(PoisonError::into_inner);
         let taken = held.len().min(max_bytes as usize);
         Ok(held.drain(..taken).collect())
@@ -165,7 +190,12 @@ impl Outside for TheMachine {
         let destination = std::path::Path::new(&spec.destination);
         let source = std::path::Path::new(&spec.source);
         let ran = Command::new("ffmpeg")
-            .args(kroma_primitives::pcm::decode_args(source, spec.track, spec.pcm, destination))
+            .args(kroma_primitives::pcm::decode_args(
+                source,
+                spec.track,
+                spec.pcm,
+                destination,
+            ))
             .stdin(Stdio::null())
             .output()
             .map_err(|error| format!("spawn ffmpeg: {error}"))?;

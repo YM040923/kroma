@@ -1,9 +1,9 @@
 //! A title's files, as the quality rules judge them.
 
 use kroma_domain::{MediaFile, RequestKind};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
-use crate::{FILE_COLS, row_to_file};
+use crate::{row_to_file, FILE_COLS};
 
 /// One file of a title, with the episodes it holds (none for a film).
 #[derive(Debug, Clone)]

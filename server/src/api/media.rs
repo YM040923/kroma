@@ -97,7 +97,12 @@ pub async fn list_items(
 ) -> Result<Response, Response> {
     let mut items = query(&state.db, move |pool| {
         let mut items = db::list_items(&pool, q.library.as_deref())?;
-        items.retain(|item| matches!(item.kind, crate::model::Kind::Movie | crate::model::Kind::Video | crate::model::Kind::Episode));
+        items.retain(|item| {
+            matches!(
+                item.kind,
+                crate::model::Kind::Movie | crate::model::Kind::Video | crate::model::Kind::Episode
+            )
+        });
         db::localize::overlay_items(&pool, &mut items, locale)?;
         Ok(items)
     })
@@ -141,9 +146,10 @@ pub async fn list_photos(
 ) -> Result<Response, Response> {
     let mut items = query(&state.db, move |pool| {
         let mut items = db::list_photos(&pool, q.library.as_deref())?;
-        if let Some(month) = q.month.filter(|month| {
-            month.len() == 7 && month.as_bytes().get(4) == Some(&b'-')
-        }) {
+        if let Some(month) = q
+            .month
+            .filter(|month| month.len() == 7 && month.as_bytes().get(4) == Some(&b'-'))
+        {
             items.retain(|item| item.added_at.get(..7) == Some(month.as_str()));
         }
         Ok(items)
@@ -159,7 +165,10 @@ pub async fn list_other(
     AuthUser(user): AuthUser,
     Query(q): Query<LibraryQuery>,
 ) -> Result<Response, Response> {
-    let mut items = query(&state.db, move |pool| db::list_other(&pool, q.library.as_deref())).await?;
+    let mut items = query(&state.db, move |pool| {
+        db::list_other(&pool, q.library.as_deref())
+    })
+    .await?;
     visibility::keep_items(&user, &mut items);
     Ok(Json(items).into_response())
 }
@@ -184,8 +193,14 @@ fn same_show(a: &Show, b: &Show) -> bool {
         return false;
     }
     match (
-        a.metadata.as_ref().map(|meta| meta.tmdb_id).filter(|id| *id > 0),
-        b.metadata.as_ref().map(|meta| meta.tmdb_id).filter(|id| *id > 0),
+        a.metadata
+            .as_ref()
+            .map(|meta| meta.tmdb_id)
+            .filter(|id| *id > 0),
+        b.metadata
+            .as_ref()
+            .map(|meta| meta.tmdb_id)
+            .filter(|id| *id > 0),
     ) {
         (Some(left), Some(right)) => left == right,
         _ => a.id == b.id,
@@ -219,7 +234,10 @@ async fn merged_show_detail(state: &SharedState, id: &str) -> Result<Option<Show
     let Some(target) = all.iter().find(|show| show.id == id).cloned() else {
         return Ok(None);
     };
-    let mut group: Vec<Show> = all.into_iter().filter(|show| same_show(show, &target)).collect();
+    let mut group: Vec<Show> = all
+        .into_iter()
+        .filter(|show| same_show(show, &target))
+        .collect();
     group.sort_by(|a, b| {
         if a.episode_count != b.episode_count {
             b.episode_count.cmp(&a.episode_count)
@@ -231,16 +249,22 @@ async fn merged_show_detail(state: &SharedState, id: &str) -> Result<Option<Show
     });
     let canonical = group[0].clone();
     let canonical_id = canonical.id.clone();
-    let Some(mut detail) = query(&state.db, move |pool| db::get_show(&pool, &canonical_id)).await? else {
+    let Some(mut detail) = query(&state.db, move |pool| db::get_show(&pool, &canonical_id)).await?
+    else {
         return Ok(None);
     };
     for member in group.iter().filter(|show| show.id != canonical.id) {
         let member_id = member.id.clone();
-        let Some(other) = query(&state.db, move |pool| db::get_show(&pool, &member_id)).await? else {
+        let Some(other) = query(&state.db, move |pool| db::get_show(&pool, &member_id)).await?
+        else {
             continue;
         };
         for season in other.seasons {
-            match detail.seasons.iter_mut().find(|existing| existing.number == season.number) {
+            match detail
+                .seasons
+                .iter_mut()
+                .find(|existing| existing.number == season.number)
+            {
                 Some(existing) => {
                     for episode in season.episodes {
                         let known = existing.episodes.iter().any(|known| {
@@ -251,7 +275,9 @@ async fn merged_show_detail(state: &SharedState, id: &str) -> Result<Option<Show
                             existing.episodes.push(episode);
                         }
                     }
-                    existing.episodes.sort_by(|a, b| a.episode.cmp(&b.episode).then_with(|| a.id.cmp(&b.id)));
+                    existing
+                        .episodes
+                        .sort_by(|a, b| a.episode.cmp(&b.episode).then_with(|| a.id.cmp(&b.id)));
                     if existing.name.is_none() {
                         existing.name = season.name;
                     }
@@ -268,7 +294,11 @@ async fn merged_show_detail(state: &SharedState, id: &str) -> Result<Option<Show
     }
     detail.seasons.sort_by_key(|season| season.number);
     detail.show = canonical;
-    detail.show.episode_count = detail.seasons.iter().map(|season| season.episodes.len() as u32).sum();
+    detail.show.episode_count = detail
+        .seasons
+        .iter()
+        .map(|season| season.episodes.len() as u32)
+        .sum();
     detail.show.season_count = detail.seasons.len() as u32;
     Ok(Some(detail))
 }
@@ -378,7 +408,10 @@ pub async fn get_item(
             return Ok(None);
         };
         db::localize::overlay_items(&pool, std::slice::from_mut(&mut item), locale)?;
-        let folders = library_folders.get(&item.library).cloned().unwrap_or_default();
+        let folders = library_folders
+            .get(&item.library)
+            .cloned()
+            .unwrap_or_default();
         beside.attach(&mut item, &folders);
         Ok(Some(item))
     })

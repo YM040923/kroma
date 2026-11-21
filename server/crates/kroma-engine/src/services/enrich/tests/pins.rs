@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::super::enrich_one;
 use super::super::jobs::build_jobs;
@@ -11,7 +11,7 @@ use crate::db::imports::{Elsewhere, FileIdentity, HeldIds, Lead, NewImport, Subj
 use crate::db::metadata_core::ITEM;
 use crate::model::imports::{Origin, Selection};
 use crate::state::SharedState;
-use crate::test_support::{FakeTmdb, seed_movie};
+use crate::test_support::{seed_movie, FakeTmdb};
 
 const HEAT: u64 = 949;
 const THE_WIRE: u64 = 1438;

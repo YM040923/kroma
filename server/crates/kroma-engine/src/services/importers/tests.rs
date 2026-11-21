@@ -6,7 +6,7 @@ mod unanswered;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::*;
 use crate::domain::import::{RefusalReason, Server};

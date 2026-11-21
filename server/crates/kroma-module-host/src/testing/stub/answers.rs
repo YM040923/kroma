@@ -8,10 +8,10 @@ use std::sync::Arc;
 
 use axum::http::StatusCode;
 use axum::response::Response;
-use kroma_sqlite::Pool;
 use kroma_module_wire::{
     Audience, EpisodeInfo, MatchCandidate, NotificationSpec, Permission, User,
 };
+use kroma_sqlite::Pool;
 
 use super::super::log::records_into_log;
 use super::StubHost;

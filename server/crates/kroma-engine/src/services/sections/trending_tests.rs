@@ -10,7 +10,13 @@ fn somebody_alone_on_a_server_is_shown_what_the_world_watches_among_their_titles
     seed_many(&state, "m", 6, &[COMEDY]);
     for (n, tmdb) in [(0, 9001u64), (1, 9002), (2, 9003), (3, 9004), (4, 9005)] {
         let id = format!("w{n}");
-        seed(&state, Film { tmdb: Some(tmdb), ..film(&id, &[COMEDY]) });
+        seed(
+            &state,
+            Film {
+                tmdb: Some(tmdb),
+                ..film(&id, &[COMEDY])
+            },
+        );
     }
     let user = viewer(&state, "alone");
     for id in ["m0", "m1", "m2", "m3", "m4"] {
@@ -37,7 +43,13 @@ fn somebody_alone_on_a_server_is_shown_what_the_world_watches_among_their_titles
 fn a_household_of_several_leads_its_trending_with_what_it_played() {
     let state = test_support::test_state();
     seed_many(&state, "m", 6, &[COMEDY]);
-    seed(&state, Film { tmdb: Some(9001), ..film("w0", &[COMEDY]) });
+    seed(
+        &state,
+        Film {
+            tmdb: Some(9001),
+            ..film("w0", &[COMEDY])
+        },
+    );
     let (ann, bob) = (viewer(&state, "ann"), viewer(&state, "bob"));
     for id in ["m0", "m1", "m2", "m3"] {
         test_support::seed_play(&state, &ann, id, now_secs());
@@ -57,7 +69,12 @@ fn a_household_of_several_leads_its_trending_with_what_it_played() {
 fn a_broken_trending_query_costs_the_row_and_nothing_else() {
     let state = test_support::test_state();
     seed_many(&state, "m", 8, &[COMEDY]);
-    state.db.get().unwrap().execute("DROP TABLE play_history", []).unwrap();
+    state
+        .db
+        .get()
+        .unwrap()
+        .execute("DROP TABLE play_history", [])
+        .unwrap();
 
     assert!(trending_ids(&state.db, 10).is_empty());
     let sections = build_home(&state, &state.db, "en", "u1");

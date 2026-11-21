@@ -99,7 +99,9 @@ mod tests {
 
         let sized = "/api/images/abc.webp?w=320";
         assert_eq!(
-            sized_for_push(with_image(Some(sized)), KEY).image_url.as_deref(),
+            sized_for_push(with_image(Some(sized)), KEY)
+                .image_url
+                .as_deref(),
             Some(sized)
         );
 

@@ -194,7 +194,9 @@ mod tests {
         );
 
         assert!(import_portable(&dst, &dir, &doc, false).unwrap().is_empty());
-        assert!(!dir.join("databases/tv.kroma.indexer/module.sqlite").exists());
+        assert!(!dir
+            .join("databases/tv.kroma.indexer/module.sqlite")
+            .exists());
     }
 
     #[test]
@@ -258,7 +260,8 @@ mod tests {
         std::fs::create_dir_all(&store).unwrap();
         std::os::unix::fs::symlink(&outside, store.join("module.sqlite")).unwrap();
         let mut doc = empty_doc();
-        doc.modules.insert("tv.kroma.indexer".into(), indexer_rows());
+        doc.modules
+            .insert("tv.kroma.indexer".into(), indexer_rows());
 
         let summary = import_portable(&dst, &dir, &doc, true).unwrap();
 
@@ -276,7 +279,8 @@ mod tests {
         std::fs::write(&elsewhere, "untouched").unwrap();
         std::os::unix::fs::symlink(&elsewhere, kroma_sqlite::journal_of(&store, "-wal")).unwrap();
         let mut doc = empty_doc();
-        doc.modules.insert("tv.kroma.indexer".into(), indexer_rows());
+        doc.modules
+            .insert("tv.kroma.indexer".into(), indexer_rows());
 
         let summary = import_portable(&dst, &dir, &doc, false).unwrap();
 

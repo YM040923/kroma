@@ -14,7 +14,10 @@ type Files = Vec<(&'static str, &'static str, &'static [u8])>;
 
 fn folder(id: &'static str, manifest: String, marks: &[&'static str]) -> Files {
     let manifest: &'static str = Box::leak(manifest.into_boxed_str());
-    let mut files = vec![(id, "mark.svg", SVG.as_bytes()), (id, MANIFEST, manifest.as_bytes())];
+    let mut files = vec![
+        (id, "mark.svg", SVG.as_bytes()),
+        (id, MANIFEST, manifest.as_bytes()),
+    ];
     files.extend(marks.iter().map(|name| (id, *name, SVG.as_bytes())));
     files
 }
@@ -38,7 +41,11 @@ fn every_preset_in_the_tree_reads_cleanly() {
 fn every_preset_draws_marks_the_catalog_holds() {
     for preset in presets() {
         assert!(mark(&preset.mark).is_some(), "{}", preset.id);
-        for look in preset.brand.iter().flat_map(|brand| [&brand.dark, &brand.light]) {
+        for look in preset
+            .brand
+            .iter()
+            .flat_map(|brand| [&brand.dark, &brand.light])
+        {
             assert!(mark(&look.mark).is_some(), "{}", preset.id);
         }
     }
@@ -59,13 +66,26 @@ fn google_and_microsoft_are_painted_as_their_guidelines_say() {
     let microsoft = preset("entra").unwrap().brand.as_ref().unwrap();
     let paint = |look: &Look| (look.fill.clone(), look.stroke.clone(), look.ink.clone());
     let painted = |fill: &str, stroke: Option<&str>, ink: &str| {
-        (fill.to_string(), stroke.map(str::to_string), ink.to_string())
+        (
+            fill.to_string(),
+            stroke.map(str::to_string),
+            ink.to_string(),
+        )
     };
 
-    assert_eq!(paint(&google.dark), painted("#131314", Some("#8e918f"), "#e3e3e3"));
-    assert_eq!(paint(&google.light), painted("#ffffff", Some("#747775"), "#1f1f1f"));
+    assert_eq!(
+        paint(&google.dark),
+        painted("#131314", Some("#8e918f"), "#e3e3e3")
+    );
+    assert_eq!(
+        paint(&google.light),
+        painted("#ffffff", Some("#747775"), "#1f1f1f")
+    );
     assert_eq!(paint(&microsoft.dark), painted("#2f2f2f", None, "#ffffff"));
-    assert_eq!(paint(&microsoft.light), painted("#ffffff", Some("#8c8c8c"), "#5e5e5e"));
+    assert_eq!(
+        paint(&microsoft.light),
+        painted("#ffffff", Some("#8c8c8c"), "#5e5e5e")
+    );
     assert_eq!(preset("entra").unwrap().label, "Microsoft");
 }
 
@@ -110,16 +130,23 @@ fn a_folder_that_does_not_make_a_preset_says_why() {
     assert!(problem_of("home", missing).contains("`white.svg`, which is not in the folder"));
     assert!(problem_of("home", plain).contains("must be https addresses"));
     assert!(problem_of("Home", manifest("")).contains("lower-case letters"));
-    assert!(problem_of("home", manifest("").replace("drawn here", " ")).contains("the source of its mark"));
+    assert!(problem_of("home", manifest("").replace("drawn here", " "))
+        .contains("the source of its mark"));
 }
 
 #[test]
 fn a_mark_that_runs_or_fetches_something_is_refused() {
     assert_eq!(svg_fault(SVG), None);
-    assert_eq!(svg_fault("<?xml version=\"1.0\"?><svg><use href=\"#a\"/></svg>"), None);
+    assert_eq!(
+        svg_fault("<?xml version=\"1.0\"?><svg><use href=\"#a\"/></svg>"),
+        None
+    );
     assert_eq!(svg_fault("<svg><use xlink:href='#a'/></svg>"), None);
     assert_eq!(svg_fault("<p>hello</p>"), Some("is not one SVG"));
-    assert_eq!(svg_fault("<svg><SCRIPT>x</SCRIPT></svg>"), Some("carries a script"));
+    assert_eq!(
+        svg_fault("<svg><SCRIPT>x</SCRIPT></svg>"),
+        Some("carries a script")
+    );
     assert_eq!(
         svg_fault("<svg><image href=\"https://x.test/a.png\"/></svg>"),
         Some("links outside itself")
@@ -131,8 +158,14 @@ fn a_png_is_a_mark_too_and_a_file_that_is_not_one_is_refused() {
     const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0";
     let named: &'static str = Box::leak(manifest(r#","mark":"mark.png""#).into_boxed_str());
 
-    let (real, _) = read(&[("home", "mark.png", PNG), ("home", MANIFEST, named.as_bytes())]);
-    let (fake, problems) = read(&[("home", "mark.png", SVG.as_bytes()), ("home", MANIFEST, named.as_bytes())]);
+    let (real, _) = read(&[
+        ("home", "mark.png", PNG),
+        ("home", MANIFEST, named.as_bytes()),
+    ]);
+    let (fake, problems) = read(&[
+        ("home", "mark.png", SVG.as_bytes()),
+        ("home", MANIFEST, named.as_bytes()),
+    ]);
 
     assert_eq!(real.presets[0].mark, "home/mark.png");
     assert_eq!(real.marks[0].media, "image/png");

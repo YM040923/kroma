@@ -3,7 +3,8 @@ mod support;
 use std::sync::Arc;
 
 use kroma_wasm_host::{
-    FetchCall, FetchRecord, FetchRequest, ModuleInstance, NetPolicy, Outcome, Response, Settings, Verdict,
+    FetchCall, FetchRecord, FetchRequest, ModuleInstance, NetPolicy, Outcome, Response, Settings,
+    Verdict,
 };
 use support::{instance, probe, text, LIMITS};
 

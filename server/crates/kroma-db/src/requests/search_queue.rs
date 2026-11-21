@@ -110,7 +110,7 @@ pub fn reset_wanted_search(pool: &Pool, ids: &[String], now_ms: i64) -> Result<(
 mod tests {
     use super::*;
     use crate::requests::tests::*;
-    use crate::requests::{insert_request, claim_wanted};
+    use crate::requests::{claim_wanted, insert_request};
     use kroma_domain::RequestKind;
 
     #[test]
@@ -150,11 +150,9 @@ mod tests {
 
         set_wanted_status(&p, &["w-aired".to_string()], "available", 2000).unwrap();
         let conn = p.get().unwrap();
-        assert!(
-            wanted_searchable(&conn, "2026-07-05", 4000, 10)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(wanted_searchable(&conn, "2026-07-05", 4000, 10)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

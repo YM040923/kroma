@@ -164,7 +164,10 @@ fn token_clause(fields: &Fields, token: &Token, scale: f32) -> Box<dyn Query> {
                 )
             })
             .collect();
-        variants.push(should(Box::new(BooleanQuery::new(clauses)), CJK_BOOST * scale));
+        variants.push(should(
+            Box::new(BooleanQuery::new(clauses)),
+            CJK_BOOST * scale,
+        ));
     }
     Box::new(BooleanQuery::new(variants))
 }
@@ -176,12 +179,7 @@ fn cjk_bigrams(text: &str) -> Option<Vec<String>> {
     if chars.len() < 2 || !chars.iter().any(|c| super::pinyin::is_cjk(*c)) {
         return None;
     }
-    Some(
-        chars
-            .windows(2)
-            .map(|pair| pair.iter().collect())
-            .collect(),
-    )
+    Some(chars.windows(2).map(|pair| pair.iter().collect()).collect())
 }
 
 const AS_WRITTEN: f32 = 2.0;

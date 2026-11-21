@@ -64,6 +64,15 @@ pub struct Options {
     pub sync_images: bool,
     pub sync_nfo: bool,
     pub sync_subtitles: bool,
+    /// How many following videos in the same folder are signed ahead when a
+    /// title starts playing. 0 disables prefetching.
+    pub prefetch_next: u8,
+    /// Calls allowed per UTC day across every run and every player; 0 is no
+    /// daily ceiling. Background work stops at 70% so a late film can still play.
+    pub daily_call_budget: u32,
+    /// Hours between scheduled full mirrors; 0 disables the schedule and leaves
+    /// manual runs and the life-event watcher in charge.
+    pub auto_sync_hours: u8,
 }
 
 impl Default for Options {
@@ -86,6 +95,9 @@ impl Default for Options {
             sync_images: true,
             sync_nfo: true,
             sync_subtitles: true,
+            prefetch_next: 2,
+            daily_call_budget: 0,
+            auto_sync_hours: 6,
         }
     }
 }
@@ -103,6 +115,13 @@ impl Options {
         self.write_pause_ms = self.write_pause_ms.clamp(1000, 60_000);
         self.watch_interval_secs = self.watch_interval_secs.clamp(30, 3600);
         self.min_video_size_mb = self.min_video_size_mb.min(1_048_576);
+        self.prefetch_next = self.prefetch_next.min(3);
+        self.daily_call_budget = self.daily_call_budget.min(1_000_000);
+        self.auto_sync_hours = if self.auto_sync_hours == 0 {
+            0
+        } else {
+            self.auto_sync_hours.clamp(1, 168)
+        };
         self
     }
 }
@@ -115,6 +134,10 @@ pub struct Config {
     /// `.strm` names. Written by the first manual sync (the browser knows it),
     /// editable in the settings, required for a scheduled run.
     pub base_url: String,
+    /// The subscription source that answers `/search`, `/unlock` and `/job/{id}`
+    /// (madreel-svc). The provider point proxies to it; empty until an operator
+    /// sets it, and readiness names it as the blocker until then.
+    pub source_url: String,
     pub libraries: Vec<Library>,
     pub options: Options,
 }
@@ -125,6 +148,7 @@ impl Config {
         Self {
             cookie: stored.cookie.trim().to_string(),
             base_url: stored.base_url.trim().trim_end_matches('/').to_string(),
+            source_url: stored.source_url.trim().trim_end_matches('/').to_string(),
             libraries: stored.libraries,
             options: stored.options.sane(),
         }

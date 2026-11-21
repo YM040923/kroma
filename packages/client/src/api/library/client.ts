@@ -13,6 +13,7 @@ const Libraries = z.object({
   libraries: z.array(AdminLibrary),
   scrapeDefaults: ScrapeDefaults.optional(),
   languages: z.array(z.string()).optional(),
+  fanartConfigured: z.boolean().optional(),
 });
 const ScrapeState = ScrapeDefaults.extend({
   languages: z.array(z.string()).optional(),

@@ -204,7 +204,8 @@ impl Row<'_> {
     pub fn get<I: RowIndex, T: FromSql>(&self, index: I) -> Result<T> {
         let at = index.index_in(&self.columns)?;
         let value = ValueRef::from(&self.values[at]);
-        T::column_result(value).map_err(|error| of_conversion(error, at, &self.columns[at], value.data_type()))
+        T::column_result(value)
+            .map_err(|error| of_conversion(error, at, &self.columns[at], value.data_type()))
     }
 
     pub fn get_ref<I: RowIndex>(&self, index: I) -> Result<ValueRef<'_>> {
@@ -214,6 +215,7 @@ impl Row<'_> {
 
     #[track_caller]
     pub fn get_unwrap<I: RowIndex, T: FromSql>(&self, index: I) -> T {
-        self.get(index).expect("a column that reads as the asked type")
+        self.get(index)
+            .expect("a column that reads as the asked type")
     }
 }

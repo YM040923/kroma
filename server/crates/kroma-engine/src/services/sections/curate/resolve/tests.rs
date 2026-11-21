@@ -76,8 +76,8 @@ fn two_collections_that_slug_the_same_are_published_once() {
 
 #[test]
 fn a_title_that_slugs_to_nothing_is_not_a_collection() {
-    let specs = parse_curate(r#"[{"title":{"en":"!!! ???"},"members":["a","b","c","d","e"]}]"#)
-        .unwrap();
+    let specs =
+        parse_curate(r#"[{"title":{"en":"!!! ???"},"members":["a","b","c","d","e"]}]"#).unwrap();
     let cat: Vec<CatalogEntry> = ["a", "b", "c", "d", "e"]
         .iter()
         .map(|id| entry(id, id, 5.0, ""))
@@ -119,8 +119,8 @@ fn parse_curate_rejects_non_array() {
 #[test]
 fn resolve_members_dedups_within_a_collection() {
     // Same id twice in members -> counted once.
-    let specs = parse_curate(r#"[{"title":{"en":"Dup"},"members":["a","a","b","c","d","e"]}]"#)
-        .unwrap();
+    let specs =
+        parse_curate(r#"[{"title":{"en":"Dup"},"members":["a","a","b","c","d","e"]}]"#).unwrap();
     let cat: Vec<CatalogEntry> = ["a", "b", "c", "d", "e"]
         .iter()
         .map(|id| entry(id, id, 1.0, ""))

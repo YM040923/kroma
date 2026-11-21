@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::time::SystemTime;
 
-use kroma_module_supervisor::{INSTALLED_DIR, MODULE_COMPONENT, Supervisor, SupervisorConfig};
+use kroma_module_supervisor::{Supervisor, SupervisorConfig, INSTALLED_DIR, MODULE_COMPONENT};
 
 fn supervisor(dir: &Path) -> std::sync::Arc<Supervisor> {
     Supervisor::new(SupervisorConfig {

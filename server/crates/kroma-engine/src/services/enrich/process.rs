@@ -98,7 +98,10 @@ pub(super) fn apply_nfo_metadata(eng: &Engine, job: &Job) {
         let Some(detail) = db::get_show(&eng.pool, &job.id).ok().flatten() else {
             return;
         };
-        (kind, detail.show.metadata.unwrap_or_else(|| nfo.metadata(true)))
+        (
+            kind,
+            detail.show.metadata.unwrap_or_else(|| nfo.metadata(true)),
+        )
     } else {
         let kind = db::metadata_core::ITEM;
         let Some(item) = db::get_item(&eng.pool, &job.id).ok().flatten() else {
@@ -120,7 +123,11 @@ pub(super) fn apply_nfo_metadata(eng: &Engine, job: &Job) {
     let language = nfo
         .language
         .as_deref()
-        .or_else(|| eng.scrape.get(&job.library).and_then(|o| o.language.as_deref()))
+        .or_else(|| {
+            eng.scrape
+                .get(&job.library)
+                .and_then(|o| o.language.as_deref())
+        })
         .unwrap_or(&eng.language);
     let language = crate::i18n::normalize(language).unwrap_or("en");
     let mut data = db::translations::load_all(&eng.pool, kind, &[job.id.as_str()])
@@ -192,9 +199,14 @@ fn apply_art_policy(
     options: &crate::services::settings::ScrapeOptions,
     force: bool,
 ) -> bool {
-    let mut poster = art_prefs(options.poster_languages.as_ref(), options.poster_language.as_deref());
-    let mut backdrop =
-        art_prefs(options.backdrop_languages.as_ref(), options.backdrop_language.as_deref());
+    let mut poster = art_prefs(
+        options.poster_languages.as_ref(),
+        options.poster_language.as_deref(),
+    );
+    let mut backdrop = art_prefs(
+        options.backdrop_languages.as_ref(),
+        options.backdrop_language.as_deref(),
+    );
     let mut logo = art_prefs(options.logo_languages.as_ref(), None);
     if force && poster.is_empty() {
         poster.push("auto".to_string());
@@ -205,15 +217,8 @@ fn apply_art_policy(
     if force && logo.is_empty() {
         logo.push("auto".to_string());
     }
-    let backdrop_count = options.backdrop_count.map(usize::from);
-    let poster_size = options
-        .poster_size
-        .as_deref()
-        .or(options.artwork_size.as_deref());
-    let backdrop_size = options
-        .backdrop_size
-        .as_deref()
-        .or(options.artwork_size.as_deref());
+    let poster_size = options.poster_size.as_deref();
+    let backdrop_size = options.backdrop_size.as_deref();
     let logo_size = options.logo_size.as_deref();
     let sources_configured = options.poster_sources.is_some()
         || options.backdrop_sources.is_some()
@@ -223,7 +228,6 @@ fn apply_art_policy(
         && poster.is_empty()
         && backdrop.is_empty()
         && logo.is_empty()
-        && backdrop_count.is_none()
         && poster_size.is_none()
         && backdrop_size.is_none()
         && logo_size.is_none()
@@ -278,7 +282,6 @@ fn apply_art_policy(
     let logo_min = options.logo_min_width.unwrap_or(0);
     let logo_locked = overrides.contains_key(db::art_overrides::LOGO);
     let needs_images = force
-        || backdrop_count.is_some()
         || poster_size.is_some()
         || backdrop_size.is_some()
         || logo_size.is_some()
@@ -315,18 +318,21 @@ fn apply_art_policy(
     let poster_sources = art_sources(
         options.poster_sources.as_ref(),
         &["tmdb", "fanart"],
+        !eng.fanart_key.is_empty(),
         &lists.posters,
         fanart.as_ref().map(|lists| &lists.posters[..]),
     );
     let backdrop_sources = art_sources(
         options.backdrop_sources.as_ref(),
         &["tmdb", "fanart"],
+        !eng.fanart_key.is_empty(),
         &lists.backdrops,
         fanart.as_ref().map(|lists| &lists.backdrops[..]),
     );
     let logo_sources = art_sources(
         options.logo_sources.as_ref(),
         &["fanart", "tmdb"],
+        !eng.fanart_key.is_empty(),
         &lists.logos,
         fanart.as_ref().map(|lists| &lists.logos[..]),
     );
@@ -346,16 +352,13 @@ fn apply_art_policy(
             meta.logo_url = Some(url);
         }
     }
-    let backdrop_policy = force
-        || !backdrop.is_empty()
-        || backdrop_count.is_some()
-        || backdrop_size.is_some();
+    let backdrop_policy = force || !backdrop.is_empty() || backdrop_size.is_some();
     let selected_backdrops = if backdrop_policy {
         selected_from(
             &backdrop_sources,
             &backdrop,
             backdrop_size,
-            backdrop_count,
+            None,
             backdrop_min,
             backdrop_votes,
         )
@@ -374,10 +377,12 @@ fn apply_art_policy(
         let primary_key = primary.map(|url| image_key(url));
         meta.backdrops = selected_backdrops
             .into_iter()
-            .filter(|url| primary_key.as_ref().is_none_or(|key| image_key(url) != *key))
+            .filter(|url| {
+                primary_key
+                    .as_ref()
+                    .is_none_or(|key| image_key(url) != *key)
+            })
             .collect();
-    } else if let Some(limit) = backdrop_count {
-        meta.backdrops.truncate(limit);
     }
     if let Some(size) = poster_size {
         if !poster_locked {
@@ -463,21 +468,28 @@ fn language_part(tag: &str) -> &str {
 }
 
 fn source_order(configured: Option<&Vec<String>>, default: &[&str]) -> Vec<String> {
-    configured.cloned().unwrap_or_else(|| {
-        default
-            .iter()
-            .map(|source| (*source).to_string())
-            .collect()
-    })
+    configured
+        .cloned()
+        .unwrap_or_else(|| default.iter().map(|source| (*source).to_string()).collect())
 }
 
 fn art_sources<'a>(
     configured: Option<&Vec<String>>,
     default: &[&str],
+    fanart_configured: bool,
     tmdb: &'a [metadata::ArtImage],
     fanart: Option<&'a [metadata::ArtImage]>,
 ) -> Vec<(&'static str, &'a [metadata::ArtImage])> {
-    source_order(configured, default)
+    let mut order = source_order(configured, default);
+    if !fanart_configured {
+        // A missing key is temporary: keep the saved preference, but let the
+        // affected artwork use TMDB until a key is configured again.
+        order.retain(|source| source != "fanart");
+        if order.is_empty() {
+            order.push("tmdb".to_string());
+        }
+    }
+    order
         .into_iter()
         .filter_map(|source| match source.as_str() {
             "tmdb" => Some(("tmdb", tmdb)),
@@ -628,11 +640,7 @@ fn popular_enough(image: &metadata::ArtImage, min_votes: u32, relaxed: bool) -> 
 /// Re-pick each season's poster from the provider's season gallery, so the
 /// season rules can differ from the show's own artwork. Only configured rules
 /// cost the extra call per season.
-fn apply_season_art(
-    eng: &Engine,
-    job: &Job,
-    options: &crate::services::settings::ScrapeOptions,
-) {
+fn apply_season_art(eng: &Engine, job: &Job, options: &crate::services::settings::ScrapeOptions) {
     let prefs = art_prefs(options.season_languages.as_ref(), None);
     if prefs.is_empty()
         && options.season_size.is_none()
@@ -673,13 +681,9 @@ fn apply_season_art(
         )
     };
     for (season, existing) in seasons {
-        let Ok(posters) = metadata::season_images(
-            &eng.api_key,
-            &eng.language,
-            &wanted,
-            tmdb_id,
-            season,
-        ) else {
+        let Ok(posters) =
+            metadata::season_images(&eng.api_key, &eng.language, &wanted, tmdb_id, season)
+        else {
             continue;
         };
         let fanart_season: &[metadata::ArtImage] = fanart
@@ -690,11 +694,17 @@ fn apply_season_art(
         let sources = art_sources(
             options.season_sources.as_ref(),
             &["fanart", "tmdb"],
+            !eng.fanart_key.is_empty(),
             &posters,
             Some(fanart_season),
         );
-        let Some(url) = pick_from(&sources, &prefs, options.season_size.as_deref(), min_width, 0)
-        else {
+        let Some(url) = pick_from(
+            &sources,
+            &prefs,
+            options.season_size.as_deref(),
+            min_width,
+            0,
+        ) else {
             continue;
         };
         let meta = image::localize(
@@ -751,7 +761,11 @@ fn art_directory(eng: &Engine, job: &Job) -> Option<std::path::PathBuf> {
             .iter()
             .map(|folder| std::path::Path::new(folder).join(rel))
             .find(|path| path.exists())
-            .or_else(|| folders.first().map(|folder| std::path::Path::new(folder).join(rel)))?
+            .or_else(|| {
+                folders
+                    .first()
+                    .map(|folder| std::path::Path::new(folder).join(rel))
+            })?
     };
     let parent = path.parent()?;
     let in_season = parent
@@ -985,7 +999,13 @@ pub(super) fn rename_if_pinned(eng: &Engine, job: &Job, meta: &Metadata) {
 mod artwork_tests {
     use super::*;
 
-    fn image(url: &str, language: Option<&str>, width: u32, height: u32, votes: f64) -> metadata::ArtImage {
+    fn image(
+        url: &str,
+        language: Option<&str>,
+        width: u32,
+        height: u32,
+        votes: f64,
+    ) -> metadata::ArtImage {
         metadata::ArtImage {
             url: url.into(),
             width,
@@ -1003,7 +1023,7 @@ mod artwork_tests {
             image("https://image.test/zh.jpg", Some("zh"), 500, 750, 1.0),
         ];
         assert_eq!(
-            pick_image(&images, "zh", None).as_deref(),
+            pick_from(&[("tmdb", images.as_slice())], &["zh".into()], None, 0, 0).as_deref(),
             Some("https://image.test/zh.jpg")
         );
     }
@@ -1015,7 +1035,14 @@ mod artwork_tests {
             image("https://image.test/clean.jpg", None, 500, 750, 1.0),
         ];
         assert_eq!(
-            pick_image(&images, "textless", None).as_deref(),
+            pick_from(
+                &[("tmdb", images.as_slice())],
+                &["textless".into()],
+                None,
+                0,
+                0,
+            )
+            .as_deref(),
             Some("https://image.test/clean.jpg")
         );
     }
@@ -1028,7 +1055,7 @@ mod artwork_tests {
             image("https://image.test/b.jpg", Some("en"), 1000, 1500, 4.0),
         ];
         assert_eq!(
-            pick_image(&images, "auto", None).as_deref(),
+            pick_from(&[("tmdb", images.as_slice())], &[], None, 0, 0).as_deref(),
             Some("https://image.test/b.jpg")
         );
     }

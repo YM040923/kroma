@@ -5,9 +5,9 @@ use std::any::{Any, TypeId};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
+use kroma_module_wire::{Audience, EpisodeInfo, MatchCandidate, NotificationSpec, User};
 use kroma_sqlite::testing::TempPool;
 use kroma_sqlite::Pool;
-use kroma_module_wire::{Audience, EpisodeInfo, MatchCandidate, NotificationSpec, User};
 use kroma_testing::TempDir;
 
 use super::log::{Log, Published};

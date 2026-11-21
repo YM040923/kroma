@@ -30,11 +30,14 @@ pub fn set_file_probe(pool: &Pool, file_id: &str, probe: &FileProbe) -> Result<(
         probe.audio_tracks
     };
     let a_tracks = serde_json::to_string(tracks)?;
-    let technical = probe.video.and_then(|v| v.technical.as_ref())
-        .map(serde_json::to_string).transpose()?;
+    let technical = probe
+        .video
+        .and_then(|v| v.technical.as_ref())
+        .map(serde_json::to_string)
+        .transpose()?;
     let version = (probe.unreadable.is_none()
         && (probe.video.is_some() || probe.audio.is_some() || probe.duration_ms.is_some()))
-        .then_some(kroma_domain::MEDIA_PROBE_VERSION);
+    .then_some(kroma_domain::MEDIA_PROBE_VERSION);
     let (video, audio) = (probe.video, probe.audio);
     let color = video.and_then(|v| v.color.as_ref());
     conn.execute(

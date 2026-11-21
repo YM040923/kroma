@@ -458,7 +458,14 @@ mod tests {
         asked.id = "n2".into();
         insert_notification(&conn, &u2, &asked).unwrap();
 
-        let moved = resolve(&conn, &about, NotificationEvent::RequestSubmitted, Some("mod-1"), 9).unwrap();
+        let moved = resolve(
+            &conn,
+            &about,
+            NotificationEvent::RequestSubmitted,
+            Some("mod-1"),
+            9,
+        )
+        .unwrap();
 
         assert_eq!(moved, 2);
         for user in [&u1, &u2] {
@@ -510,9 +517,23 @@ mod tests {
         asked.subject = Some(about.clone());
         asked.event = NotificationEvent::RequestSubmitted;
         insert_notification(&conn, &u1, &asked).unwrap();
-        resolve(&conn, &about, NotificationEvent::RequestSubmitted, Some("ana"), 9).unwrap();
+        resolve(
+            &conn,
+            &about,
+            NotificationEvent::RequestSubmitted,
+            Some("ana"),
+            9,
+        )
+        .unwrap();
 
-        let again = resolve(&conn, &about, NotificationEvent::RequestSubmitted, Some("bo"), 20).unwrap();
+        let again = resolve(
+            &conn,
+            &about,
+            NotificationEvent::RequestSubmitted,
+            Some("bo"),
+            20,
+        )
+        .unwrap();
 
         assert_eq!(again, 0);
         let row = &list_notifications(&conn, &u1, 50, false).unwrap()[0];

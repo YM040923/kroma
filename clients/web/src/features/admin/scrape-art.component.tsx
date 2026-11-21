@@ -33,7 +33,7 @@ export function ArtRuleEditor({
   widthOptions?: readonly number[];
   /** Favourites-count presets; absent hides the filter for this image type. */
   voteOptions?: readonly number[];
-  /** Provider order; shown only when a second source is configured. */
+  /** Provider choice: one source, or both in order. */
   sources?: { value: string[]; onChange: (next: string[]) => void };
   /** Undefined on the global page; false/true states the library override. */
   overridden?: boolean;
@@ -73,24 +73,44 @@ export function ArtRuleEditor({
         labelOf={label}
         onChange={(next) => onChange({ languages: next.length > 0 ? next : null })}
       />
-      {sources && sources.value.length > 0 ? (
+      {sources ? (
         <Row wrap gap={8} align="center">
           <Text variant="meta" color="textDim">
             {t('admin.sourcesOrder')}
           </Text>
-          {sources.value.map((source, index) => (
-            <Chip
-              key={source}
-              variant="surface"
-              label={`${index + 1} ${source === 'tmdb' ? 'TMDB' : 'Fanart'}`}
+          {(['tmdb', 'fanart'] as const).map((source) => {
+            const index = sources.value.indexOf(source);
+            const active = index >= 0;
+            return (
+              <Chip
+                key={source}
+                variant="surface"
+                active={active}
+                label={
+                  active && sources.value.length > 1
+                    ? `${index + 1} ${source === 'tmdb' ? 'TMDB' : 'Fanart'}`
+                    : source === 'tmdb'
+                      ? 'TMDB'
+                      : 'Fanart'
+                }
+                onPress={() => {
+                  if (!active) {
+                    sources.onChange([...sources.value, source]);
+                  } else if (sources.value.length > 1) {
+                    sources.onChange(sources.value.filter((held) => held !== source));
+                  }
+                }}
+              />
+            );
+          })}
+          {sources.value.length > 1 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              label={t('admin.swapSources')}
+              onPress={() => sources.onChange([...sources.value].reverse())}
             />
-          ))}
-          <Button
-            variant="ghost"
-            size="sm"
-            label={t('admin.swapSources')}
-            onPress={() => sources.onChange([...sources.value].reverse())}
-          />
+          ) : null}
         </Row>
       ) : null}
       <Row wrap gap={20} align="flex-end">

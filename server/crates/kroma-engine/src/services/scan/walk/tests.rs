@@ -73,7 +73,11 @@ fn scan_into_kind(lib_id: &str, root: &Path, tv_library: bool) -> ScanOutcome {
     let def = LibraryDef {
         id: lib_id.into(),
         name: "Library".into(),
-        kind: if tv_library { "shows".into() } else { String::new() },
+        kind: if tv_library {
+            "shows".into()
+        } else {
+            String::new()
+        },
         folders: vec![root.to_string_lossy().into_owned()],
         auto_scan: true,
     };
@@ -294,7 +298,8 @@ fn a_strm_tolerates_a_bom_and_leading_blank_lines() {
     let root = root_dir.path();
     std::fs::write(
         root.join("Arrival (2016).strm"),
-        "\u{feff}\n\n   https://example.test/a.mkv   \nhttps://example.test/ignored.mkv\n".as_bytes(),
+        "\u{feff}\n\n   https://example.test/a.mkv   \nhttps://example.test/ignored.mkv\n"
+            .as_bytes(),
     )
     .unwrap();
 
@@ -341,7 +346,10 @@ fn a_strm_with_a_sidecar_arrives_described_and_probed() {
     );
     assert_eq!(file.duration_ms, Some(9_330_000));
     assert_eq!(file.size, Some(21_474_836_480));
-    let video = file.video.as_ref().expect("the sidecar named a video stream");
+    let video = file
+        .video
+        .as_ref()
+        .expect("the sidecar named a video stream");
     assert_eq!(video.codec, "hevc");
     assert_eq!(video.width, Some(3840));
     assert_eq!(file.audio_tracks.len(), 1, "the audio tracks survive");
@@ -361,7 +369,10 @@ fn a_strm_without_a_sidecar_stays_unprobed() {
     let scan = scan_into("lib1", root);
 
     let file = &scan.items.values().next().unwrap().files[0];
-    assert!(!file.probed, "nothing described it, so a later pass may try");
+    assert!(
+        !file.probed,
+        "nothing described it, so a later pass may try"
+    );
     assert_eq!(file.duration_ms, None);
 }
 
@@ -402,7 +413,10 @@ fn a_tv_library_drops_an_unnumbered_file_from_a_season_folder() {
 
     let tv = scan_into_kind("lib1", root, true);
     assert_eq!(tv.items.len(), 1, "only the numbered episode is indexed");
-    assert!(tv.items.values().all(|i| i.kind == kroma_domain::Kind::Episode));
+    assert!(tv
+        .items
+        .values()
+        .all(|i| i.kind == kroma_domain::Kind::Episode));
 
     let films = scan_into_kind("lib1", root, false);
     assert_eq!(films.items.len(), 2, "a film library still takes the file");
@@ -453,11 +467,7 @@ fn an_nfo_overrides_the_filename_and_show_folder() {
         "<tvshow><title>Right Show</title><year>2020</year></tvshow>",
     )
     .unwrap();
-    std::fs::write(
-        season.join("Wrong Show S01E01.mkv"),
-        b"x",
-    )
-    .unwrap();
+    std::fs::write(season.join("Wrong Show S01E01.mkv"), b"x").unwrap();
     std::fs::write(
         season.join("Wrong Show S01E01.nfo"),
         "<episodedetails><title>Right Episode</title><season>2</season><episode>4</episode></episodedetails>",

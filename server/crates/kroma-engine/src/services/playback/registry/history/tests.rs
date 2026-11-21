@@ -1,4 +1,4 @@
-use super::super::test_support::{beat, played_for, ping, test_pool};
+use super::super::test_support::{beat, ping, played_for, test_pool};
 use super::super::Registry;
 use super::*;
 

@@ -28,17 +28,35 @@ static RUNNING: AtomicBool = AtomicBool::new(false);
 /// Start a round if one is not already running and the interval has elapsed.
 /// Called from the every-minute job; returns immediately.
 pub fn start<S: HostCtx + Clone + Send + Sync + 'static>(host: S) {
+    start_inner(host, false);
+}
+
+/// A round the operator asked for: the interval and the background reserve are
+/// skipped, because they are watching the result; the daily hard ceiling still
+/// applies inside the pacer.
+pub fn start_now<S: HostCtx + Clone + Send + Sync + 'static>(host: S) {
+    start_inner(host, true);
+}
+
+fn start_inner<S: HostCtx + Clone + Send + Sync + 'static>(host: S, force: bool) {
     if RUNNING.swap(true, Ordering::AcqRel) {
         return;
     }
     let config = Config::load();
-    if !config.runnable() || !config.options.watch_enabled {
+    if !config.runnable() || (!force && !config.options.watch_enabled) {
+        RUNNING.store(false, Ordering::Release);
+        return;
+    }
+    if !force && crate::budget::background_blocked(config.options.daily_call_budget) {
         RUNNING.store(false, Ordering::Release);
         return;
     }
     let incr = store::load().incr;
     let now = events::unix_now();
-    if incr.last_poll_at > 0 && now - incr.last_poll_at < config.options.watch_interval_secs as i64 {
+    if !force
+        && incr.last_poll_at > 0
+        && now - incr.last_poll_at < config.options.watch_interval_secs as i64
+    {
         RUNNING.store(false, Ordering::Release);
         return;
     }
@@ -52,6 +70,7 @@ pub fn start<S: HostCtx + Clone + Send + Sync + 'static>(host: S) {
 /// One poll + apply pass. Never panics and never returns an error: a failed
 /// round simply leaves the cursor where it was and the next one retries.
 pub async fn run_once<S: HostCtx>(host: &S, config: &Config) {
+    crate::pacer::pacer().configure(&config.options).await;
     let stored = store::load();
     let mut incr = stored.incr.clone();
 
@@ -195,6 +214,7 @@ fn try_direct(
         &stem,
         &event.pick_code,
         event.size,
+        &[],
         config.options.overwrite_strm,
         &mut HashSet::new(),
         report,
@@ -332,6 +352,7 @@ async fn rescan(
                 &stem,
                 &entry.pick_code,
                 entry.size,
+                &[],
                 config.options.overwrite_strm,
                 &mut seen,
                 report,

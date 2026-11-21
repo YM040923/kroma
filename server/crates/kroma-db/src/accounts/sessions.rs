@@ -61,7 +61,13 @@ fn insert_session(
         "INSERT INTO sessions (token,user_id,created_at,expires_at,access_token) \
          SELECT ?1,?2,?3,?4,?5 \
          WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = ?2 AND waiting = 1)",
-        params![stored(token), user_id, now_or_blank(), expires_at, access_token.map(stored)],
+        params![
+            stored(token),
+            user_id,
+            now_or_blank(),
+            expires_at,
+            access_token.map(stored)
+        ],
     )?;
     anyhow::ensure!(written == 1, "an account that waits holds no session");
     Ok(())
@@ -102,7 +108,10 @@ pub fn session_user(pool: &Pool, token: &str) -> Result<Option<User>> {
 
 pub fn delete_session(pool: &Pool, token: &str) -> Result<()> {
     let conn = pool.get()?;
-    conn.execute("DELETE FROM sessions WHERE token = ?1", params![stored(token)])?;
+    conn.execute(
+        "DELETE FROM sessions WHERE token = ?1",
+        params![stored(token)],
+    )?;
     Ok(())
 }
 

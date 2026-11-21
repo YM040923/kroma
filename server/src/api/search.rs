@@ -121,7 +121,10 @@ pub async fn search(
         let shows = if show_ids.is_empty() {
             HashMap::new()
         } else {
-            query(&state.db, move |pool| db::show_certifications(&pool, &show_ids)).await?
+            query(&state.db, move |pool| {
+                db::show_certifications(&pool, &show_ids)
+            })
+            .await?
         };
         resp.results.retain(|hit| match hit {
             SearchHit::Movie { item } => limit.allows_metadata(item.metadata.as_ref()),

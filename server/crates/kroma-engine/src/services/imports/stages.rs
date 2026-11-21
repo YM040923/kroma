@@ -101,7 +101,7 @@ pub(crate) struct PlayRow<'a> {
 
 pub(crate) trait Stages {
     fn libraries(&self, importing: &Importing<'_>, kept: &[LibraryRow<'_>])
-    -> Result<Vec<Outcome>>;
+        -> Result<Vec<Outcome>>;
 
     fn users(&self, importing: &Importing<'_>, kept: &UserRows<'_>) -> Result<Vec<Outcome>>;
 

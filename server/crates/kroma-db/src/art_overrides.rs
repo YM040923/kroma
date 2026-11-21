@@ -39,9 +39,8 @@ pub fn get(pool: &Pool, kind: &str, id: &str) -> Result<HashMap<String, String>>
 /// card.
 pub fn all(pool: &Pool, kind: &str) -> Result<HashMap<String, HashMap<String, String>>> {
     let conn = pool.get()?;
-    let mut stmt = conn.prepare(
-        "SELECT subject_id, art, url FROM art_overrides WHERE subject_kind = ?1",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT subject_id, art, url FROM art_overrides WHERE subject_kind = ?1")?;
     let rows = stmt.query_map(params![kind], |row| {
         Ok((
             row.get::<_, String>(0)?,

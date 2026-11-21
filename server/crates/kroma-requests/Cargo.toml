@@ -27,4 +27,5 @@ tracing = { workspace = true }
 axum = { workspace = true }
 kroma-db = { workspace = true, features = ["testing"] }
 kroma-module-host = { workspace = true, features = ["testing"] }
+kroma-testing = { workspace = true }
 tokio = { workspace = true }

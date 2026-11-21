@@ -5,7 +5,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use super::paths::{Translation, under_its_own_name};
+use super::paths::{under_its_own_name, Translation};
 use crate::db;
 use crate::model::imports::KeptLibrary;
 use crate::state::SharedState;

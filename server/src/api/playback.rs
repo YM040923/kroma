@@ -39,10 +39,7 @@ pub fn routes() -> Router<SharedState> {
             "/my-list/{id}",
             put(watch_state::add_to_list).delete(watch_state::remove_from_list),
         )
-        .route(
-            "/history",
-            get(history::history).delete(history::clear_all),
-        )
+        .route("/history", get(history::history).delete(history::clear_all))
         .route("/history/shows/{id}", delete(history::clear_show))
         .route("/history/items", delete(history::clear_items))
         .route(

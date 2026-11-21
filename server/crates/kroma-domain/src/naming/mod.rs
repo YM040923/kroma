@@ -18,8 +18,8 @@ mod title;
 
 use std::path::Path;
 
-pub use marker::is_season_folder;
 use marker::find_marker;
+pub use marker::is_season_folder;
 use title::clean_episode_title;
 pub use title::{clean_title, parse_year};
 

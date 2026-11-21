@@ -126,7 +126,10 @@ impl Pool {
     }
 
     fn park(&self, parked: Parked) {
-        self.idle.lock().unwrap_or_else(PoisonError::into_inner).push(parked);
+        self.idle
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(parked);
     }
 
     fn lost(&self, role: Role, error: &kroma_wasm_host::HostError) -> String {
@@ -159,7 +162,11 @@ impl Pool {
     // its slots. An instance with nothing left running costs nothing until the next
     // call wakes it.
     fn tick(&self) {
-        let turns = self.idle.lock().unwrap_or_else(PoisonError::into_inner).len();
+        let turns = self
+            .idle
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len();
         let mut still_running = false;
         for _ in 0..turns {
             let next = {
@@ -228,7 +235,10 @@ impl Pool {
         }
         let deadline = Instant::now() + STOP_WAIT;
         let held = loop {
-            match self.slots.try_acquire_many(self.capacity.load(Ordering::Acquire)) {
+            match self
+                .slots
+                .try_acquire_many(self.capacity.load(Ordering::Acquire))
+            {
                 Ok(held) => break Some(held),
                 Err(_) if Instant::now() < deadline => std::thread::sleep(STOP_STEP),
                 Err(_) => break None,

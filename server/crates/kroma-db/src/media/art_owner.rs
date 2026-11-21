@@ -144,7 +144,13 @@ mod tests {
 
         let owner = art_owner(&p, ART).unwrap();
 
-        assert_eq!(owner, Some(ArtOwner { kind: SHOW, id: "s1".into() }));
+        assert_eq!(
+            owner,
+            Some(ArtOwner {
+                kind: SHOW,
+                id: "s1".into()
+            })
+        );
     }
 
     #[test]
@@ -167,11 +173,17 @@ mod tests {
 
         assert_eq!(
             art_owner(&p, ART).unwrap(),
-            Some(ArtOwner { kind: SHOW, id: "s1".into() })
+            Some(ArtOwner {
+                kind: SHOW,
+                id: "s1".into()
+            })
         );
         assert_eq!(
             art_owner(&p, "/api/images/movie.webp").unwrap(),
-            Some(ArtOwner { kind: ITEM, id: "m1".into() })
+            Some(ArtOwner {
+                kind: ITEM,
+                id: "m1".into()
+            })
         );
     }
 
@@ -216,10 +228,17 @@ mod tests {
         )
         .unwrap();
 
-        for url in ["/api/images/fr.webp", "/api/images/face.webp", "/api/images/gap.webp"] {
+        for url in [
+            "/api/images/fr.webp",
+            "/api/images/face.webp",
+            "/api/images/gap.webp",
+        ] {
             assert_eq!(
                 art_owner(&p, url).unwrap(),
-                Some(ArtOwner { kind: SHOW, id: "s1".into() }),
+                Some(ArtOwner {
+                    kind: SHOW,
+                    id: "s1".into()
+                }),
                 "{url}"
             );
         }
@@ -243,7 +262,10 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(art_owner(&p, "/api/images/________________.webp").unwrap(), None);
+        assert_eq!(
+            art_owner(&p, "/api/images/________________.webp").unwrap(),
+            None
+        );
         assert_eq!(art_owner(&p, "/api/images/feed%.webp").unwrap(), None);
     }
 }

@@ -45,9 +45,17 @@ pub struct Metadata {
     /// The film series this title belongs to, when TMDB or an NFO names one.
     /// Shows have none. A name can stand alone (an NFO `<set>`); the id is
     /// TMDB's, and is dropped when a later NFO renames the set.
-    #[serde(rename = "collectionId", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "collectionId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub collection_id: Option<u64>,
-    #[serde(rename = "collectionName", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "collectionName",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub collection_name: Option<String>,
     #[serde(rename = "posterUrl", skip_serializing_if = "Option::is_none")]
     pub poster_url: Option<String>,

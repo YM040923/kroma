@@ -167,7 +167,10 @@ mod tests {
         let meta = metadata_from(d, Target::Movie, 11, "en", "US");
 
         assert_eq!(meta.collection_id, Some(10));
-        assert_eq!(meta.collection_name.as_deref(), Some("Star Wars Collection"));
+        assert_eq!(
+            meta.collection_name.as_deref(),
+            Some("Star Wars Collection")
+        );
     }
 
     #[test]
@@ -248,7 +251,10 @@ mod tests {
         }"#;
         let details: Details = serde_json::from_str(raw).unwrap();
         let meta = metadata_from(details, Target::Movie, 1, "zh", "CN");
-        assert_eq!(meta.poster_url.as_deref(), Some("https://image.tmdb.org/t/p/w500/zh-large.jpg"));
+        assert_eq!(
+            meta.poster_url.as_deref(),
+            Some("https://image.tmdb.org/t/p/w500/zh-large.jpg")
+        );
     }
 
     #[test]
@@ -282,8 +288,8 @@ mod tests {
 
     #[test]
     fn a_title_without_gallery_images_carries_no_backdrops() {
-        let d = serde_json::from_str(r#"{"id": 1, "title": "X", "backdrop_path": "/a.jpg"}"#)
-            .unwrap();
+        let d =
+            serde_json::from_str(r#"{"id": 1, "title": "X", "backdrop_path": "/a.jpg"}"#).unwrap();
 
         let meta = metadata_from(d, Target::Movie, 1, "en", "US");
 

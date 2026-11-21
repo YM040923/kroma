@@ -4,12 +4,12 @@ import type { RequestStatus } from '@kromatv/client/requests';
 import { posterColors, sizedImageUrl } from '@kromatv/core';
 import type { Translate } from '@kromatv/i18n';
 import { useT } from '@kromatv/ui';
-import { Box, Img, rhythm, Text } from '@kromatv/ui/kit';
+import { Box, Img, rhythm, Text, toast } from '@kromatv/ui/kit';
 import { type ReactNode, useState } from 'react';
 import { imageUrl } from '#web/shared/lib/api';
-import { useAuth } from '#web/shared/lib/auth';
 import { useMyList } from '#web/shared/lib/mylist';
 import { savedTitleId } from '#web/shared/lib/saved-title-id';
+import { useAcquisition } from '#web/shared/lib/use-acquisition.hook';
 import { useWatched } from '#web/shared/lib/watched';
 import type { PosterAction } from '#web/shared/ui/poster-action-bar.component';
 import { PosterTile } from '#web/shared/ui/poster-tile.component';
@@ -62,7 +62,7 @@ function cardActions(t: Translate, toggles: Readonly<TileToggles>): PosterAction
     actions.push({
       key: 'request',
       icon: 'download',
-      label: t('discover.request'),
+      label: t('requests.acquire'),
       disabled: toggles.requesting,
       onSelect: toggles.onRequest,
     });
@@ -90,7 +90,7 @@ function cardActions(t: Translate, toggles: Readonly<TileToggles>): PosterAction
 
 export function DiscoverCard({ entry, width }: Readonly<{ entry: DiscoverEntry; width?: number }>) {
   const t = useT();
-  const { client } = useAuth();
+  const acquire = useAcquisition();
   const { isWatched, toggleWatched } = useWatched();
   const { inList, toggle: toggleMyList } = useMyList();
   const [imgOk, setImgOk] = useState(true);
@@ -103,12 +103,35 @@ export function DiscoverCard({ entry, width }: Readonly<{ entry: DiscoverEntry; 
   const listId = savedTitleId(entry.kind, owned ? entry.localId : null, entry.tmdbId);
   const tint = `linear-gradient(158deg, ${c1} 0%, ${c2} 70%)`;
 
+  // The card is a shortcut for the title page's own Acquire button, so it goes
+  // through the same acquisition: a priced cloud candidate is confirmed here,
+  // and a failure is said out loud rather than swallowed.
   const request = () => {
     setRequesting(true);
-    client.requests
-      .create({ kind: entry.kind, tmdbId: entry.tmdbId, seasons: null })
-      .then((req) => setOptimisticStatus(req.status))
-      .catch(() => undefined)
+    void acquire({
+      kind: entry.kind,
+      tmdbId: entry.tmdbId,
+      title: entry.title,
+      year: entry.year ?? null,
+    })
+      .then((outcome) => {
+        switch (outcome.state) {
+          case 'owned':
+            setOptimisticStatus('available');
+            break;
+          case 'pending_review':
+            setOptimisticStatus('pending');
+            break;
+          case 'started':
+            setOptimisticStatus('searching');
+            break;
+          case 'cancelled':
+            break;
+          case 'failed':
+            toast({ message: outcome.error, icon: 'alert-triangle' });
+            break;
+        }
+      })
       .finally(() => setRequesting(false));
   };
 

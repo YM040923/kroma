@@ -58,7 +58,11 @@ pub fn rating_age(raw: &str) -> Option<u8> {
     if key.is_empty() {
         return None;
     }
-    if let Some(age) = TABLE.iter().find(|(symbol, _)| *symbol == key).map(|(_, age)| *age) {
+    if let Some(age) = TABLE
+        .iter()
+        .find(|(symbol, _)| *symbol == key)
+        .map(|(_, age)| *age)
+    {
         return Some(age);
     }
     // A few sources prefix the system name (FSK16 / KMRB12 / BBFC15).

@@ -135,12 +135,10 @@ fn a_ledger_needs_tmdb_to_describe_anything() {
 #[test]
 fn an_unknown_request_is_an_error_not_an_empty_ledger() {
     let host = host(Some("k"));
-    assert!(
-        ledger(&host, "nope", LANG)
-            .unwrap_err()
-            .to_string()
-            .contains("request not found")
-    );
+    assert!(ledger(&host, "nope", LANG)
+        .unwrap_err()
+        .to_string()
+        .contains("request not found"));
 }
 
 #[test]
@@ -272,7 +270,10 @@ fn a_season_row_carries_what_the_request_and_the_library_know() {
 fn a_movie_has_no_season_to_open() {
     let host = host(Some("k"));
     seed_request(&host, "r1", RequestKind::Movie, 7, None);
-    assert!(season_ledger(&host, "r1", 1, LANG).unwrap().episodes.is_empty());
+    assert!(season_ledger(&host, "r1", 1, LANG)
+        .unwrap()
+        .episodes
+        .is_empty());
 }
 
 #[test]
@@ -290,10 +291,9 @@ fn preview_rows_describe_a_season_the_request_never_covered() {
 
     let rows = preview_season_rows(&host, &req, 2).unwrap();
     assert_eq!(rows.len(), 2, "a searchable row per episode of the season");
-    assert!(
-        rows.iter()
-            .all(|r| r.season == Some(2) && r.status == "wanted")
-    );
+    assert!(rows
+        .iter()
+        .all(|r| r.season == Some(2) && r.status == "wanted"));
     // Never persisted: the request still covers only what it covered.
     let conn = host.db().get().unwrap();
     assert!(db::wanted_for_request(&conn, "r1").unwrap().is_empty());

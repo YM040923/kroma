@@ -123,7 +123,11 @@ mod tests {
 
         let uid = confirm_verification(&p, "tok1").unwrap().unwrap();
         assert_eq!(uid, user.id);
-        assert!(get_verification(&p, "tok1").unwrap().unwrap().used_at.is_some());
+        assert!(get_verification(&p, "tok1")
+            .unwrap()
+            .unwrap()
+            .used_at
+            .is_some());
         assert!(confirm_verification(&p, "tok1").unwrap().is_none());
     }
 
@@ -158,7 +162,11 @@ mod tests {
         crate::accounts::set_user_email(&p, &user.id, "new@b.c").unwrap();
 
         assert!(confirm_verification(&p, "tok").unwrap().is_none());
-        assert!(get_verification(&p, "tok").unwrap().unwrap().used_at.is_none());
+        assert!(get_verification(&p, "tok")
+            .unwrap()
+            .unwrap()
+            .used_at
+            .is_none());
     }
 
     #[test]

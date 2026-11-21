@@ -163,10 +163,7 @@ fn alert<'a>(out: &'a Outgoing<'a>) -> kroma_push::Alert<'a> {
         id: &n.id,
         title: &n.title,
         body: &n.body,
-        subject: n
-            .subject
-            .as_ref()
-            .map(|s| (s.kind.as_str(), s.id.as_str())),
+        subject: n.subject.as_ref().map(|s| (s.kind.as_str(), s.id.as_str())),
         collapse_key: n.group_key.as_deref(),
         link: n.link.as_deref(),
         image_url: out.native_image.as_deref(),

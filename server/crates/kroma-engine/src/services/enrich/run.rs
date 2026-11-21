@@ -110,7 +110,12 @@ pub(super) fn jobs_after_scan(
     let mut items = db::list_items(&state.db, None)?;
     items.retain(|item| matches!(item.kind, Kind::Movie | Kind::Video));
     let shows = db::list_shows(&state.db, None)?;
-    let mut jobs = build_jobs(&items, &shows, &load_pins(&state.db), &state.config.data_dir);
+    let mut jobs = build_jobs(
+        &items,
+        &shows,
+        &load_pins(&state.db),
+        &state.config.data_dir,
+    );
     jobs.retain(|job| job.fetches(changed_shows));
     Ok(jobs)
 }

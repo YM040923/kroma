@@ -75,7 +75,9 @@ fn a_file_is_found_by_its_path_and_a_path_no_file_has_is_absent() {
 #[test]
 fn more_paths_than_one_statement_binds_are_all_looked_up() {
     let pool = a_catalogue();
-    let absent: Vec<String> = (0..2000).map(|n| format!("/media/absent-{n}.mkv")).collect();
+    let absent: Vec<String> = (0..2000)
+        .map(|n| format!("/media/absent-{n}.mkv"))
+        .collect();
     let mut paths: Vec<&str> = absent.iter().map(String::as_str).collect();
     paths.push("/media/Heat (1995)/Heat.mkv");
 

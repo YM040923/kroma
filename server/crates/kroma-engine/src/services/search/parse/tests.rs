@@ -48,7 +48,10 @@ fn an_episode_is_located_however_it_is_written() {
     assert_eq!(read("breaking bad 2x05").locator, at(2, Some(5)));
     assert_eq!(read("breaking bad s2 e5").locator, at(2, Some(5)));
     assert_eq!(read("breaking bad s2").locator, at(2, None));
-    assert_eq!(read("breaking bad saison 2 episode 5").locator, at(2, Some(5)));
+    assert_eq!(
+        read("breaking bad saison 2 episode 5").locator,
+        at(2, Some(5))
+    );
     assert_eq!(read("breaking bad season 3").locator, at(3, None));
 }
 

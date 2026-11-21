@@ -98,6 +98,7 @@ pub struct AdminLibrary {
     pub last_scan: Option<String>,
     pub auto_scan: bool,
     pub scrape: crate::services::settings::ScrapeOptions,
+    pub acquisition_mode: kroma_domain::AcquisitionMode,
     /// The operator-picked cover, if one is set.
     pub cover: Option<String>,
     /// One of the demo libraries, which nobody added and which go once

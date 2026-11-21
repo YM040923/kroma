@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::halt::Halt;
-use super::kept::{Kept, kept_libraries, kept_users};
+use super::kept::{kept_libraries, kept_users, Kept};
 use super::stages::{Importing, Stages};
 use crate::db;
 use crate::model::import::{Library, Survey, User};

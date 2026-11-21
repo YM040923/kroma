@@ -9,7 +9,7 @@ use kroma_module_host::{
     NetworkAction, NetworkAnswer, NetworkAsk, NetworkFlow, NetworkPolicy, NetworkPolicyOf,
     SettingReach, SettingReachOf,
 };
-use kroma_module_supervisor::{INSTALLED_DIR, Supervisor, SupervisorConfig};
+use kroma_module_supervisor::{Supervisor, SupervisorConfig, INSTALLED_DIR};
 use tower::ServiceExt;
 
 pub mod settings;

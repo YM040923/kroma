@@ -25,8 +25,8 @@ fn push(out: &mut Vec<LocalFile>, abs_path: String, rel_path: String) {
 /// `.strm` file itself, which is where an NFO belongs.
 pub fn item_file_paths(pool: &Pool, item_id: &str) -> Result<Vec<LocalFile>> {
     let conn = pool.get()?;
-    let mut stmt = conn
-        .prepare("SELECT abs_path, rel_path FROM files WHERE item_id = ?1 ORDER BY id")?;
+    let mut stmt =
+        conn.prepare("SELECT abs_path, rel_path FROM files WHERE item_id = ?1 ORDER BY id")?;
     let rows = stmt.query_map(params![item_id], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     })?;

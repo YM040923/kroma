@@ -83,11 +83,21 @@ pub fn migrate_store(store: &Pool, name: &str, baseline: &str, steps: &[Step]) -
 
 /// [`migrate_store`] for a schema read at run time, the way the host applies a
 /// module's.
-pub fn migrate_store_sql(store: &Pool, name: &str, baseline: &str, steps: &[SqlStep]) -> Result<Migrated> {
+pub fn migrate_store_sql(
+    store: &Pool,
+    name: &str,
+    baseline: &str,
+    steps: &[SqlStep],
+) -> Result<Migrated> {
     migrate_own(store, name, baseline, steps)
 }
 
-fn migrate_own<C: Change>(store: &Pool, name: &str, baseline: &str, steps: &[C]) -> Result<Migrated> {
+fn migrate_own<C: Change>(
+    store: &Pool,
+    name: &str,
+    baseline: &str,
+    steps: &[C],
+) -> Result<Migrated> {
     let schema = Schema {
         name,
         baseline,

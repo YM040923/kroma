@@ -24,6 +24,9 @@ export const CloudOptions = z.object({
   keepSuffix: z.boolean().default(false),
   overwriteStrm: z.boolean().default(false),
   minVideoSizeMb: z.number().default(0),
+  prefetchNext: z.number().default(2),
+  dailyCallBudget: z.number().default(0),
+  autoSyncHours: z.number().default(6),
   syncImages: z.boolean().default(true),
   syncNfo: z.boolean().default(true),
   syncSubtitles: z.boolean().default(true),
@@ -144,6 +147,11 @@ export const CloudStatusView = z.object({
   signCount: z.number().default(0),
   history: z.array(CloudHistoryEntry).default([]),
   transfers: z.array(TransferEntryView).default([]),
+  alias: z.string().default(''),
+  dailyCallBudget: z.number().default(0),
+  callsToday: z.number().default(0),
+  autoSyncHours: z.number().default(6),
+  lastAutoSyncAt: z.number().default(0),
 });
 export type CloudStatusView = z.infer<typeof CloudStatusView>;
 
@@ -158,8 +166,24 @@ export const CloudAccount = z.object({
   userId: z.string().default(''),
   vip: z.boolean().default(false),
   avatarUrl: z.string().default(''),
+  alias: z.string().default(''),
 });
 export type CloudAccount = z.infer<typeof CloudAccount>;
+
+export const AliasView = z.object({ alias: z.string().default('') });
+export const RemovedView = z.object({ removed: z.boolean(), filesDeleted: z.boolean() });
+export const ClearedView = z.object({ cleared: z.boolean() });
+
+export const CloudConfigExport = z.object({
+  format: z.string().optional(),
+  version: z.number().optional(),
+  exportedAt: z.number().optional(),
+  baseUrl: z.string().default(''),
+  libraries: z.array(CloudLibrary).default([]),
+  options: CloudOptions,
+  alias: z.string().default(''),
+});
+export type CloudConfigExport = z.infer<typeof CloudConfigExport>;
 
 export const LoginStarted = z.object({
   flow: z.string(),

@@ -1,8 +1,8 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use kroma_module_host::SettingReachOf;
 use kroma_module_host::testing::StubHost;
-use serde_json::{Value, json};
+use kroma_module_host::SettingReachOf;
+use serde_json::{json, Value};
 use tower::ServiceExt;
 
 use super::Modules;

@@ -63,7 +63,11 @@ impl Network {
     }
 
     fn current_offers(&self) -> Offers {
-        let cached = self.offers.lock().unwrap_or_else(PoisonError::into_inner).clone();
+        let cached = self
+            .offers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
         if let Some((at, offers)) = cached {
             if at.elapsed() < OFFERS_TTL {
                 return offers;

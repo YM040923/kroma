@@ -1,7 +1,7 @@
 //! Library-scan gaps: aired episodes a show on disk is missing.
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 use crate::Pool;
 use kroma_domain::{CalendarEntry, RequestKind};

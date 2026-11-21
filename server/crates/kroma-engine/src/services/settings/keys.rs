@@ -74,6 +74,22 @@ fn declared() -> Declared {
     m.module_declared("uiLanguage", json!("Français"));
     // Empty → the env-configured `KROMA_TMDB_LANGUAGE` (default "en-US").
     m.module_declared("tmdbLanguage", json!(super::TMDB_LANGUAGE_AUTO));
+    // The household scraping rules; without a declared default `set_patch`
+    // drops the whole object and every rule edit silently disappears.
+    m.core_only("scrapeDefaults", json!({}));
+    // Per-library placement policies for the unified acquisition entrypoint.
+    m.core_only("libraryAcquisition", json!({}));
+    // Which storage mode this deployment runs. Only cloud_only is implemented;
+    // local_only and hybrid are reserved and must not be selectable yet.
+    m.core_only("deploymentMode", json!("cloud_only"));
+    // The 115 folder Symedia watches. Acquisition transfers and uploads land
+    // here; it is never mirrored as a library. Empty = not configured.
+    m.core_only("cloudIntakeFolder", json!(""));
+    // How often each 115 share subscription is re-listed, in minutes.
+    m.core_only("sharePollMinutes", json!(30));
+    // The administrator's personal Fanart.tv key. Core-only: no module needs
+    // to read it, and it must not reach a settings view.
+    m.core_only("fanartApiKey", json!(""));
     m.module_declared("timezone", json!("Europe/Zurich (UTC+1)"));
     m.module_declared("autoUpdate", json!(true));
     m.module_declared("autoInstallUpdates", json!(null));

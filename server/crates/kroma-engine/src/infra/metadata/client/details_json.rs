@@ -130,11 +130,20 @@ fn language_rank(image: &ImageEntry, lang2: &str) -> u8 {
 pub(super) fn pick_poster(posters: &[ImageEntry], lang2: &str) -> Option<String> {
     posters
         .iter()
-        .filter(|image| image.file_path.as_deref().is_some_and(|path| !path.is_empty()))
+        .filter(|image| {
+            image
+                .file_path
+                .as_deref()
+                .is_some_and(|path| !path.is_empty())
+        })
         .min_by(|a, b| {
             language_rank(a, lang2)
                 .cmp(&language_rank(b, lang2))
-                .then_with(|| b.vote_average.unwrap_or(0.0).total_cmp(&a.vote_average.unwrap_or(0.0)))
+                .then_with(|| {
+                    b.vote_average
+                        .unwrap_or(0.0)
+                        .total_cmp(&a.vote_average.unwrap_or(0.0))
+                })
                 .then_with(|| (b.width * b.height).cmp(&(a.width * a.height)))
                 .then_with(|| a.file_path.cmp(&b.file_path))
         })
@@ -144,11 +153,20 @@ pub(super) fn pick_poster(posters: &[ImageEntry], lang2: &str) -> Option<String>
 pub(super) fn pick_backdrop(backdrops: &[ImageEntry], lang2: &str) -> Option<String> {
     backdrops
         .iter()
-        .filter(|image| image.file_path.as_deref().is_some_and(|path| !path.is_empty()))
+        .filter(|image| {
+            image
+                .file_path
+                .as_deref()
+                .is_some_and(|path| !path.is_empty())
+        })
         .min_by(|a, b| {
             language_rank(a, lang2)
                 .cmp(&language_rank(b, lang2))
-                .then_with(|| b.vote_average.unwrap_or(0.0).total_cmp(&a.vote_average.unwrap_or(0.0)))
+                .then_with(|| {
+                    b.vote_average
+                        .unwrap_or(0.0)
+                        .total_cmp(&a.vote_average.unwrap_or(0.0))
+                })
                 .then_with(|| (b.width * b.height).cmp(&(a.width * a.height)))
                 .then_with(|| a.file_path.cmp(&b.file_path))
         })
@@ -202,7 +220,10 @@ pub(super) fn pick_backdrops(backdrops: &[ImageEntry]) -> Vec<String> {
                     .unwrap_or(0.0)
                     .total_cmp(&seen.vote_average.unwrap_or(0.0))
                     .then((entry.width * entry.height).cmp(&(seen.width * seen.height)))
-                    .is_gt() => *seen = entry,
+                    .is_gt() =>
+            {
+                *seen = entry
+            }
             Some(_) => {}
             None => unique.push(entry),
         }
@@ -307,7 +328,10 @@ mod tests {
             {"file_path":"/zh-large.jpg","iso_639_1":"zh","vote_average":3.0,"width":1000,"height":1500}
         ]))
         .unwrap();
-        assert_eq!(pick_poster(&posters, "zh").as_deref(), Some("/zh-large.jpg"));
+        assert_eq!(
+            pick_poster(&posters, "zh").as_deref(),
+            Some("/zh-large.jpg")
+        );
     }
 
     #[test]
@@ -320,7 +344,13 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(pick_backdrop(&images, "zh").as_deref(), Some("/zh.jpg"));
-        assert_eq!(pick_backdrops(&images).iter().filter(|path| *path == "/zh.jpg").count(), 1);
+        assert_eq!(
+            pick_backdrops(&images)
+                .iter()
+                .filter(|path| *path == "/zh.jpg")
+                .count(),
+            1
+        );
     }
 
     #[test]

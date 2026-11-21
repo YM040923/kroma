@@ -92,7 +92,10 @@ mod tests {
 
         assert_eq!(old.fresh, 2);
         assert_eq!((old.season, old.episode), (2, 4));
-        assert!(old.first_at < JUNE, "it was here before, so it is not a new show");
+        assert!(
+            old.first_at < JUNE,
+            "it was here before, so it is not a new show"
+        );
     }
 
     #[test]

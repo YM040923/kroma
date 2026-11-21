@@ -92,7 +92,8 @@ async fn session(
     pool: &Pool,
     target: &RelayTarget<'_>,
 ) -> Result<relay::Session, RelayError> {
-    let identity = ensure_identity(settings, pool).map_err(|e| RelayError::Transient(e.to_string()))?;
+    let identity =
+        ensure_identity(settings, pool).map_err(|e| RelayError::Transient(e.to_string()))?;
     let stored = settings.get_str(INSTANCE, "");
     if !stored.is_empty() && settings.get_str(INSTANCE_ORIGIN, "") == target.origin {
         return Ok(relay::Session {
@@ -132,7 +133,11 @@ enum Answer {
     Link(String),
 }
 
-async fn perform(base: &str, session: &relay::Session, call: &Call<'_>) -> Result<Answer, RelayError> {
+async fn perform(
+    base: &str,
+    session: &relay::Session,
+    call: &Call<'_>,
+) -> Result<Answer, RelayError> {
     match call {
         Call::Send { to, rendered } => relay::send(base, session, to, rendered)
             .await
@@ -243,9 +248,17 @@ pub async fn relay_test(
         html: format!("<p>{text}</p>"),
         text,
     };
-    with_session(settings, pool, target, Call::Send { to, rendered: &rendered })
-        .await
-        .map(|_| ())
+    with_session(
+        settings,
+        pool,
+        target,
+        Call::Send {
+            to,
+            rendered: &rendered,
+        },
+    )
+    .await
+    .map(|_| ())
 }
 
 #[cfg(test)]

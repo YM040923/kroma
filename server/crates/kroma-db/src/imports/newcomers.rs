@@ -4,7 +4,7 @@
 use kroma_domain::imports::Kind;
 use rusqlite::TransactionBehavior;
 
-use super::records::{Entry, Ledger, record_on};
+use super::records::{record_on, Entry, Ledger};
 use crate::accounts::{insert_waiting_account, replace_invitation};
 use crate::{AccountInvite, Awaited, Pool, Result, WaitingAccount};
 

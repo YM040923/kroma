@@ -70,7 +70,10 @@ pub struct TestReport {
 pub enum Outcome {
     /// `created` is true the first time the person comes in: the account was
     /// made for them now, or it waited on the invitation they just redeemed.
-    SignedIn { user_id: String, created: bool },
+    SignedIn {
+        user_id: String,
+        created: bool,
+    },
     Waiting(Waiting, Identity),
     Refused(Refusal),
     /// The conversation with the provider broke down. Carries a code that
@@ -79,7 +82,10 @@ pub enum Outcome {
     /// The identity is `user_id`'s once the flow is collected. Nothing is
     /// written before that: whoever holds both halves of the flow is the one
     /// who began it, and the person at the provider may be somebody else.
-    Linking { user_id: String, identity: Identity },
+    Linking {
+        user_id: String,
+        identity: Identity,
+    },
     Tested(TestReport),
 }
 
@@ -241,7 +247,11 @@ pub fn approve(pool: &Pool, request_id: &str, approval: &Approval) -> Result<App
     if db::find_user_by_email(pool, &request.email)?.is_some() {
         return Ok(Approved::EmailTaken);
     }
-    let username = match approval.username.map(str::trim).filter(|name| !name.is_empty()) {
+    let username = match approval
+        .username
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+    {
         Some(typed) if db::username_taken(pool, typed, None)? => {
             return Ok(Approved::UsernameTaken)
         }

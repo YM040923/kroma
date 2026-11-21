@@ -34,8 +34,6 @@ pub(super) fn scene_clip(dir: &Path, seconds: u32) -> PathBuf {
 pub(super) fn credits_clip(dir: &Path, seconds: u32) -> PathBuf {
     render(
         &dir.join("credits.mp4"),
-        &format!(
-            "color=c=black:s={WIDTH}x{HEIGHT}:r=1:d={seconds},drawgrid=w=8:h=8:t=1:c=white"
-        ),
+        &format!("color=c=black:s={WIDTH}x{HEIGHT}:r=1:d={seconds},drawgrid=w=8:h=8:t=1:c=white"),
     )
 }

@@ -11,7 +11,7 @@ use kroma_module_host::{
     NetworkAction, NetworkAnswer, NetworkAsk, NetworkFlow, NetworkPolicy, NetworkPolicyOf,
 };
 use kroma_module_supervisor::{
-    Endpoint, FolderRoots, INSTALLED_DIR, MODULE_COMPONENT, Supervisor, SupervisorConfig,
+    Endpoint, FolderRoots, Supervisor, SupervisorConfig, INSTALLED_DIR, MODULE_COMPONENT,
 };
 use sha2::Digest;
 

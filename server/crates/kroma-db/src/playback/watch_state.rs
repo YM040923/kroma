@@ -56,11 +56,7 @@ pub fn list_watched_entries(pool: &Pool, user_id: &str) -> Result<Vec<(String, S
 }
 
 /// Forget every watched flag and resume position for a show's episodes.
-pub fn clear_show_history(
-    pool: &Pool,
-    user_id: &str,
-    show_id: &str,
-) -> Result<(usize, usize)> {
+pub fn clear_show_history(pool: &Pool, user_id: &str, show_id: &str) -> Result<(usize, usize)> {
     let conn = pool.get()?;
     let watched = conn.execute(
         "DELETE FROM watched WHERE user_id = ?1 \
@@ -90,9 +86,7 @@ pub fn delete_watched_many(pool: &Pool, user_id: &str, item_ids: &[String]) -> R
     let mut removed = 0;
     for chunk in item_ids.chunks(crate::IN_CHUNK) {
         let placeholders = vec!["?"; chunk.len() + 1].join(",");
-        let sql = format!(
-            "DELETE FROM watched WHERE user_id = ?1 AND item_id IN ({placeholders})"
-        );
+        let sql = format!("DELETE FROM watched WHERE user_id = ?1 AND item_id IN ({placeholders})");
         let mut stmt = conn.prepare(&sql)?;
         removed += stmt.execute(rusqlite::params_from_iter(
             std::iter::once(user_id).chain(chunk.iter().map(String::as_str)),

@@ -186,6 +186,12 @@ kroma-module-host = { workspace = true }
 # `crate::model` wire types come through `kroma-engine`.
 kroma-config = { workspace = true }
 kroma-db = { workspace = true }
+# `/api/acquisition` plans against the shared ledger types (`MediaUnitRef`,
+# `AcquisitionPolicy`, `Candidate`, …) and the provider-neutral plan; the engine
+# re-exports both crates privately, so the binary names them here. Both are
+# already in the graph through kroma-engine, so this adds no compilation.
+kroma-domain = { workspace = true }
+kroma-requests = { workspace = true }
 # The byte routes are a thin shell over this: the HLS engine, the per-request
 # program over it, and the range streamer.
 kroma-media = { workspace = true }

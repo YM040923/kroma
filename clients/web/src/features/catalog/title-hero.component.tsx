@@ -110,7 +110,10 @@ export function TitleHero({
             poster={view.poster}
             owned={owned}
           />
-          <FollowState kind={view.kind === 'show' ? 'show' : 'movie'} tmdbId={view.tmdbId ?? null} />
+          <FollowState
+            kind={view.kind === 'show' ? 'show' : 'movie'}
+            tmdbId={view.tmdbId ?? null}
+          />
           {localId ? <ArtworkButton itemId={localId} title={view.title} /> : null}
         </>
       }
@@ -147,7 +150,7 @@ function RequestCta({
   return (
     <Button
       icon="plus"
-      label={view.kind === 'show' ? t('discover.requestShow') : t('discover.request')}
+      label={view.kind === 'show' ? t('requests.acquireShow') : t('requests.acquire')}
       onPress={onRequest}
       loading={busy}
     />

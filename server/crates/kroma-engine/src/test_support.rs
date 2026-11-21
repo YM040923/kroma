@@ -320,6 +320,8 @@ pub(crate) fn test_user(
         subtitle_language: None,
         permissions,
         libraries: crate::model::LibraryScope::All,
+        max_age: None,
+        allow_unrated: true,
         created_at: "now".into(),
         has_pin: false,
     }

@@ -17,7 +17,12 @@ fn real_location(path: &Path) -> Option<PathBuf> {
     let mut below = Vec::new();
     loop {
         if let Ok(real) = std::fs::canonicalize(existing) {
-            return Some(below.iter().rev().fold(real, |at: PathBuf, part| at.join(part)));
+            return Some(
+                below
+                    .iter()
+                    .rev()
+                    .fold(real, |at: PathBuf, part| at.join(part)),
+            );
         }
         below.push(existing.file_name()?);
         existing = existing.parent()?;
@@ -103,10 +108,14 @@ impl Files for ModuleFiles {
             return Err(format!("{source} is not in a folder this module holds"));
         }
         if !self.holds(destination, true) {
-            return Err(format!("{destination} is not in a folder this module may write"));
+            return Err(format!(
+                "{destination} is not in a folder this module may write"
+            ));
         }
         if reflink(from, to).is_ok() {
-            return std::fs::metadata(to).map(|meta| meta.len()).map_err(|error| error.to_string());
+            return std::fs::metadata(to)
+                .map(|meta| meta.len())
+                .map_err(|error| error.to_string());
         }
         std::fs::copy(from, to).map_err(|error| error.to_string())
     }

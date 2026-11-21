@@ -256,7 +256,13 @@ mod tests {
         ]);
 
         assert!(catalog.get("serie").unwrap().has_genre(SCIENCE_FICTION));
-        assert!(catalog.get("film").unwrap().resemblance(catalog.get("serie").unwrap()) > 0.0);
+        assert!(
+            catalog
+                .get("film")
+                .unwrap()
+                .resemblance(catalog.get("serie").unwrap())
+                > 0.0
+        );
     }
 
     #[test]

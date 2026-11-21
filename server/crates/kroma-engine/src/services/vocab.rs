@@ -68,8 +68,12 @@ mod tests {
     fn an_ordered_vocabulary_keeps_each_language_s_own_order() {
         let numbers = by_language("vocab.numbers");
 
-        assert!(numbers.iter().any(|list| list.first().map(String::as_str) == Some("two")));
-        assert!(numbers.iter().any(|list| list.first().map(String::as_str) == Some("deux")));
+        assert!(numbers
+            .iter()
+            .any(|list| list.first().map(String::as_str) == Some("two")));
+        assert!(numbers
+            .iter()
+            .any(|list| list.first().map(String::as_str) == Some("deux")));
         assert!(numbers.iter().all(|list| list.len() == 9));
     }
 

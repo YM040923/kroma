@@ -118,8 +118,16 @@ fn a_report_of_a_carried_call_files_no_second_flow() {
         carried,
     };
 
-    NetworkPolicy::record_flows(&network, "tv.kroma.indexer", vec![flow(false, CARRIED_METHOD, None)]);
-    NetworkPolicy::record_flows(&network, "tv.kroma.indexer", vec![flow(true, "GET", Some(200))]);
+    NetworkPolicy::record_flows(
+        &network,
+        "tv.kroma.indexer",
+        vec![flow(false, CARRIED_METHOD, None)],
+    );
+    NetworkPolicy::record_flows(
+        &network,
+        "tv.kroma.indexer",
+        vec![flow(true, "GET", Some(200))],
+    );
 
     let page = network.flows(&FlowFilter {
         limit: 10,

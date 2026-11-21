@@ -9,7 +9,7 @@ use kroma_module_supervisor::Endpoint;
 mod component_support;
 
 use component_support::wasm::guest_component;
-use component_support::{GUEST, Server, THIRD_PARTY};
+use component_support::{Server, GUEST, THIRD_PARTY};
 
 const DECODES: &str = r#", "storage": {}, "permissions": { "fs": { "read": ["media"], "write": ["module"] }, "media": ["decode"] }"#;
 const READS_ONLY: &str =

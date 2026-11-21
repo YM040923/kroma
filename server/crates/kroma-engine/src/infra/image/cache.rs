@@ -73,7 +73,12 @@ pub fn cache_local_capped(data_dir: &Path, source: &Path, max_width: u32) -> Opt
         return Some(source.to_path_buf());
     }
     let metadata = std::fs::metadata(source).ok()?;
-    let modified = metadata.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+    let modified = metadata
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
     let key = format!("{}:{}:{}", source.display(), metadata.len(), modified);
     let dir = images_dir(data_dir);
     std::fs::create_dir_all(&dir).ok()?;

@@ -3,7 +3,7 @@
 
 use rusqlite::OptionalExtension;
 
-use crate::{Pool, Result, params};
+use crate::{params, Pool, Result};
 
 /// Unix seconds at which the last whole read of `pass` began. `None` when the
 /// pass was never read whole.

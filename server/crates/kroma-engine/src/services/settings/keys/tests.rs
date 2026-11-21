@@ -1,5 +1,16 @@
 use super::*;
 
+#[test]
+fn global_scrape_rules_and_the_fanart_key_are_writable_settings() {
+    let keys = defaults();
+    assert!(keys.contains_key("scrapeDefaults"));
+    assert!(keys.contains_key("fanartApiKey"));
+    assert!(matches!(
+        reach_of_setting("fanartApiKey"),
+        SettingReach::CoreOnly
+    ));
+}
+
 const CREDENTIAL_WORDS: [&str; 4] = ["password", "token", "secret", "credential"];
 const CREDENTIAL_COMPOUNDS: [&str; 4] = ["apikey", "privatekey", "serviceaccount", "keyp8"];
 const MODULE_CREDENTIALS: [&str; 2] = ["vpnWgConfig", "remoteAccessToken"];

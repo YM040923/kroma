@@ -24,7 +24,11 @@ fn configured_library(dir: &Path) -> LibraryDef {
 fn episode(root: &Path, show: &str, season: u32, number: u32) {
     let dir = root.join(show);
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join(format!("{show} S{season:02}E{number:02}.mkv")), b"x").unwrap();
+    std::fs::write(
+        dir.join(format!("{show} S{season:02}E{number:02}.mkv")),
+        b"x",
+    )
+    .unwrap();
 }
 
 fn walked(state: &SharedState) -> ScanData {

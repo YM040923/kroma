@@ -93,7 +93,13 @@ impl Report {
         });
         let _ = writeln!(out, "\nDriven");
         for call in &self.calls {
-            let _ = writeln!(out, "  {:>3}  {} {}", call.answered(), call.method, call.path);
+            let _ = writeln!(
+                out,
+                "  {:>3}  {} {}",
+                call.answered(),
+                call.method,
+                call.path
+            );
         }
         let outside = self.undeclared();
         let _ = match outside {
@@ -107,7 +113,10 @@ impl Report {
     fn render_declared(&self, out: &mut String) {
         let _ = writeln!(out, "\nDeclared");
         let Some(declared) = &self.declared else {
-            let _ = writeln!(out, "  no permissions: no network, no program, its own folder only");
+            let _ = writeln!(
+                out,
+                "  no permissions: no network, no program, its own folder only"
+            );
             return;
         };
         for connect in &declared.net.connect {
@@ -117,7 +126,10 @@ impl Report {
         if !declared.run.is_empty() {
             let _ = writeln!(out, "  run          {}", declared.run.join(", "));
         }
-        for (kind, roots) in [("fs.read", &declared.fs.read), ("fs.write", &declared.fs.write)] {
+        for (kind, roots) in [
+            ("fs.read", &declared.fs.read),
+            ("fs.write", &declared.fs.write),
+        ] {
             if !roots.is_empty() {
                 let line = serde_json::to_string(roots).unwrap_or_default();
                 let _ = writeln!(out, "  {kind:<11}  {line}");
@@ -133,7 +145,11 @@ fn section<T>(out: &mut String, title: &str, rows: &[T], line: impl Fn(&T) -> (b
     }
     for row in rows {
         let (declared, text) = line(row);
-        let verdict = if declared { "ok          " } else { "NOT DECLARED" };
+        let verdict = if declared {
+            "ok          "
+        } else {
+            "NOT DECLARED"
+        };
         let _ = writeln!(out, "  {verdict}  {text}");
     }
 }

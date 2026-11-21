@@ -112,7 +112,10 @@ pub(super) fn wanted_row(id: &str, request_id: &str, air: Option<&str>, status: 
         id: id.into(),
         request_id: Some(request_id.into()),
         kind: "movie".into(),
-        tmdb_id: id.bytes().fold(7u64, |h, b| h.wrapping_mul(31).wrapping_add(u64::from(b))) % 1_000_000,
+        tmdb_id: id
+            .bytes()
+            .fold(7u64, |h, b| h.wrapping_mul(31).wrapping_add(u64::from(b)))
+            % 1_000_000,
         imdb_id: None,
         title: "T".into(),
         year: Some(2020),

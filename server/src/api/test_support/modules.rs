@@ -66,7 +66,8 @@ pub async fn registry_serving(index: Value, records: &[(&str, Value)]) -> String
         .as_array()
         .map(|rows| rows.iter().map(|row| row["id"].clone()).collect())
         .unwrap_or_default();
-    let descriptor = json!({ "apiVersion": 1, "name": "Test", "url": "https://test", "modules": ids });
+    let descriptor =
+        json!({ "apiVersion": 1, "name": "Test", "url": "https://test", "modules": ids });
     let mut app = axum::Router::new()
         .route("/registry.json", serve(descriptor))
         .route("/index.json", serve(index));

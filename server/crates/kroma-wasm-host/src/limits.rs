@@ -45,7 +45,8 @@ pub(crate) fn thread_cpu_time() -> Duration {
     if read == 0 {
         return Duration::ZERO;
     }
-    let hundreds_of_nanos = |time: &FILETIME| (u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime);
+    let hundreds_of_nanos =
+        |time: &FILETIME| (u64::from(time.dwHighDateTime) << 32) | u64::from(time.dwLowDateTime);
     Duration::from_nanos(
         hundreds_of_nanos(kernel)
             .saturating_add(hundreds_of_nanos(user))

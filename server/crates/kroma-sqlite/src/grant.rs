@@ -68,4 +68,3 @@ pub fn init_scoped(path: &Path, _module_id: &str, _grant: &Grant) -> Result<Pool
 pub fn open_guarded(path: &Path, module_id: &str) -> Result<Pool> {
     crate::open::scoped_pool_at(path, 4, Some(crate::authorizer::Scope::own_file(module_id)))
 }
-

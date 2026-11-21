@@ -162,7 +162,10 @@ fn a_media_tool_is_read_by_its_name() {
     let p = parse(json!({ "media": ["decode"] })).unwrap();
 
     assert_eq!(p.media, [MediaTool::Decode]);
-    assert_eq!(serde_json::to_value(&p).unwrap(), json!({ "net": {}, "fs": {}, "media": ["decode"] }));
+    assert_eq!(
+        serde_json::to_value(&p).unwrap(),
+        json!({ "net": {}, "fs": {}, "media": ["decode"] })
+    );
 }
 
 #[test]
@@ -266,7 +269,8 @@ fn an_empty_block_widens_nothing() {
 #[test]
 fn a_new_destination_widens_the_block() {
     let before = block(json!({ "net": { "connect": [{ "purpose": "a", "to": ["public"] }] } }));
-    let after = block(json!({ "net": { "connect": [{ "purpose": "a", "to": ["public", "lan"] }] } }));
+    let after =
+        block(json!({ "net": { "connect": [{ "purpose": "a", "to": ["public", "lan"] }] } }));
 
     assert!(after.widens(&before));
     assert!(!before.widens(&after));
@@ -282,7 +286,9 @@ fn a_new_purpose_widens_the_block() {
 
 #[test]
 fn losing_a_port_limit_widens_the_block() {
-    let before = block(json!({ "net": { "connect": [{ "purpose": "a", "to": ["x.example"], "ports": [443] }] } }));
+    let before = block(
+        json!({ "net": { "connect": [{ "purpose": "a", "to": ["x.example"], "ports": [443] }] } }),
+    );
     let after = block(json!({ "net": { "connect": [{ "purpose": "a", "to": ["x.example"] }] } }));
 
     assert!(after.widens(&before));
@@ -292,7 +298,9 @@ fn losing_a_port_limit_widens_the_block() {
 #[test]
 fn a_new_protocol_widens_the_block() {
     let before = block(json!({ "net": { "connect": [{ "purpose": "a", "to": ["public"] }] } }));
-    let after = block(json!({ "net": { "connect": [{ "purpose": "a", "to": ["public"], "proto": ["tcp", "udp"] }] } }));
+    let after = block(
+        json!({ "net": { "connect": [{ "purpose": "a", "to": ["public"], "proto": ["tcp", "udp"] }] } }),
+    );
 
     assert!(after.widens(&before));
 }

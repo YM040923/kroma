@@ -52,7 +52,9 @@ pub fn assemble(files: &[(&str, &str, &str)]) -> Vec<Release> {
             }
             release.date = meta.and_then(|meta| meta.date);
         } else if let Some(locale) = name.strip_suffix(".md") {
-            release.notes.insert(locale.to_owned(), ReleaseNotes::parse(text));
+            release
+                .notes
+                .insert(locale.to_owned(), ReleaseNotes::parse(text));
         }
     }
     for version in drafts {
@@ -157,7 +159,10 @@ mod tests {
     }
 
     fn versions(shown: &[ReleaseView]) -> Vec<&str> {
-        shown.iter().map(|release| release.version.as_str()).collect()
+        shown
+            .iter()
+            .map(|release| release.version.as_str())
+            .collect()
     }
 
     #[test]

@@ -169,7 +169,10 @@ pub fn state(flow_id: &str) -> Result<State, String> {
         }),
         2 => {
             let cookie = exchange(&flow)?;
-            crate::store::patch(|stored| stored.cookie = cookie)
+            crate::store::patch(|stored| {
+                stored.cookie = cookie;
+                stored.account = crate::store::AccountSnapshot::default();
+            })
                 .map_err(|error| failure(format!("保存 115 登录失败：{error}")))?;
             forget(flow_id);
             Ok(State {
@@ -244,7 +247,10 @@ pub fn import_cookie(raw: &str) -> CookieImported {
             message: "这份 Cookie 已经失效，请在浏览器里重新登录 115".into(),
         };
     }
-    match crate::store::patch(|stored| stored.cookie = cookie) {
+    match crate::store::patch(|stored| {
+        stored.cookie = cookie;
+        stored.account = crate::store::AccountSnapshot::default();
+    }) {
         Ok(_) => CookieImported {
             ok: true,
             message: "已导入".into(),

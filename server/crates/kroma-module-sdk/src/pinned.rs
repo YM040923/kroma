@@ -23,7 +23,12 @@ pub fn holds(dir: &Path, file: &PinnedFile<'_>) -> bool {
 /// not. Bytes that are not the pinned ones are deleted, never installed. One
 /// caller downloads a given file at a time: another finds it busy and gets
 /// `false`, as it does when the download fails.
-pub fn ensure(dir: &Path, file: &PinnedFile<'_>, url: &str, fetch: &dyn Fn(&str, &Path) -> bool) -> bool {
+pub fn ensure(
+    dir: &Path,
+    file: &PinnedFile<'_>,
+    url: &str,
+    fetch: &dyn Fn(&str, &Path) -> bool,
+) -> bool {
     if holds(dir, file) {
         return true;
     }
@@ -71,11 +76,16 @@ impl Lock {
             .ok()
             .and_then(|at| SystemTime::now().duration_since(at).ok())
             .is_some_and(|age| age >= LOCK_EXPIRES);
-        (expired && std::fs::remove_file(path).is_ok() && Self::create(path)).then(|| Self(path.to_path_buf()))
+        (expired && std::fs::remove_file(path).is_ok() && Self::create(path))
+            .then(|| Self(path.to_path_buf()))
     }
 
     fn create(path: &Path) -> bool {
-        OpenOptions::new().write(true).create_new(true).open(path).is_ok()
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .is_ok()
     }
 }
 

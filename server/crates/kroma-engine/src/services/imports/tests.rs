@@ -16,9 +16,9 @@ mod watching;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use other_server::{OtherServer, film, household, play};
+use other_server::{film, household, play, OtherServer};
 use recording::{Given, Recording};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::run::run_with;
 use super::stages::{

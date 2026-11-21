@@ -136,7 +136,10 @@ fn with_action(action: &str) -> Result<NetworkRules, RulesError> {
 
 #[test]
 fn an_action_is_direct_block_or_the_name_of_a_network() {
-    assert_eq!(with_action("direct").unwrap().rules[0].action, Action::Direct);
+    assert_eq!(
+        with_action("direct").unwrap().rules[0].action,
+        Action::Direct
+    );
     assert_eq!(with_action("block").unwrap().rules[0].action, Action::Block);
     assert_eq!(
         with_action("vpn-ch").unwrap().rules[0].action,
@@ -172,4 +175,3 @@ fn an_address_range_that_is_not_one_is_refused() {
         RulesError::InvalidAddress("10.0.0.0/99".to_string())
     );
 }
-

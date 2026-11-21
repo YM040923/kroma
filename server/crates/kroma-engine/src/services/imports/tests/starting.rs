@@ -1,9 +1,9 @@
-use std::sync::mpsc::{Sender, channel};
+use std::sync::mpsc::{channel, Sender};
 
 use tokio::sync::broadcast::Receiver;
 
 use super::super::start::claimed_or_withdrawn;
-use super::super::{Request, StartError, Started, start};
+use super::super::{start, Request, StartError, Started};
 use super::*;
 use crate::infra::events::Envelope;
 use crate::model::imports::{KeptFolder, Status};
@@ -108,11 +108,9 @@ fn an_import_through_an_importer_that_is_not_running_does_not_start() {
 
     assert!(matches!(absent, Err(StartError::Absent)));
     assert!(matches!(unknown, Err(StartError::Absent)));
-    assert!(
-        db::imports::list(&another_answers.db, 10)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(db::imports::list(&another_answers.db, 10)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -137,11 +135,9 @@ fn an_id_the_other_server_could_not_have_given_is_refused_and_nothing_is_queued(
         start(&state, request("owner", kept(&[], &[""]))),
     ];
 
-    assert!(
-        refused
-            .iter()
-            .all(|refusal| matches!(refusal, Err(StartError::Invalid(_))))
-    );
+    assert!(refused
+        .iter()
+        .all(|refusal| matches!(refusal, Err(StartError::Invalid(_)))));
     assert!(db::imports::list(&state.db, 10).unwrap().is_empty());
 }
 
@@ -164,11 +160,9 @@ fn a_folder_no_review_screen_could_have_confirmed_is_refused_and_nothing_is_queu
         start(&state, confirming("/data/movies", "video/movies")),
     ];
 
-    assert!(
-        refused
-            .iter()
-            .all(|refusal| matches!(refusal, Err(StartError::Invalid(_))))
-    );
+    assert!(refused
+        .iter()
+        .all(|refusal| matches!(refusal, Err(StartError::Invalid(_)))));
     assert!(db::imports::list(&state.db, 10).unwrap().is_empty());
 }
 

@@ -14,14 +14,25 @@ fn guest_component() -> &'static Path {
             .join("../kroma-module-supervisor/tests/component_guest");
         let target_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("components");
         let built = kroma_testing::cargo()
-            .args(["build", "--release", "--target", "wasm32-wasip2", "--bin", "module"])
+            .args([
+                "build",
+                "--release",
+                "--target",
+                "wasm32-wasip2",
+                "--bin",
+                "module",
+            ])
             .arg("--manifest-path")
             .arg(guest.join("Cargo.toml"))
             .current_dir(&guest)
             .env("CARGO_TARGET_DIR", &target_dir)
             .output()
             .expect("run cargo");
-        assert!(built.status.success(), "{}", String::from_utf8_lossy(&built.stderr));
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
         target_dir.join("wasm32-wasip2/release/module.wasm")
     })
 }
@@ -31,7 +42,10 @@ fn module_asking(dir: &Path, permissions: &str, requests: &[&str]) {
         r#"{{ "schemaVersion": {}, "id": "{ID}", "name": "Guest", "version": "1.0.0", "storage": {{}} {permissions} }}"#,
         kroma_module_manifest::MODULE_SCHEMA_VERSION
     );
-    let asks: Vec<String> = requests.iter().map(|path| format!(r#"{{ "path": "{path}" }}"#)).collect();
+    let asks: Vec<String> = requests
+        .iter()
+        .map(|path| format!(r#"{{ "path": "{path}" }}"#))
+        .collect();
     std::fs::write(dir.join("module.json"), manifest).unwrap();
     std::fs::write(
         dir.join("audit.json"),
@@ -68,7 +82,11 @@ const PROBES_THE_LAN: &str =
 
 #[test]
 fn a_connection_inside_the_declaration_is_listed_and_passes() {
-    let report = audited("audit-declared", PROBES_THE_LAN, &["/fetch?http://127.0.0.1:9/"]);
+    let report = audited(
+        "audit-declared",
+        PROBES_THE_LAN,
+        &["/fetch?http://127.0.0.1:9/"],
+    );
 
     assert_eq!(
         report.connections,
@@ -102,8 +120,14 @@ fn a_connection_outside_the_declaration_is_named_and_counted() {
     );
     assert_eq!(report.undeclared(), 1);
     let read = report.render();
-    assert!(read.contains("NOT DECLARED  probe  tracker.example.org:80"), "{read}");
-    assert!(read.contains("1 attempt outside the declaration."), "{read}");
+    assert!(
+        read.contains("NOT DECLARED  probe  tracker.example.org:80"),
+        "{read}"
+    );
+    assert!(
+        read.contains("1 attempt outside the declaration."),
+        "{read}"
+    );
 }
 
 #[test]
@@ -134,7 +158,12 @@ fn a_point_the_module_answers_is_called_by_each_method_its_definer_lists() {
     let modules = kroma_testing::temp_dir("audit-points");
     let guest = modules.path().join(ID);
     std::fs::create_dir_all(&guest).unwrap();
-    definer(modules.path(), "tv.example.definer", "client", r#"["test", "add"]"#);
+    definer(
+        modules.path(),
+        "tv.example.definer",
+        "client",
+        r#"["test", "add"]"#,
+    );
     module_asking(
         &guest,
         r#", "definesPoints": [{ "name": "own", "version": 1, "methods": ["ping"] }],
@@ -161,7 +190,11 @@ fn a_point_the_module_answers_is_called_by_each_method_its_definer_lists() {
 fn every_request_made_is_reported_with_how_the_module_answered() {
     let report = audited("audit-driven", PROBES_THE_LAN, &["/echo"]);
 
-    let echo = report.calls.iter().find(|call| call.path == "/echo").unwrap();
+    let echo = report
+        .calls
+        .iter()
+        .find(|call| call.path == "/echo")
+        .unwrap();
 
     assert_eq!((echo.method.as_str(), echo.status), ("GET", Some(200)));
 }

@@ -45,7 +45,10 @@ pub fn rank<'a>(signals: &Signals, pool: impl IntoIterator<Item = &'a Title>) ->
     let pool: Vec<&Title> = pool.into_iter().collect();
     let fits: Vec<f32> = pool.iter().map(|t| signals.taste.affinity(t)).collect();
     let taste_span = span(fits.iter().copied()).filter(|_| !signals.taste.is_blank());
-    let vector_span = span(pool.iter().filter_map(|t| signals.vectors.get(&t.facts.id).copied()));
+    let vector_span = span(
+        pool.iter()
+            .filter_map(|t| signals.vectors.get(&t.facts.id).copied()),
+    );
 
     let mut scored: Vec<Scored> = pool
         .iter()

@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use kroma_domain::{AcquisitionMode, DeploymentMode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -172,6 +173,10 @@ pub struct ScrapeOptions {
     /// global default, never "no language".
     pub language_priority: Option<Vec<String>>,
     pub nfo: bool,
+    /// `None` follows the household NFO default; `Some` overrides it. The
+    /// plain `nfo` above stays for old stored rows and for the effective value
+    /// the enrichment pass reads.
+    pub nfo_override: Option<bool>,
     pub poster_language: Option<String>,
     pub backdrop_language: Option<String>,
     /// Ordered artwork languages: "textless" picks the clean plate, a tag
@@ -183,7 +188,7 @@ pub struct ScrapeOptions {
     pub backdrop_min_width: Option<u16>,
     pub poster_min_votes: Option<u32>,
     pub backdrop_min_votes: Option<u32>,
-    /// Per-artwork provider size; None falls back to `artwork_size`.
+    /// Per-artwork provider size; None keeps the provider's URL.
     pub poster_size: Option<String>,
     pub backdrop_size: Option<String>,
     pub logo_languages: Option<Vec<String>>,
@@ -201,13 +206,6 @@ pub struct ScrapeOptions {
     /// fanart.jpg. Existing files are never replaced; the household default
     /// carries this, a library does not override it yet.
     pub write_images: bool,
-    /// How many gallery backdrops to keep per title. `None` keeps the
-    /// provider's full set (capped by the metadata client).
-    pub backdrop_count: Option<u8>,
-    /// TMDB image size to store for poster and backdrop URLs.
-    pub artwork_size: Option<String>,
-    /// Refresh show artwork after this many days; `None` disables the job.
-    pub artwork_refresh_days: Option<u16>,
 }
 
 /// Trim, dedupe and cap an ordered language list. The cap is what the UI
@@ -257,6 +255,34 @@ fn clean_sources(values: Vec<String>) -> Vec<String> {
 }
 
 impl ScrapeOptions {
+    /// No override at all: every optional field is unset. `write_images` and
+    /// the legacy `nfo` bool are not per-library overrides.
+    pub fn follows_global(&self) -> bool {
+        self.language.is_none()
+            && self.language_priority.is_none()
+            && self.nfo_override.is_none()
+            && self.poster_language.is_none()
+            && self.backdrop_language.is_none()
+            && self.poster_languages.is_none()
+            && self.backdrop_languages.is_none()
+            && self.poster_min_width.is_none()
+            && self.backdrop_min_width.is_none()
+            && self.poster_min_votes.is_none()
+            && self.backdrop_min_votes.is_none()
+            && self.poster_size.is_none()
+            && self.backdrop_size.is_none()
+            && self.logo_languages.is_none()
+            && self.logo_min_width.is_none()
+            && self.logo_size.is_none()
+            && self.season_languages.is_none()
+            && self.season_min_width.is_none()
+            && self.season_size.is_none()
+            && self.poster_sources.is_none()
+            && self.backdrop_sources.is_none()
+            && self.logo_sources.is_none()
+            && self.season_sources.is_none()
+    }
+
     fn sane(mut self) -> Self {
         self.language_priority = self
             .language_priority
@@ -269,7 +295,11 @@ impl ScrapeOptions {
                 .map(|tag| clean_language_priority(vec![tag.to_string()]))
                 .filter(|list| !list.is_empty());
         }
-        if let Some(first) = self.language_priority.as_ref().and_then(|list| list.first()) {
+        if let Some(first) = self
+            .language_priority
+            .as_ref()
+            .and_then(|list| list.first())
+        {
             self.language = Some(first.clone());
         }
         self.poster_languages = self
@@ -326,22 +356,22 @@ impl ScrapeOptions {
             .filter(|list| !list.is_empty());
         self.season_min_width = self.season_min_width.filter(|width| *width > 0);
         self.season_size = self.season_size.as_deref().and_then(valid_art_size);
-        self.poster_sources = self.poster_sources.map(clean_sources).filter(|list| !list.is_empty());
+        self.poster_sources = self
+            .poster_sources
+            .map(clean_sources)
+            .filter(|list| !list.is_empty());
         self.backdrop_sources = self
             .backdrop_sources
             .map(clean_sources)
             .filter(|list| !list.is_empty());
-        self.logo_sources = self.logo_sources.map(clean_sources).filter(|list| !list.is_empty());
+        self.logo_sources = self
+            .logo_sources
+            .map(clean_sources)
+            .filter(|list| !list.is_empty());
         self.season_sources = self
             .season_sources
             .map(clean_sources)
             .filter(|list| !list.is_empty());
-        self.backdrop_count = self.backdrop_count.map(|count| count.min(8));
-        self.artwork_size = self.artwork_size.as_deref().and_then(valid_art_size);
-        self.artwork_refresh_days = self
-            .artwork_refresh_days
-            .filter(|days| *days > 0)
-            .map(|days| days.min(365));
         self
     }
 }
@@ -352,7 +382,42 @@ pub fn library_scrape(settings: &Settings, library_id: &str) -> ScrapeOptions {
         .get(library_id)
         .and_then(|value| serde_json::from_value(value.clone()).ok())
         .map(ScrapeOptions::sane)
+        .map(migrate_nfo)
         .unwrap_or_default()
+}
+
+/// The library-specific storage policy for new acquisitions. A missing or
+/// malformed value preserves the legacy cloud-only staged behavior.
+pub fn library_acquisition(settings: &Settings, library_id: &str) -> AcquisitionMode {
+    settings
+        .get("libraryAcquisition")
+        .get(library_id)
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or_default()
+}
+
+pub fn set_library_acquisition(
+    settings: &Settings,
+    pool: &Pool,
+    library_id: &str,
+    mode: AcquisitionMode,
+) {
+    let mut map = settings
+        .get("libraryAcquisition")
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    if mode == AcquisitionMode::default() {
+        map.remove(library_id);
+    } else {
+        map.insert(
+            library_id.to_string(),
+            serde_json::to_value(mode).unwrap_or_default(),
+        );
+    }
+    let mut patch = BTreeMap::new();
+    patch.insert("libraryAcquisition".to_string(), Value::Object(map));
+    settings.set_patch(pool, patch);
 }
 
 pub fn all_library_scrape(settings: &Settings) -> BTreeMap<String, ScrapeOptions> {
@@ -365,11 +430,50 @@ pub fn all_library_scrape(settings: &Settings) -> BTreeMap<String, ScrapeOptions
                     serde_json::from_value::<ScrapeOptions>(value.clone())
                         .ok()
                         .map(ScrapeOptions::sane)
+                        .map(migrate_nfo)
                         .map(|options| (id.clone(), options))
                 })
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Which storage mode this deployment runs. Unknown or reserved values fall
+/// back to cloud-only rather than enabling a mode the build cannot serve.
+pub fn deployment_mode(settings: &Settings) -> DeploymentMode {
+    DeploymentMode::parse(&settings.get_str("deploymentMode", "cloud_only"))
+        .filter(|mode| mode.available())
+        .unwrap_or_default()
+}
+
+/// The 115 folder Symedia watches, normalized to a leading slash. Empty when
+/// the operator has not configured one; acquisition must then refuse to start.
+pub fn cloud_intake_folder(settings: &Settings) -> String {
+    let raw = settings.get_str("cloudIntakeFolder", "");
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.starts_with('/') {
+        trimmed.to_string()
+    } else {
+        format!("/{trimmed}")
+    }
+}
+
+/// How often share subscriptions are re-listed, in minutes. Clamped to 5..=1440.
+pub fn share_poll_minutes(settings: &Settings) -> i64 {
+    settings.get_i64("sharePollMinutes", 30).clamp(5, 1440)
+}
+
+/// Old rows stored a plain `nfo` bool, where `false` could not mean "follow
+/// the global default". An old `true` was an explicit choice, so it becomes an
+/// override; an old `false` becomes "follow global".
+fn migrate_nfo(mut options: ScrapeOptions) -> ScrapeOptions {
+    if options.nfo_override.is_none() && options.nfo {
+        options.nfo_override = Some(true);
+    }
+    options
 }
 
 pub fn set_library_scrape(
@@ -383,10 +487,15 @@ pub fn set_library_scrape(
         .as_object()
         .cloned()
         .unwrap_or_default();
-    map.insert(
-        library_id.to_string(),
-        serde_json::to_value(options.clone().sane()).unwrap_or_default(),
-    );
+    let options = options.clone().sane();
+    if options.follows_global() {
+        map.remove(library_id);
+    } else {
+        map.insert(
+            library_id.to_string(),
+            serde_json::to_value(options).unwrap_or_default(),
+        );
+    }
     let mut patch = BTreeMap::new();
     patch.insert("libraryScrape".to_string(), Value::Object(map));
     settings.set_patch(pool, patch);
@@ -399,6 +508,7 @@ pub fn set_library_scrape(
 #[serde(rename_all = "camelCase", default)]
 pub struct ScrapeDefaults {
     pub language_priority: Option<Vec<String>>,
+    pub nfo: bool,
     pub poster_languages: Option<Vec<String>>,
     pub backdrop_languages: Option<Vec<String>>,
     pub poster_min_width: Option<u16>,
@@ -418,6 +528,8 @@ pub struct ScrapeDefaults {
     pub logo_sources: Option<Vec<String>>,
     pub season_sources: Option<Vec<String>>,
     pub write_images: bool,
+    /// Refresh show artwork after this many days; `None` disables the job.
+    pub artwork_refresh_days: Option<u16>,
 }
 
 fn clean_defaults(mut defaults: ScrapeDefaults) -> ScrapeDefaults {
@@ -467,6 +579,10 @@ fn clean_defaults(mut defaults: ScrapeDefaults) -> ScrapeDefaults {
         .season_sources
         .map(clean_sources)
         .filter(|list| !list.is_empty());
+    defaults.artwork_refresh_days = defaults
+        .artwork_refresh_days
+        .filter(|days| *days > 0)
+        .map(|days| days.min(365));
     defaults
 }
 
@@ -971,6 +1087,39 @@ mod tests {
     }
 
     #[test]
+    fn library_acquisition_modes_are_isolated_defaulted_and_resettable() {
+        let pool = test_pool();
+        let s = settings(&pool);
+        assert_eq!(
+            library_acquisition(&s, "movies"),
+            AcquisitionMode::CloudOnlyStaged
+        );
+
+        set_library_acquisition(&s, &pool, "movies", AcquisitionMode::HybridLocalFirst);
+        set_library_acquisition(&s, &pool, "shows", AcquisitionMode::LocalOnly);
+        assert_eq!(
+            library_acquisition(&s, "movies"),
+            AcquisitionMode::HybridLocalFirst
+        );
+        assert_eq!(library_acquisition(&s, "shows"), AcquisitionMode::LocalOnly);
+        assert_eq!(
+            library_acquisition(&s, "other"),
+            AcquisitionMode::CloudOnlyStaged
+        );
+
+        set_library_acquisition(&s, &pool, "movies", AcquisitionMode::CloudOnlyStaged);
+        assert_eq!(
+            library_acquisition(&s, "movies"),
+            AcquisitionMode::CloudOnlyStaged
+        );
+        assert_eq!(
+            s.get("libraryAcquisition").get("movies"),
+            None,
+            "the default mode is represented by the absence of an override"
+        );
+    }
+
+    #[test]
     fn library_scrape_is_stored_under_its_own_key_and_reads_back() {
         let pool = test_pool();
         let s = settings(&pool);
@@ -980,6 +1129,7 @@ mod tests {
             language: Some("en-US".to_string()),
             language_priority: Some(vec!["en-US".to_string()]),
             nfo: true,
+            nfo_override: Some(true),
             poster_language: Some("textless".to_string()),
             backdrop_language: None,
             poster_languages: Some(vec!["textless".to_string()]),
@@ -992,9 +1142,6 @@ mod tests {
             logo_min_width: None,
             logo_size: None,
             write_images: false,
-            backdrop_count: Some(4),
-            artwork_size: Some("w780".to_string()),
-            artwork_refresh_days: Some(30),
             ..Default::default()
         };
         set_library_scrape(&s, &pool, "lib1", &wanted);
@@ -1010,5 +1157,50 @@ mod tests {
             serde_json::from_value(json!({"id":"x","name":"N","folders":["/f"]})).unwrap();
         assert!(d.auto_scan);
         assert!(d.kind.is_empty());
+    }
+
+    #[test]
+    fn deployment_mode_defaults_to_cloud_and_refuses_the_reserved_modes() {
+        let pool = test_pool();
+        let s = settings(&pool);
+        assert_eq!(deployment_mode(&s), DeploymentMode::CloudOnly);
+
+        let mut patch = BTreeMap::new();
+        patch.insert("deploymentMode".to_string(), json!("hybrid"));
+        s.set_patch(&pool, patch);
+        assert_eq!(
+            deployment_mode(&s),
+            DeploymentMode::CloudOnly,
+            "a reserved mode must not enable a build that cannot serve it"
+        );
+    }
+
+    #[test]
+    fn the_cloud_intake_folder_needs_a_leading_slash_and_is_empty_by_default() {
+        let pool = test_pool();
+        let s = settings(&pool);
+        assert_eq!(cloud_intake_folder(&s), "");
+
+        let mut patch = BTreeMap::new();
+        patch.insert("cloudIntakeFolder".to_string(), json!(" 待整理/网盘 "));
+        s.set_patch(&pool, patch);
+        assert_eq!(cloud_intake_folder(&s), "/待整理/网盘");
+    }
+
+    #[test]
+    fn the_share_poll_interval_is_clamped() {
+        let pool = test_pool();
+        let s = settings(&pool);
+        assert_eq!(share_poll_minutes(&s), 30);
+
+        let mut patch = BTreeMap::new();
+        patch.insert("sharePollMinutes".to_string(), json!(1));
+        s.set_patch(&pool, patch);
+        assert_eq!(share_poll_minutes(&s), 5);
+
+        let mut patch = BTreeMap::new();
+        patch.insert("sharePollMinutes".to_string(), json!(99999));
+        s.set_patch(&pool, patch);
+        assert_eq!(share_poll_minutes(&s), 1440);
     }
 }

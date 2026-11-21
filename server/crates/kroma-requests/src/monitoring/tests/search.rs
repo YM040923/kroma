@@ -2,8 +2,8 @@ use super::*;
 
 use std::sync::{Arc, Mutex};
 
-use axum::Json;
 use axum::routing::post;
+use axum::Json;
 
 type Asked = Arc<Mutex<Vec<serde_json::Value>>>;
 
@@ -61,10 +61,11 @@ async fn a_search_now_reaches_the_module_and_brings_its_answer_back() {
     let host = host().with_point("acquisition", None, &base, "t");
     wants_an_episode(&host);
 
-    let answer = tokio::task::spawn_blocking(move || search_now(&host, RequestKind::Show, SHOW, &[]))
-    .await
-    .unwrap()
-    .unwrap();
+    let answer =
+        tokio::task::spawn_blocking(move || search_now(&host, RequestKind::Show, SHOW, &[]))
+            .await
+            .unwrap()
+            .unwrap();
 
     assert!(answer.started);
     assert_eq!(answer.units, 2);
@@ -73,15 +74,15 @@ async fn a_search_now_reaches_the_module_and_brings_its_answer_back() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_module_that_refuses_hands_its_reason_to_the_caller() {
-    let (base, _asked) =
-        fake_acquisition(json!({ "started": false, "reason": "noIndexer" })).await;
+    let (base, _asked) = fake_acquisition(json!({ "started": false, "reason": "noIndexer" })).await;
     let host = host().with_point("acquisition", None, &base, "t");
     wants_an_episode(&host);
 
-    let answer = tokio::task::spawn_blocking(move || search_now(&host, RequestKind::Show, SHOW, &[]))
-    .await
-    .unwrap()
-    .unwrap();
+    let answer =
+        tokio::task::spawn_blocking(move || search_now(&host, RequestKind::Show, SHOW, &[]))
+            .await
+            .unwrap()
+            .unwrap();
 
     assert!(!answer.started);
     assert_eq!(answer.reason.as_deref(), Some("noIndexer"));
@@ -102,7 +103,14 @@ fn a_module_that_cannot_be_reached_is_reported_as_failed() {
 fn naming_units_leaves_a_film_row_out_of_the_search() {
     let _tmdb = tmdb();
     let host = host();
-    monitor(&host, RequestKind::Movie, MOVIE, &MonitorBody::default(), None).unwrap();
+    monitor(
+        &host,
+        RequestKind::Movie,
+        MOVIE,
+        &MonitorBody::default(),
+        None,
+    )
+    .unwrap();
     exec(&host, "UPDATE wanted SET last_search_at = 99");
     let units = [EpisodeRef {
         season: 1,

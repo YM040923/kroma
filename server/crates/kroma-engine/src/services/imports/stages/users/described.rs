@@ -4,8 +4,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::model::LibraryScope;
 use crate::model::import::User;
+use crate::model::LibraryScope;
 
 const MAX_NAME_CHARS: usize = 40;
 const MAX_ADDRESS_CHARS: usize = 254;

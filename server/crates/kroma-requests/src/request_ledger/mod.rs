@@ -9,17 +9,17 @@
 
 use std::collections::HashMap;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 
 use kroma_module_host::HostStorage;
 
 use crate::db;
-use crate::tmdb::{self, discover};
-use crate::model::{
-    LedgerEpisode, LedgerSeason, RequestCoverage, RequestKind, RequestLedgerView,
-    SeasonLedgerView, VideoStream,
-};
 use crate::lifecycle::today_ymd;
+use crate::model::{
+    LedgerEpisode, LedgerSeason, RequestCoverage, RequestKind, RequestLedgerView, SeasonLedgerView,
+    VideoStream,
+};
+use crate::tmdb::{self, discover};
 
 mod preview;
 #[cfg(test)]

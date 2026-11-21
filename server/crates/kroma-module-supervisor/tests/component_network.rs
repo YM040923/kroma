@@ -7,7 +7,7 @@ use kroma_module_host::{NetworkAction, NetworkRoute};
 mod component_support;
 
 use component_support::wasm::guest_component;
-use component_support::{DECLARES, GUEST, Server, http_server};
+use component_support::{http_server, Server, DECLARES, GUEST};
 
 const NOTHING: &str = r#", "storage": {}"#;
 

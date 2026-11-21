@@ -94,7 +94,9 @@ impl Listen {
             return Vec::new();
         };
         let count = self.count.unwrap_or(1).min(MAX_LISTEN_COUNT);
-        (0..count).map_while(|step| first.checked_add(step)).collect()
+        (0..count)
+            .map_while(|step| first.checked_add(step))
+            .collect()
     }
 }
 
@@ -173,12 +175,26 @@ impl Permissions {
 
     /// Whether this block asks for anything `before` does not grant.
     pub fn widens(&self, before: &Permissions) -> bool {
-        let beyond = |asked: &[String], granted: &[String]| asked.iter().any(|a| !granted.contains(a));
-        let roots_beyond = |asked: &[FsRoot], granted: &[FsRoot]| asked.iter().any(|a| !granted.contains(a));
+        let beyond =
+            |asked: &[String], granted: &[String]| asked.iter().any(|a| !granted.contains(a));
+        let roots_beyond =
+            |asked: &[FsRoot], granted: &[FsRoot]| asked.iter().any(|a| !granted.contains(a));
         (self.net.host && !before.net.host)
-            || self.net.connect.iter().any(|connect| !before.covers(connect))
-            || self.net.discovery.iter().any(|kind| !before.net.discovery.contains(kind))
-            || self.net.listen.iter().any(|listen| !before.net.listen.contains(listen))
+            || self
+                .net
+                .connect
+                .iter()
+                .any(|connect| !before.covers(connect))
+            || self
+                .net
+                .discovery
+                .iter()
+                .any(|kind| !before.net.discovery.contains(kind))
+            || self
+                .net
+                .listen
+                .iter()
+                .any(|listen| !before.net.listen.contains(listen))
             || roots_beyond(&self.fs.read, &before.fs.read)
             || roots_beyond(&self.fs.write, &before.fs.write)
             || beyond(&self.run, &before.run)

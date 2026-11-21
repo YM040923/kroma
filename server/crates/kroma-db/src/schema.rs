@@ -1,8 +1,8 @@
 //! Opening a database: the pool, and the core schema's history on top of it.
 
-use std::path::Path;
 use anyhow::Result;
 use rusqlite::Connection;
+use std::path::Path;
 
 use kroma_sqlite::{open_with, Legacy, Pool, Schema};
 
@@ -47,9 +47,10 @@ fn rewind_fork_v20(conn: &mut Connection) -> Result<()> {
     if version != 19 && version != 20 {
         return Ok(());
     }
-    let fork_schema = table_exists(conn, "art_overrides")? || column_exists(conn, "files", "probe_version")?;
-    let upstream_schema = column_exists(conn, "downloads", "protocol")?
-        && column_exists(conn, "users", "waiting")?;
+    let fork_schema =
+        table_exists(conn, "art_overrides")? || column_exists(conn, "files", "probe_version")?;
+    let upstream_schema =
+        column_exists(conn, "downloads", "protocol")? && column_exists(conn, "users", "waiting")?;
     if fork_schema && !upstream_schema {
         conn.pragma_update(None, "user_version", 18)?;
     }
@@ -420,7 +421,11 @@ mod tests {
         repair_restored(&conn);
 
         let series: Option<String> = conn
-            .query_row("SELECT show_title FROM play_history WHERE id = 'p1'", [], |r| r.get(0))
+            .query_row(
+                "SELECT show_title FROM play_history WHERE id = 'p1'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(series.as_deref(), Some("House of the Dragon"));
     }

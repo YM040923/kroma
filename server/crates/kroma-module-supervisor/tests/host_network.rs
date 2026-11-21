@@ -4,7 +4,7 @@ use serde_json::json;
 
 mod test_support;
 
-use test_support::{FABRIC, Modules};
+use test_support::{Modules, FABRIC};
 
 fn flow(host: &str) -> NetworkFlow {
     NetworkFlow {

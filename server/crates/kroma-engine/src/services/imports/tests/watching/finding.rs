@@ -36,8 +36,14 @@ fn watched_here(world: &World) -> Vec<String> {
 #[test]
 fn a_title_whose_file_is_not_here_is_matched_by_the_id_another_catalogue_gives_it() {
     let titles = vec![
-        elsewhere("t1", json!({ "title": "La Chaleur", "ids": { "tmdb": "949" } })),
-        elsewhere("t2", json!({ "title": "Rien", "ids": { "imdb": "tt8195" } })),
+        elsewhere(
+            "t1",
+            json!({ "title": "La Chaleur", "ids": { "tmdb": "949" } }),
+        ),
+        elsewhere(
+            "t2",
+            json!({ "title": "Rien", "ids": { "imdb": "tt8195" } }),
+        ),
     ];
     let world = a_household_that_holds(titles, of_ana(vec![watched("t1"), watched("t2")]));
     world.has_scanned(&[HEAT, RONIN]);
@@ -58,7 +64,10 @@ fn a_title_whose_file_is_not_here_is_matched_by_the_id_another_catalogue_gives_i
 #[test]
 fn a_title_no_id_matches_is_matched_by_its_name_and_its_year() {
     let titles = vec![
-        elsewhere("t1", json!({ "title": "HEAT!", "year": 1995, "ids": { "tmdb": "1" } })),
+        elsewhere(
+            "t1",
+            json!({ "title": "HEAT!", "year": 1995, "ids": { "tmdb": "1" } }),
+        ),
         elsewhere("t2", json!({ "title": "Ronin", "year": 1999 })),
         elsewhere("t3", json!({ "title": "Ronin" })),
     ];

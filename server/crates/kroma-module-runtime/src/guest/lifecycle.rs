@@ -1,8 +1,8 @@
 use anyhow::Result;
 use kroma_module_host::host_token::ct_eq;
-use kroma_module_wire::{LIFECYCLE_HEADER, Lifecycle};
+use kroma_module_wire::{Lifecycle, LIFECYCLE_HEADER};
 
-use super::{Header, Request, Response, failed};
+use super::{failed, Header, Request, Response};
 
 const AUTHORIZATION: &str = "authorization";
 

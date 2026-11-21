@@ -128,7 +128,10 @@ mod tests {
     fn slug_eq_answers_for_every_shared_case_what_slugify_would_have_built() {
         for Case { name, slug } in shared_cases() {
             assert!(slug_eq(&name, &slug), "{name:?} should equal {slug:?}");
-            assert!(!slug_eq(&name, &format!("{slug}x")), "{name:?} vs a longer slug");
+            assert!(
+                !slug_eq(&name, &format!("{slug}x")),
+                "{name:?} vs a longer slug"
+            );
             if !slug.is_empty() {
                 assert!(
                     !slug_eq(&name, &slug[..slug.len() - 1]),

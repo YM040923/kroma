@@ -210,6 +210,9 @@ mod tests {
             resp.headers().get(header::LOCATION).unwrap(),
             "https://cdn.example.test/film.mkv?sig=abc"
         );
-        assert_eq!(resp.headers().get(header::CACHE_CONTROL).unwrap(), "no-store");
+        assert_eq!(
+            resp.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-store"
+        );
     }
 }

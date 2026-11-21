@@ -53,8 +53,8 @@ pub use async_trait::async_trait;
 pub use kroma_module_wire::{
     ActionKind, ActionSpec, ActionStyle, Audience, NetworkAction, NetworkAnswer, NetworkAsk,
     NetworkCarries, NetworkEndpoint, NetworkFlow, NetworkHealth, NetworkOffer, NetworkRoute,
-    NetworkSeal, NotificationCategory, NotificationEvent, NotificationSpec,
-    NotificationSubject, NotificationType, PushCategory,
+    NetworkSeal, NotificationCategory, NotificationEvent, NotificationSpec, NotificationSubject,
+    NotificationType, PushCategory,
 };
 
 /// Build a JSON error response `{ "error": "<message>" }` with the given status.

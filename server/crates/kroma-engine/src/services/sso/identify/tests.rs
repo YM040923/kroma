@@ -67,7 +67,13 @@ impl Round {
     fn sign_in_at(&self, claims: Value, at: i64) -> Result<Identity, IdentifyError> {
         let (started, url) = self.authorize();
         let back = self.idp.approve(&url, claims);
-        let code = back.split("code=").nth(1).unwrap().split('&').next().unwrap();
+        let code = back
+            .split("code=")
+            .nth(1)
+            .unwrap()
+            .split('&')
+            .next()
+            .unwrap();
         let flow = self.flows.arrive(&started.state, now()).unwrap();
         identify(&self.directory, &self.provider, &flow, code, at)
     }
@@ -129,7 +135,13 @@ fn a_code_is_redeemed_once() {
     let round = Round::new();
     let (started, url) = round.authorize();
     let back = round.idp.approve(&url, lea());
-    let code = back.split("code=").nth(1).unwrap().split('&').next().unwrap();
+    let code = back
+        .split("code=")
+        .nth(1)
+        .unwrap()
+        .split('&')
+        .next()
+        .unwrap();
     let flow = round.flows.arrive(&started.state, now()).unwrap();
     identify(&round.directory, &round.provider, &flow, code, now()).unwrap();
 
@@ -149,7 +161,13 @@ fn a_code_cannot_be_redeemed_by_a_flow_that_did_not_ask_for_it() {
     let round = Round::new();
     let (_, url) = round.authorize();
     let back = round.idp.approve(&url, lea());
-    let code = back.split("code=").nth(1).unwrap().split('&').next().unwrap();
+    let code = back
+        .split("code=")
+        .nth(1)
+        .unwrap()
+        .split('&')
+        .next()
+        .unwrap();
     let (other, _) = round.authorize();
     let thief = round.flows.arrive(&other.state, now()).unwrap();
 
@@ -241,7 +259,10 @@ fn groups_are_asked_for_when_the_provider_offers_the_scope() {
 #[test]
 fn the_authorize_address_keeps_a_query_the_provider_already_had() {
     let round = Round::new();
-    let (mut metadata, _) = round.directory.lookup(&round.provider.issuer, now()).unwrap();
+    let (mut metadata, _) = round
+        .directory
+        .lookup(&round.provider.issuer, now())
+        .unwrap();
     metadata.authorization_endpoint.push_str("?tenant=home");
     let (started, _) = round.authorize();
 
@@ -294,7 +315,10 @@ fn every_failure_has_a_code_and_the_providers_word_is_stripped_to_plain_text() {
     };
 
     assert_eq!(refused("invalid_client"), "exchange.invalid_client");
-    assert_eq!(refused("<script>alert(1)</script>"), "exchange.scriptalert1script");
+    assert_eq!(
+        refused("<script>alert(1)</script>"),
+        "exchange.scriptalert1script"
+    );
     assert_eq!(
         IdentifyError::Exchange(ExchangeError::Refused(500, None)).code(),
         "exchange.refused"

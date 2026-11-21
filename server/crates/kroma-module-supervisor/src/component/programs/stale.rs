@@ -25,7 +25,10 @@ impl Programs {
             .collect();
         drop(children);
         let mut kept = Vec::new();
-        for pid in recorded.lines().filter_map(|line| line.trim().parse::<u32>().ok()) {
+        for pid in recorded
+            .lines()
+            .filter_map(|line| line.trim().parse::<u32>().ok())
+        {
             if ours.contains(&pid) {
                 kept.push(pid);
             } else if is_named(pid, program) {

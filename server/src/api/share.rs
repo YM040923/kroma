@@ -19,8 +19,8 @@ use sha2::{Digest, Sha256};
 
 use crate::api::error::json_error;
 use crate::api::extract::AuthUser;
-use crate::api::util::query;
 use crate::api::stream;
+use crate::api::util::query;
 use crate::db;
 use crate::db::share::Share;
 use crate::model::{Permission, User};
@@ -32,7 +32,10 @@ const TRY_WINDOW: Duration = Duration::from_secs(10 * 60);
 
 pub fn protected_routes() -> Router<SharedState> {
     Router::new()
-        .route("/items/{id}/share", get(current).post(create).delete(revoke))
+        .route(
+            "/items/{id}/share",
+            get(current).post(create).delete(revoke),
+        )
         .route("/shares", get(list))
 }
 
@@ -240,7 +243,10 @@ async fn revoke(
     .await?;
     if let Some(share) = live {
         let slug = share.slug;
-        query(&state.db, move |pool| db::share::revoke(&pool, &slug, now())).await?;
+        query(&state.db, move |pool| {
+            db::share::revoke(&pool, &slug, now())
+        })
+        .await?;
     }
     Ok(StatusCode::NO_CONTENT.into_response())
 }
@@ -333,7 +339,10 @@ async fn unlock(
         return Ok(Json(json!({ "unlocked": true })).into_response());
     };
     if throttled(&share.slug) {
-        return Err(json_error(StatusCode::TOO_MANY_REQUESTS, "尝试次数过多，稍后再试"));
+        return Err(json_error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "尝试次数过多，稍后再试",
+        ));
     }
     if hash_password(&share.slug, body.password.trim()) != expected {
         note_failure(&share.slug);

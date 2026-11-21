@@ -43,13 +43,16 @@ impl Roster {
         if words.is_empty() {
             return;
         }
-        let person = self.by_key.entry(words.join(" ")).or_insert_with(|| Person {
-            name: name.trim().to_string(),
-            tmdb_id,
-            profile_url: None,
-            words,
-            libraries: Vec::new(),
-        });
+        let person = self
+            .by_key
+            .entry(words.join(" "))
+            .or_insert_with(|| Person {
+                name: name.trim().to_string(),
+                tmdb_id,
+                profile_url: None,
+                words,
+                libraries: Vec::new(),
+            });
         if person.tmdb_id.is_none() {
             person.tmdb_id = tmdb_id;
         }
@@ -194,7 +197,11 @@ mod tests {
 
     #[test]
     fn a_full_name_finds_the_person_and_counts_their_titles() {
-        let people = roster(&[("Tom Hardy", "films"), ("Tom Hardy", "films"), ("Tom Hanks", "films")]);
+        let people = roster(&[
+            ("Tom Hardy", "films"),
+            ("Tom Hardy", "films"),
+            ("Tom Hanks", "films"),
+        ]);
 
         let found = matching(&people, &query("tom hardy"), &|_| true);
 
@@ -213,7 +220,10 @@ mod tests {
 
     #[test]
     fn a_typo_in_a_long_name_is_forgiven_and_ranks_below_the_exact_one() {
-        let people = roster(&[("Denis Villeneuve", "films"), ("Dennis Villeneuve", "films")]);
+        let people = roster(&[
+            ("Denis Villeneuve", "films"),
+            ("Dennis Villeneuve", "films"),
+        ]);
 
         assert_eq!(
             names(&people, "denis villenueve"),

@@ -236,7 +236,14 @@ fn a_title_played_here_after_an_import_is_first_in_continue_watching() {
     world.has_scanned(&[HEAT, RONIN]);
     world.imports();
     let ronin = world.title_of(RONIN);
-    db::upsert_progress(&world.state.db, &world.ana, &ronin, 900_000, Some(7_200_000)).unwrap();
+    db::upsert_progress(
+        &world.state.db,
+        &world.ana,
+        &ronin,
+        900_000,
+        Some(7_200_000),
+    )
+    .unwrap();
 
     let resumable = continue_watching(&world);
 

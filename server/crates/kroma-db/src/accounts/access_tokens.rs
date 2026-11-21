@@ -51,7 +51,10 @@ pub fn create_access_token(
             hints.via
         ],
     )?;
-    anyhow::ensure!(written == 1, "an account that waits holds no device credential");
+    anyhow::ensure!(
+        written == 1,
+        "an account that waits holds no device credential"
+    );
     Ok(())
 }
 
@@ -216,7 +219,10 @@ pub fn reset_access_pin_verified(pool: &Pool, user_id: &str) -> Result<()> {
 
 pub fn delete_access_token(pool: &Pool, token: &str) -> Result<()> {
     let conn = pool.get()?;
-    conn.execute("DELETE FROM access_tokens WHERE token = ?1", params![stored(token)])?;
+    conn.execute(
+        "DELETE FROM access_tokens WHERE token = ?1",
+        params![stored(token)],
+    )?;
     Ok(())
 }
 

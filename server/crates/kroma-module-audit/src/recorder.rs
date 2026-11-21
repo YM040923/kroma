@@ -42,16 +42,25 @@ impl Recorder {
     }
 
     pub fn heard(&self, asked: Asked) {
-        self.asked.lock().unwrap_or_else(PoisonError::into_inner).push(asked);
+        self.asked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(asked);
     }
 
     pub fn connections(&self) -> Vec<Connection> {
-        let seen = self.connections.lock().unwrap_or_else(PoisonError::into_inner);
+        let seen = self
+            .connections
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         seen.iter().cloned().collect()
     }
 
     pub fn asked(&self) -> Vec<Asked> {
-        self.asked.lock().unwrap_or_else(PoisonError::into_inner).clone()
+        self.asked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn declares(&self, ask: &NetworkAsk) -> bool {
@@ -77,7 +86,10 @@ impl Recorder {
 
 fn hosts_named(value: &Value) -> Vec<String> {
     match value {
-        Value::String(url) => web_target(url).map(|target| target.host).into_iter().collect(),
+        Value::String(url) => web_target(url)
+            .map(|target| target.host)
+            .into_iter()
+            .collect(),
         Value::Array(urls) => urls.iter().flat_map(hosts_named).collect(),
         _ => Vec::new(),
     }

@@ -89,7 +89,11 @@ pub enum Error {
     InvalidColumnName(String),
     InvalidColumnType(usize, String, Type),
     IntegralValueOutOfRange(usize, i64),
-    FromSqlConversionFailure(usize, Type, Box<dyn std::error::Error + Send + Sync + 'static>),
+    FromSqlConversionFailure(
+        usize,
+        Type,
+        Box<dyn std::error::Error + Send + Sync + 'static>,
+    ),
     ToSqlConversionFailure(Box<dyn std::error::Error + Send + Sync + 'static>),
     Utf8Error(usize, std::str::Utf8Error),
     InvalidQuery,
@@ -111,13 +115,19 @@ impl fmt::Display for Error {
             Self::InvalidColumnIndex(index) => write!(f, "Invalid column index: {index}"),
             Self::InvalidColumnName(name) => write!(f, "Invalid column name: {name}"),
             Self::InvalidColumnType(index, name, kind) => {
-                write!(f, "Invalid column type {kind} at index: {index}, name: {name}")
+                write!(
+                    f,
+                    "Invalid column type {kind} at index: {index}, name: {name}"
+                )
             }
             Self::IntegralValueOutOfRange(index, value) => {
                 write!(f, "Integer {value} out of range at index {index}")
             }
             Self::FromSqlConversionFailure(index, kind, error) => {
-                write!(f, "Conversion error from type {kind} at index: {index}, {error}")
+                write!(
+                    f,
+                    "Conversion error from type {kind} at index: {index}, {error}"
+                )
             }
             Self::ToSqlConversionFailure(error) => write!(f, "{error}"),
             Self::Utf8Error(index, error) => write!(f, "Invalid UTF-8 at index {index}: {error}"),

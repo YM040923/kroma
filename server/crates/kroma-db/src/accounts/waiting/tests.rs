@@ -113,9 +113,11 @@ fn a_new_invitation_voids_the_one_before_and_the_account_goes_on_waiting() {
 
     assert!(minted);
     assert!(invitee(&p, "first").unwrap().is_none());
-    assert!(claim_account(&p, "first", &with_password("ana@test.dev", "ana"))
-        .unwrap()
-        .is_none());
+    assert!(
+        claim_account(&p, "first", &with_password("ana@test.dev", "ana"))
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(invitee(&p, "second").unwrap().unwrap().user_id, ana.id);
     assert!(account_waits(&p, &ana.id).unwrap());
 }
@@ -233,7 +235,10 @@ fn redeeming_through_a_provider_links_the_identity_and_keeps_the_name() {
 
     let claimed = claim_account(&p, "inv", &claim).unwrap().unwrap();
 
-    assert_eq!((claimed.id.as_str(), claimed.username.as_str()), (ana.id.as_str(), "ana"));
+    assert_eq!(
+        (claimed.id.as_str(), claimed.username.as_str()),
+        (ana.id.as_str(), "ana")
+    );
     let signed_in = identity_user(&p, "https://id.test", "sub-ana").unwrap();
     assert_eq!(signed_in.map(|user| user.id), Some(ana.id.clone()));
     assert!(!sign_in_means(&p, &ana.id).unwrap().password);
@@ -268,7 +273,11 @@ fn an_accounts_invitation_creates_nobody_and_an_open_one_claims_nobody() {
     assert!(claimed.is_none());
     assert!(!get_invite(&p, "bound").unwrap().unwrap().used);
     assert!(!get_invite(&p, "open").unwrap().unwrap().used);
-    let listed: Vec<String> = list_invites(&p).unwrap().into_iter().map(|i| i.token).collect();
+    let listed: Vec<String> = list_invites(&p)
+        .unwrap()
+        .into_iter()
+        .map(|i| i.token)
+        .collect();
     assert_eq!(listed, ["open"]);
 }
 

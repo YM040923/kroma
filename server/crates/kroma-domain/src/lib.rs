@@ -6,6 +6,8 @@
 //! type lives in (and the server's `crate::model` barrel re-exports this).
 
 pub mod accounts;
+pub mod acquisition;
+pub mod acquisition_center;
 pub mod admin;
 pub mod app_version;
 pub mod cast;
@@ -34,6 +36,8 @@ pub mod watching;
 // `matching`, `people` and `slug` are intentionally not globbed here; reach them via their
 // module path.
 pub use accounts::*;
+pub use acquisition::*;
+pub use acquisition_center::*;
 pub use admin::*;
 pub use app_version::*;
 pub use cast::*;

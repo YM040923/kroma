@@ -13,7 +13,7 @@ use std::net::IpAddr;
 use std::sync::Arc;
 
 pub use challenge::Challenge;
-pub use origins::{PublicOrigins, origin_of};
+pub use origins::{origin_of, PublicOrigins};
 pub use reach::{is_private_client, shares_a_prefix};
 
 use challenge::Challenges;
@@ -130,9 +130,8 @@ impl Direct {
         }
         Household {
             public_v4: self.public_ip.learned(),
-            own_v6: NEIGHBOURHOOD.addresses(kroma_primitives::now_ms(), || {
-                global_v6(&local_addresses())
-            }),
+            own_v6: NEIGHBOURHOOD
+                .addresses(kroma_primitives::now_ms(), || global_v6(&local_addresses())),
         }
     }
 

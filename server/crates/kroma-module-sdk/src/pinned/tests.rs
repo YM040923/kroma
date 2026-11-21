@@ -91,7 +91,10 @@ fn downloads_again_over_a_file_cut_short() {
     let repaired = ensure(dir.path(), &PINNED_TO_ABC, "u", &|u, d| origin.fetch(u, d));
 
     assert!(repaired);
-    assert_eq!(std::fs::read(dir.path().join(PINNED_TO_ABC.name)).unwrap(), b"abc");
+    assert_eq!(
+        std::fs::read(dir.path().join(PINNED_TO_ABC.name)).unwrap(),
+        b"abc"
+    );
 }
 
 #[test]

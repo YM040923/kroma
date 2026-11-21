@@ -87,7 +87,9 @@ fn looks_like_audio(path: &Path) -> bool {
     let Ok(bytes) = std::fs::read(path) else {
         return false;
     };
-    bytes.starts_with(b"ID3") || bytes.starts_with(&[0xff, 0xfb]) || bytes.starts_with(&[0xff, 0xf3])
+    bytes.starts_with(b"ID3")
+        || bytes.starts_with(&[0xff, 0xfb])
+        || bytes.starts_with(&[0xff, 0xf3])
 }
 
 #[cfg(test)]

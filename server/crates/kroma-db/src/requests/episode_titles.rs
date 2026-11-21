@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use rusqlite::{Connection, params_from_iter};
+use rusqlite::{params_from_iter, Connection};
 
 use kroma_domain::{CalendarEntry, RequestKind};
 
@@ -94,9 +94,9 @@ fn guide_titles(conn: &Connection, keys: &[&str]) -> rusqlite::Result<HashMap<St
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Pool;
     use crate::requests::tests::*;
     use crate::translations::TransData;
+    use crate::Pool;
     use kroma_domain::ListedEpisode;
 
     fn seed_guide(p: &Pool, show_id: &str, tmdb_id: u64, title: &str) {

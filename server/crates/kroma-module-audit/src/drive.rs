@@ -52,7 +52,8 @@ pub struct Call {
 
 impl Call {
     pub(crate) fn answered(&self) -> String {
-        self.status.map_or_else(|| "-".to_string(), |status| status.to_string())
+        self.status
+            .map_or_else(|| "-".to_string(), |status| status.to_string())
     }
 }
 
@@ -73,7 +74,8 @@ impl Driver<'_> {
         let answer = if ask.method.eq_ignore_ascii_case("GET") {
             self.client().get(&url)
         } else {
-            self.client().post_json(&url, ask.body.as_ref().unwrap_or(&json!({})))
+            self.client()
+                .post_json(&url, ask.body.as_ref().unwrap_or(&json!({})))
         };
         Call {
             method: ask.method.to_ascii_uppercase(),
@@ -102,8 +104,14 @@ impl Driver<'_> {
             path,
             body: None,
         };
-        let jobs = lifecycle.jobs.iter().map(|job| post(format!("/_job/run/{}", job.key)));
-        let events = lifecycle.events.iter().map(|topic| post(format!("/_event/{topic}")));
+        let jobs = lifecycle
+            .jobs
+            .iter()
+            .map(|job| post(format!("/_job/run/{}", job.key)));
+        let events = lifecycle
+            .events
+            .iter()
+            .map(|topic| post(format!("/_event/{topic}")));
         let points = manifest.contributes.iter().flat_map(|answered| {
             methods_of(&answered.point)
                 .into_iter()

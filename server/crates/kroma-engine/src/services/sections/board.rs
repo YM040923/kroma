@@ -144,7 +144,12 @@ impl<'a> Board<'a> {
             return Some(self.t("content.noteSaved", &[]));
         }
         if self.viewer.taste.affinity(title) > 0.0 {
-            if let Some(line) = self.viewer.taste.strongest(title).and_then(|f| self.for_its(title, f)) {
+            if let Some(line) = self
+                .viewer
+                .taste
+                .strongest(title)
+                .and_then(|f| self.for_its(title, f))
+            {
                 return Some(line);
             }
         }

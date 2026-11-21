@@ -67,7 +67,8 @@ impl Sessions {
             if k == key || !same_program(k, key) {
                 continue;
             }
-            if s.opened_by(opener) || now.duration_since(*s.last_access.lock().await) >= BUDGET_GRACE
+            if s.opened_by(opener)
+                || now.duration_since(*s.last_access.lock().await) >= BUDGET_GRACE
             {
                 stale.push(k.clone());
             } else {

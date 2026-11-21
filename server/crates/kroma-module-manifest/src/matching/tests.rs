@@ -9,7 +9,10 @@ fn a_purpose_covers_itself() {
 fn a_purpose_covers_its_dotted_children() {
     assert!(purpose_covers("metadata", "metadata.discover"));
     assert!(purpose_covers("metadata", "metadata.discover.page"));
-    assert!(purpose_covers("metadata.discover", "metadata.discover.page"));
+    assert!(purpose_covers(
+        "metadata.discover",
+        "metadata.discover.page"
+    ));
 }
 
 #[test]

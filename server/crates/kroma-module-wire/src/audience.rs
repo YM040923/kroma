@@ -41,20 +41,14 @@ impl PushCategory {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Audience {
     // One account, by id (the requester whose film arrived).
-    User {
-        id: String,
-    },
+    User { id: String },
     // Everyone holding a capability (the moderators who must review a request).
-    Permission {
-        permission: crate::Permission,
-    },
+    Permission { permission: crate::Permission },
     // Everyone with an account (a new film in the library).
     Everyone,
     // Everyone who follows a show — it is in their list, they marked it
     // watched, or they have progress on an episode (a new episode aired).
-    Followers {
-        show_id: String,
-    },
+    Followers { show_id: String },
 }
 
 impl Audience {

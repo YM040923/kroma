@@ -116,7 +116,9 @@ fn write_release_parts(manifest: &Path, out_dir: &Path) {
                 rerun_if_changed(&file);
                 let name = file_name(&file);
                 let path = file.display().to_string();
-                parts.push(format!("    ({version:?}, {name:?}, include_str!({path:?})),"));
+                parts.push(format!(
+                    "    ({version:?}, {name:?}, include_str!({path:?})),"
+                ));
             }
         }
     }
@@ -159,7 +161,8 @@ fn is_preset_file(path: &Path) -> bool {
 }
 
 fn is_release_file(path: &Path) -> bool {
-    path.extension().is_some_and(|e| e == "md") || path.file_name() == Some(OsStr::new("release.json"))
+    path.extension().is_some_and(|e| e == "md")
+        || path.file_name() == Some(OsStr::new("release.json"))
 }
 
 fn file_name(path: &Path) -> &str {

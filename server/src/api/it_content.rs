@@ -174,15 +174,21 @@ async fn similar_and_for_you_are_ok_arrays() {
     assert_eq!(status, StatusCode::OK);
     assert!(similar.is_array());
 
-    let (status, collection) =
-        get(&t.app, &format!("/api/items/{id}/collection"), Some(&t.token)).await;
+    let (status, collection) = get(
+        &t.app,
+        &format!("/api/items/{id}/collection"),
+        Some(&t.token),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert!(collection["items"].is_array());
 
     // Configuration only: the layout answers without an upstream call.
     let (status, layout) = get(&t.app, "/api/douban/discover/movie", Some(&t.token)).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(layout["rows"].as_array().is_some_and(|rows| !rows.is_empty()));
+    assert!(layout["rows"]
+        .as_array()
+        .is_some_and(|rows| !rows.is_empty()));
 
     let (status, for_you) = get(&t.app, "/api/for-you", Some(&t.token)).await;
     assert_eq!(status, StatusCode::OK);
@@ -452,7 +458,10 @@ async fn history_returns_watched_and_resumable_titles() {
     assert_eq!(body["watched"].as_array().map(Vec::len), Some(1));
     assert_eq!(body["watched"][0]["item"]["title"], json!("The Matrix"));
     assert_eq!(body["inProgress"].as_array().map(Vec::len), Some(1));
-    assert_eq!(body["inProgress"][0]["item"]["title"], json!("Dune Part Two"));
+    assert_eq!(
+        body["inProgress"][0]["item"]["title"],
+        json!("Dune Part Two")
+    );
 
     let (status, _) = get(&t.app, "/api/history", None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);

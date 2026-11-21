@@ -19,8 +19,8 @@ mod state;
 pub use bindings::kroma::module::net::FetchRequest;
 pub use bindings::kroma::module::types::{Header, Request, Response};
 pub use capabilities::{
-    AudioDecode, Command, Databases, Files, Lan, Media, Output, Preopen, Processes, Reply, SampleFormat, Service,
-    SqlConnection, SqlFailure, SqlOutcome, SqlValue,
+    AudioDecode, Command, Databases, Files, Lan, Media, Output, Preopen, Processes, Reply,
+    SampleFormat, Service, SqlConnection, SqlFailure, SqlOutcome, SqlValue,
 };
 pub use command::CommandComponent;
 pub use error::HostError;

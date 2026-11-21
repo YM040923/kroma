@@ -123,7 +123,14 @@ mod tests {
         assert_eq!(card["title"], json!("Heat"));
         assert_eq!(card["metadata"]["genres"], json!(["Crime"]));
         assert_eq!(card["metadata"]["posterUrl"], json!("/api/images/a.webp"));
-        for gone in ["files", "subtitles", "audioTracks", "container", "relPath", "showId"] {
+        for gone in [
+            "files",
+            "subtitles",
+            "audioTracks",
+            "container",
+            "relPath",
+            "showId",
+        ] {
             assert_eq!(card.get(gone), None, "{gone}");
         }
         for gone in ["cast", "crew"] {

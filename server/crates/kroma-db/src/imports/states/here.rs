@@ -5,14 +5,13 @@ use kroma_domain::watching::{Resume, Watching};
 use rusqlite::{params, Connection, Row};
 
 use super::Merged;
-use crate::playback::{
-    remove_progress, write_listed, write_progress, write_watched, Stopped,
-};
+use crate::playback::{remove_progress, write_listed, write_progress, write_watched, Stopped};
 use crate::{now_or_blank, Result};
 
 const NEWER_THAN_ANY: i64 = i64::MAX;
 
-const HELD_HERE: &str = "SELECT w.user_id IS NOT NULL, CAST(strftime('%s', w.watched_at) AS INTEGER), \
+const HELD_HERE: &str =
+    "SELECT w.user_id IS NOT NULL, CAST(strftime('%s', w.watched_at) AS INTEGER), \
         p.user_id IS NOT NULL, CAST(strftime('%s', p.updated_at) AS INTEGER), \
         p.position_ms, p.duration_ms, l.user_id IS NOT NULL \
      FROM (SELECT ?1 AS user_id, ?2 AS item_id) k \
@@ -67,7 +66,10 @@ fn write_resume(conn: &Connection, title: &Title<'_>, resume: Option<Resume>) ->
 
 fn write(conn: &Connection, title: &Title<'_>, here: &Watching, merged: &Watching) -> Result<()> {
     let (account, item) = (title.account, title.item);
-    if let Some(at) = merged.watched_at.filter(|_| merged.watched_at != here.watched_at) {
+    if let Some(at) = merged
+        .watched_at
+        .filter(|_| merged.watched_at != here.watched_at)
+    {
         write_watched(conn, account, item, &kroma_primitives::iso8601_of_secs(at))?;
     }
     if merged.resume != here.resume {

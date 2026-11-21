@@ -52,7 +52,10 @@ fn every_account_and_what_points_at_it_is_still_there_after_the_step() {
         "u1"
     );
     let conn = pool.get().unwrap();
-    assert_eq!(count(&conn, "SELECT COUNT(*) FROM users WHERE waiting = 0"), 2);
+    assert_eq!(
+        count(&conn, "SELECT COUNT(*) FROM users WHERE waiting = 0"),
+        2
+    );
     assert_eq!(count(&conn, "SELECT COUNT(*) FROM progress"), 1);
     assert_eq!(
         count(

@@ -33,7 +33,11 @@ fn directed_by(title: &str, director: &str) -> Metadata {
     m
 }
 
-fn engine_of(movies: &[MediaItem], shows: &[crate::model::Show], episodes: &[MediaItem]) -> SearchEngine {
+fn engine_of(
+    movies: &[MediaItem],
+    shows: &[crate::model::Show],
+    episodes: &[MediaItem],
+) -> SearchEngine {
     let e = SearchEngine::new().unwrap();
     e.rebuild(movies, shows, episodes).unwrap();
     e
@@ -57,7 +61,10 @@ fn a_year_picks_the_film_of_that_year_among_namesakes() {
 #[test]
 fn a_year_that_is_part_of_the_title_still_finds_it() {
     let e = engine_of(
-        &[movie("br", "Blade Runner 2049", None), movie("other", "Blade", None)],
+        &[
+            movie("br", "Blade Runner 2049", None),
+            movie("other", "Blade", None),
+        ],
         &[],
         &[],
     );
@@ -86,7 +93,10 @@ fn an_episode_named_by_its_number_comes_before_its_show() {
 
     assert_eq!(ids(&e, "breaking bad s02e05", 5), ["s2e5", "bb"]);
     assert_eq!(ids(&e, "breaking bad 3x11", 5), ["s3e11", "bb"]);
-    assert_eq!(ids(&e, "breaking bad saison 4 episode 1", 5), ["s4e1", "bb"]);
+    assert_eq!(
+        ids(&e, "breaking bad saison 4 episode 1", 5),
+        ["s4e1", "bb"]
+    );
 }
 
 #[test]
@@ -158,7 +168,11 @@ fn between_two_namesakes_the_better_rated_comes_first() {
 fn a_director_finds_the_films_they_made() {
     let e = engine_of(
         &[
-            movie("arrival", "Arrival", Some(directed_by("Arrival", "Denis Villeneuve"))),
+            movie(
+                "arrival",
+                "Arrival",
+                Some(directed_by("Arrival", "Denis Villeneuve")),
+            ),
             movie("heat", "Heat", Some(directed_by("Heat", "Michael Mann"))),
         ],
         &[],
@@ -233,7 +247,11 @@ fn a_title_in_a_library_the_asker_cannot_see_does_not_take_a_place() {
 fn a_name_answers_with_the_person_as_well_as_their_titles() {
     let e = engine_of(
         &[
-            movie("a", "Inception", Some(meta("Inception", "", &[], &["Tom Hardy"]))),
+            movie(
+                "a",
+                "Inception",
+                Some(meta("Inception", "", &[], &["Tom Hardy"])),
+            ),
             movie("b", "Venom", Some(meta("Venom", "", &[], &["Tom Hardy"]))),
         ],
         &[],
@@ -259,9 +277,18 @@ fn a_full_name_ranks_the_films_of_that_person_above_a_film_that_merely_has_both_
             movie(
                 "two-people",
                 "Bohemian Rhapsody",
-                Some(meta("Bohemian Rhapsody", "", &[], &["Tom Hollander", "Ben Hardy"])),
+                Some(meta(
+                    "Bohemian Rhapsody",
+                    "",
+                    &[],
+                    &["Tom Hollander", "Ben Hardy"],
+                )),
             ),
-            movie("one-person", "Venom", Some(meta("Venom", "", &[], &["Tom Hardy"]))),
+            movie(
+                "one-person",
+                "Venom",
+                Some(meta("Venom", "", &[], &["Tom Hardy"])),
+            ),
         ],
         &[],
         &[],
@@ -278,9 +305,18 @@ fn a_theme_is_carried_by_a_title_or_a_synopsis_in_any_wording_given() {
             movie(
                 "synopsis",
                 "Klaus",
-                Some(meta("Klaus", "A postman befriends a toymaker; le Père Noël est né.", &[], &[])),
+                Some(meta(
+                    "Klaus",
+                    "A postman befriends a toymaker; le Père Noël est né.",
+                    &[],
+                    &[],
+                )),
             ),
-            movie("neither", "Heat", Some(meta("Heat", "A heist crew in Los Angeles.", &[], &[]))),
+            movie(
+                "neither",
+                "Heat",
+                Some(meta("Heat", "A heist crew in Los Angeles.", &[], &[])),
+            ),
         ],
         &[show("show", "Noël en famille", None)],
         &[episode("ep", "s1", "Some Show", "The Christmas Special")],
@@ -292,5 +328,8 @@ fn a_theme_is_carried_by_a_title_or_a_synopsis_in_any_wording_given() {
     assert!(carried["synopsis"] < 1.0);
     assert!(carried.contains_key("show"));
     assert!(!carried.contains_key("neither"));
-    assert!(!carried.contains_key("ep"), "an episode is not a title a row offers");
+    assert!(
+        !carried.contains_key("ep"),
+        "an episode is not a title a row offers"
+    );
 }

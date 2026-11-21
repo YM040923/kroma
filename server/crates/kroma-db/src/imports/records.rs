@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use kroma_domain::imports::Kind;
 
-use crate::{Connection, Pool, Result, params, query_by_subject_ids};
+use crate::{params, query_by_subject_ids, Connection, Pool, Result};
 
 /// The rows of one kind brought from one server. `scope` narrows a kind whose
 /// ids repeat: a watch state is its title's id under its user's.

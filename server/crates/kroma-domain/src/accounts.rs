@@ -78,8 +78,14 @@ mod tests {
             role_label(&[Permission::Playback, Permission::RequestsCreate]),
             "admin.roleMember"
         );
-        assert_eq!(role_label(&[Permission::RequestsCreate]), "admin.roleRestricted");
+        assert_eq!(
+            role_label(&[Permission::RequestsCreate]),
+            "admin.roleRestricted"
+        );
         assert_eq!(role_label(&[]), "admin.roleRestricted");
-        assert_eq!(role_label(&[Permission::UsersManage]), "admin.roleRestricted");
+        assert_eq!(
+            role_label(&[Permission::UsersManage]),
+            "admin.roleRestricted"
+        );
     }
 }

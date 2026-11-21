@@ -117,10 +117,7 @@ fn a_lapsed_invitation_of_a_waiting_account_is_refused_and_creates_nobody() {
     assert!(db::account_waits(&p, &account).unwrap());
     assert_eq!(db::user_count(&p).unwrap(), 2);
     assert_eq!(
-        db::user_by_id(&p, &account)
-            .unwrap()
-            .unwrap()
-            .permissions,
+        db::user_by_id(&p, &account).unwrap().unwrap().permissions,
         [Permission::Playback]
     );
 }

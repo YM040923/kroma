@@ -155,7 +155,9 @@ impl Jwk {
 }
 
 fn decoded(field: &Option<String>) -> Option<Vec<u8>> {
-    URL_SAFE_NO_PAD.decode(field.as_deref()?.trim_end_matches('=')).ok()
+    URL_SAFE_NO_PAD
+        .decode(field.as_deref()?.trim_end_matches('='))
+        .ok()
 }
 
 fn coordinate(field: &Option<String>) -> Option<[u8; 32]> {
@@ -195,7 +197,11 @@ impl KeySet {
         signed: &[u8],
         signature: &[u8],
     ) -> Result<(), SignatureError> {
-        let mut candidates = self.keys.iter().filter(|key| key.signs(alg, kid)).peekable();
+        let mut candidates = self
+            .keys
+            .iter()
+            .filter(|key| key.signs(alg, kid))
+            .peekable();
         if candidates.peek().is_none() {
             return Err(SignatureError::UnknownKey);
         }

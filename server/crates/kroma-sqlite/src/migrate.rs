@@ -228,7 +228,9 @@ fn dangling_rows(conn: &Connection, step: &impl Change) -> rusqlite::Result<i64>
     if !step.rebuilds() {
         return Ok(0);
     }
-    conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r.get(0))
+    conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+        r.get(0)
+    })
 }
 
 #[cfg(target_family = "wasm")]

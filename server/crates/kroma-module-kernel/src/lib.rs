@@ -458,11 +458,7 @@ mod gate_tests {
                 "tv.kroma.broken",
                 r#"{ "name": "no id, no version" }"#,
             );
-            std::fs::write(
-                installed.join("tv.kroma.notes").join("icon.svg"),
-                b"<svg/>",
-            )
-            .unwrap();
+            std::fs::write(installed.join("tv.kroma.notes").join("icon.svg"), b"<svg/>").unwrap();
 
             let supervisor = kroma_module_supervisor::Supervisor::new(
                 kroma_module_supervisor::SupervisorConfig {

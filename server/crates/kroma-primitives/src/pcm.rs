@@ -100,9 +100,7 @@ mod tests {
         assert_eq!(worded(input_args), named);
         assert_eq!(
             worded(shaped),
-            [
-                "-vn", "-map", "0:a:2", "-ac", "1", "-ar", "16000", "-f", "f32le", "/out/pcm",
-            ]
+            ["-vn", "-map", "0:a:2", "-ac", "1", "-ar", "16000", "-f", "f32le", "/out/pcm",]
         );
     }
 

@@ -112,14 +112,6 @@ fn error(status: u16, message: impl Into<String>) -> ApiError {
     }
 }
 
-fn id_of(value: &serde_json::Value) -> String {
-    match value {
-        serde_json::Value::String(text) => text.clone(),
-        serde_json::Value::Number(number) => number.to_string(),
-        _ => String::new(),
-    }
-}
-
 fn text_at(item: &serde_json::Value, keys: &[&str]) -> String {
     for key in keys {
         if let Some(value) = item.get(*key) {
@@ -198,7 +190,8 @@ pub async fn enable_life(cookie: &str) -> Result<(), String> {
         return Err(format!("HTTP {}", response.status));
     }
     let body = response.text();
-    let parsed: serde_json::Value = serde_json::from_str(&body).map_err(|_| "响应无法解析".to_string())?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&body).map_err(|_| "响应无法解析".to_string())?;
     if parsed.get("state").and_then(serde_json::Value::as_bool) == Some(true) {
         Ok(())
     } else {
@@ -207,7 +200,12 @@ pub async fn enable_life(cookie: &str) -> Result<(), String> {
 }
 
 /// Read one page of events.
-async fn page(cookie: &str, channel: Channel, limit: u32, offset: u32) -> Result<(Vec<Event>, i64), ApiError> {
+async fn page(
+    cookie: &str,
+    channel: Channel,
+    limit: u32,
+    offset: u32,
+) -> Result<(Vec<Event>, i64), ApiError> {
     pacer().acquire().await.map_err(|reason| error(0, reason))?;
     let url = match channel {
         Channel::App => APP_EVENTS,
@@ -234,13 +232,24 @@ async fn page(cookie: &str, channel: Channel, limit: u32, offset: u32) -> Result
         ));
     }
     let body = response.text();
-    let parsed: serde_json::Value = serde_json::from_str(&body)
-        .map_err(|_| error(200, format!("事件响应无法解析：{}", body.chars().take(120).collect::<String>())))?;
+    let parsed: serde_json::Value = serde_json::from_str(&body).map_err(|_| {
+        error(
+            200,
+            format!(
+                "事件响应无法解析：{}",
+                body.chars().take(120).collect::<String>()
+            ),
+        )
+    })?;
     if parsed.get("state").and_then(serde_json::Value::as_bool) != Some(true) {
         let message = text_at(&parsed, &["error", "message"]);
         return Err(error(
             200,
-            if message.is_empty() { "事件接口 state=false".to_string() } else { message },
+            if message.is_empty() {
+                "事件接口 state=false".to_string()
+            } else {
+                message
+            },
         ));
     }
     let data = parsed.get("data").cloned().unwrap_or_default();
@@ -312,7 +321,8 @@ pub async fn poll(cookie: &str, state: &IncrState, max: usize) -> Result<Poll, A
     let mut first = true;
 
     for _ in 0..10 {
-        let (events, count, channel, fell_back) = page_with_fallback(cookie, state, limit, offset).await?;
+        let (events, count, channel, fell_back) =
+            page_with_fallback(cookie, state, limit, offset).await?;
         if channel == Channel::App && !fell_back {
             poll.proapi_405 = 0;
         }
@@ -404,11 +414,31 @@ mod tests {
 
     #[test]
     fn browse_noise_is_dropped_and_saves_are_kept() {
-        assert!(Event { kind: 8, ..Event::default() }.ignored());
-        assert!(Event { kind: 4, ..Event::default() }.ignored());
-        assert!(!Event { kind: 14, ..Event::default() }.ignored());
-        assert!(Event { kind: 14, ..Event::default() }.adds());
-        assert!(Event { kind: 22, ..Event::default() }.deletes());
+        assert!(Event {
+            kind: 8,
+            ..Event::default()
+        }
+        .ignored());
+        assert!(Event {
+            kind: 4,
+            ..Event::default()
+        }
+        .ignored());
+        assert!(!Event {
+            kind: 14,
+            ..Event::default()
+        }
+        .ignored());
+        assert!(Event {
+            kind: 14,
+            ..Event::default()
+        }
+        .adds());
+        assert!(Event {
+            kind: 22,
+            ..Event::default()
+        }
+        .deletes());
     }
 
     #[test]

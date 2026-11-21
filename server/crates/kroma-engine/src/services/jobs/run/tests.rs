@@ -53,7 +53,13 @@ fn start(id: &str) -> db::RunStart<'_> {
 fn a_finish_lands_even_when_the_start_was_never_recorded() {
     let pool = test_pool();
 
-    assert!(finalize_run(&pool, &start("run-lost"), "success", 2_000, None));
+    assert!(finalize_run(
+        &pool,
+        &start("run-lost"),
+        "success",
+        2_000,
+        None
+    ));
 
     let runs = db::list_job_runs(&pool, "test.job", 10).unwrap();
     assert_eq!(runs.len(), 1);
@@ -66,7 +72,13 @@ fn a_finish_lands_even_when_the_start_was_never_recorded() {
 fn a_failure_after_a_failure_is_already_failing() {
     let pool = test_pool();
     db::insert_job_run(&pool, "run-1", "test.job", "manual", 1_000).unwrap();
-    assert!(finalize_run(&pool, &start("run-1"), "failed", 1_500, Some("boom")));
+    assert!(finalize_run(
+        &pool,
+        &start("run-1"),
+        "failed",
+        1_500,
+        Some("boom")
+    ));
     db::insert_job_run(&pool, "run-2", "test.job", "manual", 2_000).unwrap();
 
     assert!(already_failing(&pool, "test.job", "run-2"));
@@ -109,7 +121,13 @@ fn finalize_run_records_terminal_status() {
 fn finalize_run_records_failure_message() {
     let pool = test_pool();
     db::insert_job_run(&pool, "run-y", "test.job", "manual", 1_000).unwrap();
-    assert!(finalize_run(&pool, &start("run-y"), "failed", 3_000, Some("boom")));
+    assert!(finalize_run(
+        &pool,
+        &start("run-y"),
+        "failed",
+        3_000,
+        Some("boom")
+    ));
     let runs = db::list_job_runs(&pool, "test.job", 10).unwrap();
     assert_eq!(runs[0].status, "failed");
     assert_eq!(runs[0].error.as_deref(), Some("boom"));

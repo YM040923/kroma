@@ -7,8 +7,8 @@ mod details;
 mod details_json;
 mod lookup;
 
-pub use lookup::{lookup, lookup_all, lookup_all_by_id};
 pub(super) use kroma_requests::tmdb::{api, tmdb_json, IMG};
+pub use lookup::{lookup, lookup_all, lookup_all_by_id};
 
 use serde::{Deserialize, Serialize};
 
@@ -90,7 +90,9 @@ fn include_image_language(language: &str, languages: &[String]) -> String {
 fn map_art(raw: Vec<RawArt>, size: &str) -> Vec<ArtImage> {
     let mut unique: Vec<ArtImage> = Vec::new();
     for image in raw {
-        let Some(path) = image.file_path else { continue };
+        let Some(path) = image.file_path else {
+            continue;
+        };
         let candidate = ArtImage {
             url: format!("{IMG}/{size}{path}"),
             width: image.width,
@@ -105,7 +107,10 @@ fn map_art(raw: Vec<RawArt>, size: &str) -> Vec<ArtImage> {
                     .votes
                     .total_cmp(&seen.votes)
                     .then((candidate.width * candidate.height).cmp(&(seen.width * seen.height)))
-                    .is_gt() => *seen = candidate,
+                    .is_gt() =>
+            {
+                *seen = candidate
+            }
             Some(_) => {}
             None => unique.push(candidate),
         }

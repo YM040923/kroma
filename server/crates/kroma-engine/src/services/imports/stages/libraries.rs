@@ -11,7 +11,7 @@ use std::path::Path;
 use anyhow::Result;
 
 use super::super::passage::logged;
-use super::super::paths::{Translation, on_this_machine};
+use super::super::paths::{on_this_machine, Translation};
 use super::{Importing, LibraryRow, Outcome};
 use crate::db;
 use crate::model::import::{Library, LibraryKind};

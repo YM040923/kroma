@@ -3,7 +3,10 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use super::{inbound, summary, Arrival, FlowFilter, FlowPage, FlowReport, InboundSummary, Network, Summary, CORE};
+use super::{
+    inbound, summary, Arrival, FlowFilter, FlowPage, FlowReport, InboundSummary, Network, Summary,
+    CORE,
+};
 
 pub const CORE_PURPOSES: &[&str] = &[
     "address", "ai", "artwork", "email", "metadata", "push", "registry", "sign-in", "stats",

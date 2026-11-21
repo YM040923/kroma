@@ -1,7 +1,7 @@
 //! The daily tally of outbound flows: one row per day, caller, purpose, host,
 //! route and verdict. A tally names a host and never a URL.
 
-use super::{Pool, Result, params};
+use super::{params, Pool, Result};
 
 pub const RETENTION_DAYS: i64 = 30;
 

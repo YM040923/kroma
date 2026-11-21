@@ -15,9 +15,10 @@ fn network(tag: &str, block: Option<Value>) -> (Network, TempPool) {
     let pool = temp_pool(tag);
     let settings = Settings::load(&pool);
     let declared: Option<Permissions> = block.map(|block| serde_json::from_value(block).unwrap());
-    let network = Network::new((*pool).clone(), settings, Point::absent(NETWORK_POINT)).with_declared(
-        Arc::new(move |id| (id == MODULE).then(|| declared.clone()).flatten()),
-    );
+    let network = Network::new((*pool).clone(), settings, Point::absent(NETWORK_POINT))
+        .with_declared(Arc::new(move |id| {
+            (id == MODULE).then(|| declared.clone()).flatten()
+        }));
     (network, pool)
 }
 

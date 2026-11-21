@@ -179,7 +179,10 @@ pub async fn keep_items_certified(
     let Some(limit) = content_limit::for_user(user) else {
         return Ok(());
     };
-    let show_ids: HashSet<String> = items.iter().filter_map(|item| item.show_id.clone()).collect();
+    let show_ids: HashSet<String> = items
+        .iter()
+        .filter_map(|item| item.show_id.clone())
+        .collect();
     if show_ids.is_empty() {
         return Ok(());
     }

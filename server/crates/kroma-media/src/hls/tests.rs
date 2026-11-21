@@ -182,7 +182,10 @@ async fn a_re_anchor_into_a_session_already_running_is_answered_out_of_it() {
         .expect("the anchor sits inside what the running session has produced");
 
     assert_eq!(session_dirs(dir.path()), 1, "no second ffmpeg was started");
-    assert_eq!(start, 0.0, "the client is told where the stream it gets begins");
+    assert_eq!(
+        start, 0.0,
+        "the client is told where the stream it gets begins"
+    );
     assert!(playlist.contains("seg_00000.m4s"));
     assert!(
         playlist.starts_with("#EXTM3U\n#EXT-X-START:TIME-OFFSET=0\n"),

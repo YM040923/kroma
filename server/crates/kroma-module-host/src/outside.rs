@@ -79,5 +79,8 @@ pub(crate) fn outside() -> Result<&'static dyn Outside, String> {
 
 #[cfg(not(target_family = "wasm"))]
 pub(crate) fn outside() -> Result<&'static dyn Outside, String> {
-    Ok(OUTSIDE.get().copied().unwrap_or(&crate::outside_native::THE_MACHINE))
+    Ok(OUTSIDE
+        .get()
+        .copied()
+        .unwrap_or(&crate::outside_native::THE_MACHINE))
 }

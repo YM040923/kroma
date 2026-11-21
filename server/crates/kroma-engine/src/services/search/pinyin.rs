@@ -83,8 +83,14 @@ mod tests {
     fn a_chinese_title_is_spelled_three_ways() {
         let spellings = forms("流浪地球");
 
-        assert!(spellings.contains(&"liu lang di qiu".to_string()), "{spellings:?}");
-        assert!(spellings.contains(&"liulangdiqiu".to_string()), "{spellings:?}");
+        assert!(
+            spellings.contains(&"liu lang di qiu".to_string()),
+            "{spellings:?}"
+        );
+        assert!(
+            spellings.contains(&"liulangdiqiu".to_string()),
+            "{spellings:?}"
+        );
         assert!(spellings.contains(&"lldq".to_string()), "{spellings:?}");
     }
 
@@ -92,7 +98,10 @@ mod tests {
     fn a_number_stays_put_in_every_spelling() {
         let spellings = forms("流浪地球2");
 
-        assert!(spellings.contains(&"liulangdiqiu2".to_string()), "{spellings:?}");
+        assert!(
+            spellings.contains(&"liulangdiqiu2".to_string()),
+            "{spellings:?}"
+        );
         assert!(spellings.contains(&"lldq2".to_string()), "{spellings:?}");
     }
 

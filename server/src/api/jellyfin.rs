@@ -28,11 +28,18 @@ const SERVER_VERSION: &str = "10.9.11";
 
 fn query_value<'a>(params: &'a HashMap<String, String>, key: &str) -> Option<&'a String> {
     params.get(key).or_else(|| {
-        params.iter().find(|(name, _)| name.eq_ignore_ascii_case(key)).map(|(_, value)| value)
+        params
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(key))
+            .map(|(_, value)| value)
     })
 }
 
-fn metadata_locale(state: &SharedState, _headers: &HeaderMap, params: &HashMap<String, String>) -> &'static str {
+fn metadata_locale(
+    state: &SharedState,
+    _headers: &HeaderMap,
+    params: &HashMap<String, String>,
+) -> &'static str {
     // Jellyfin clients disagree on what they send: 小幻 renders a Chinese UI
     // while requesting these endpoints without a Chinese Accept-Language. The
     // library's own metadata language is the only answer both clients share,
@@ -43,12 +50,16 @@ fn metadata_locale(state: &SharedState, _headers: &HeaderMap, params: &HashMap<S
     crate::i18n::content_locale(crate::i18n::detect_locale(None, Some(tag)))
 }
 
-async fn localized_items(state: &SharedState, locale: &'static str) -> Result<Vec<MediaItem>, Response> {
+async fn localized_items(
+    state: &SharedState,
+    locale: &'static str,
+) -> Result<Vec<MediaItem>, Response> {
     query(&state.db, move |pool| {
         let mut items = db::list_items(&pool, None)?;
         db::localize::overlay_items(&pool, &mut items, locale)?;
         Ok(items)
-    }).await
+    })
+    .await
 }
 
 async fn localized_shows(state: &SharedState, locale: &'static str) -> Result<Vec<Show>, Response> {
@@ -56,17 +67,23 @@ async fn localized_shows(state: &SharedState, locale: &'static str) -> Result<Ve
         let mut shows = db::list_shows(&pool, None)?;
         db::localize::overlay_shows(&pool, &mut shows, locale)?;
         Ok(shows)
-    }).await
+    })
+    .await
 }
 
-async fn localized_show(state: &SharedState, id: String, locale: &'static str) -> Result<Option<crate::model::ShowDetail>, Response> {
+async fn localized_show(
+    state: &SharedState,
+    id: String,
+    locale: &'static str,
+) -> Result<Option<crate::model::ShowDetail>, Response> {
     query(&state.db, move |pool| {
         let mut detail = db::get_show(&pool, &id)?;
         if let Some(detail) = detail.as_mut() {
             db::localize::overlay_show_detail(&pool, detail, locale)?;
         }
         Ok(detail)
-    }).await
+    })
+    .await
 }
 
 /// Two rows describe one series when they sit in the same library and matched
@@ -77,8 +94,14 @@ fn same_series(a: &Show, b: &Show) -> bool {
         return false;
     }
     match (
-        a.metadata.as_ref().map(|meta| meta.tmdb_id).filter(|id| *id > 0),
-        b.metadata.as_ref().map(|meta| meta.tmdb_id).filter(|id| *id > 0),
+        a.metadata
+            .as_ref()
+            .map(|meta| meta.tmdb_id)
+            .filter(|id| *id > 0),
+        b.metadata
+            .as_ref()
+            .map(|meta| meta.tmdb_id)
+            .filter(|id| *id > 0),
     ) {
         (Some(left), Some(right)) => left == right,
         _ => a.id == b.id,
@@ -100,7 +123,10 @@ fn preferred_row(candidate: &Show, current: &Show) -> bool {
 fn dedupe_series(shows: Vec<Show>) -> Vec<Show> {
     let mut kept: Vec<Show> = Vec::new();
     for show in shows {
-        match kept.iter_mut().find(|existing| same_series(existing, &show)) {
+        match kept
+            .iter_mut()
+            .find(|existing| same_series(existing, &show))
+        {
             Some(existing) => {
                 if preferred_row(&show, existing) {
                     *existing = show;
@@ -114,13 +140,21 @@ fn dedupe_series(shows: Vec<Show>) -> Vec<Show> {
 }
 
 /// Every row that belongs to the same series as `id`, the preferred one first.
-async fn series_group(state: &SharedState, user: &User, locale: &'static str, id: &str) -> Result<Option<Vec<Show>>, Response> {
+async fn series_group(
+    state: &SharedState,
+    user: &User,
+    locale: &'static str,
+    id: &str,
+) -> Result<Option<Vec<Show>>, Response> {
     let mut shows = localized_shows(state, locale).await?;
     crate::api::visibility::keep_shows(user, &mut shows);
     let Some(target) = shows.iter().find(|show| show.id == id).cloned() else {
         return Ok(None);
     };
-    let mut group: Vec<Show> = shows.into_iter().filter(|show| same_series(show, &target)).collect();
+    let mut group: Vec<Show> = shows
+        .into_iter()
+        .filter(|show| same_series(show, &target))
+        .collect();
     group.sort_by(|a, b| {
         if a.episode_count != b.episode_count {
             b.episode_count.cmp(&a.episode_count)
@@ -135,7 +169,12 @@ async fn series_group(state: &SharedState, user: &User, locale: &'static str, id
 
 /// A series as the client must see it: every season of every row that matched
 /// the same provider show, under the id of the row holding most of it.
-async fn merged_detail(state: &SharedState, user: &User, locale: &'static str, id: &str) -> Result<Option<(crate::model::ShowDetail, Vec<Show>)>, Response> {
+async fn merged_detail(
+    state: &SharedState,
+    user: &User,
+    locale: &'static str,
+    id: &str,
+) -> Result<Option<(crate::model::ShowDetail, Vec<Show>)>, Response> {
     let Some(group) = series_group(state, user, locale, id).await? else {
         return Ok(None);
     };
@@ -148,17 +187,24 @@ async fn merged_detail(state: &SharedState, user: &User, locale: &'static str, i
             continue;
         };
         for season in other.seasons {
-            match detail.seasons.iter_mut().find(|existing| existing.number == season.number) {
+            match detail
+                .seasons
+                .iter_mut()
+                .find(|existing| existing.number == season.number)
+            {
                 Some(existing) => {
                     for episode in season.episodes {
                         if !existing.episodes.iter().any(|known| {
                             known.episode == episode.episode && known.id == episode.id
-                                || (known.episode == episode.episode && known.rel_path == episode.rel_path)
+                                || (known.episode == episode.episode
+                                    && known.rel_path == episode.rel_path)
                         }) {
                             existing.episodes.push(episode);
                         }
                     }
-                    existing.episodes.sort_by(|a, b| a.episode.cmp(&b.episode).then_with(|| a.id.cmp(&b.id)));
+                    existing
+                        .episodes
+                        .sort_by(|a, b| a.episode.cmp(&b.episode).then_with(|| a.id.cmp(&b.id)));
                     if existing.name.is_none() {
                         existing.name = season.name;
                     }
@@ -175,7 +221,11 @@ async fn merged_detail(state: &SharedState, user: &User, locale: &'static str, i
     }
     detail.seasons.sort_by_key(|season| season.number);
     detail.show = canonical;
-    detail.show.episode_count = detail.seasons.iter().map(|season| season.episodes.len() as u32).sum();
+    detail.show.episode_count = detail
+        .seasons
+        .iter()
+        .map(|season| season.episodes.len() as u32)
+        .sum();
     detail.show.season_count = detail.seasons.len() as u32;
     Ok(Some((detail, group)))
 }
@@ -201,11 +251,23 @@ pub fn routes() -> Router<SharedState> {
         .route("/Users/{user_id}/Items/Latest", get(latest))
         .route("/Users/{user_id}/Items/Resume", get(resume_items))
         .route("/Users/{user_id}/Items/Root", get(items_root))
-        .route("/Users/{user_id}/PlayedItems/{id}", post(mark_played).delete(unmark_played))
-        .route("/Users/{user_id}/FavoriteItems/{id}", post(mark_favorite).delete(unmark_favorite))
+        .route(
+            "/Users/{user_id}/PlayedItems/{id}",
+            post(mark_played).delete(unmark_played),
+        )
+        .route(
+            "/Users/{user_id}/FavoriteItems/{id}",
+            post(mark_favorite).delete(unmark_favorite),
+        )
         // Legacy spellings older Emby-shaped clients still call.
-        .route("/UserPlayedItems/{id}", post(mark_played).delete(unmark_played))
-        .route("/UserFavoriteItems/{id}", post(mark_favorite).delete(unmark_favorite))
+        .route(
+            "/UserPlayedItems/{id}",
+            post(mark_played).delete(unmark_played),
+        )
+        .route(
+            "/UserFavoriteItems/{id}",
+            post(mark_favorite).delete(unmark_favorite),
+        )
         .route("/UserItems/{id}/UserData", get(user_item_data))
         .route("/Users/{user_id}/Items/{id}", get(item_detail))
         .route("/Users/{user_id}/Items/{id}/Similar", get(catalog::similar))
@@ -236,7 +298,10 @@ pub fn routes() -> Router<SharedState> {
         .route("/Search/Hints", get(search_hints))
         .route("/Sessions", get(empty_sessions))
         .route("/Library/VirtualFolders", get(virtual_folders))
-        .route("/Notifications/{user_id}/Summary", get(notifications_summary))
+        .route(
+            "/Notifications/{user_id}/Summary",
+            get(notifications_summary),
+        )
         .route("/Shows/{id}/Seasons", get(seasons))
         .route("/Shows/{id}/Episodes", get(episodes))
         .route("/Shows/{id}/Similar", get(catalog::similar))
@@ -254,7 +319,10 @@ pub fn routes() -> Router<SharedState> {
         .route("/QuickConnect/Enabled", get(quick_connect_enabled))
         .route("/DisplayPreferences/{id}", get(display_preferences))
         .route("/Shows/NextUp", get(empty_items))
-        .route("/Shows/{id}/Episodes/{episode_id}/Similar", get(empty_items))
+        .route(
+            "/Shows/{id}/Episodes/{episode_id}/Similar",
+            get(empty_items),
+        )
 }
 
 #[derive(Deserialize, Default)]
@@ -422,8 +490,8 @@ async fn user_views(
 }
 
 async fn views_payload(state: &SharedState) -> Result<Value, Response> {
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
-        .unwrap_or_default();
+    let defs =
+        crate::services::settings::library_defs(&state.settings, &state.config).unwrap_or_default();
     let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
     let covers = query(&state.db, |pool| {
         db::art_overrides::all(&pool, db::art_overrides::LIBRARY_KIND)
@@ -474,8 +542,8 @@ async fn item_detail(
     if id.is_empty() {
         return Err(json_error(StatusCode::NOT_FOUND, "item not found"));
     }
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
-        .unwrap_or_default();
+    let defs =
+        crate::services::settings::library_defs(&state.settings, &state.config).unwrap_or_default();
     if let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) {
         let items = query(&state.db, |pool| db::list_items(&pool, None)).await?;
         let picked = query(&state.db, {
@@ -518,7 +586,14 @@ async fn item_detail(
             let locale = metadata_locale(&state, &headers, &params);
             if let Some(detail) = localized_show(&state, show_id.to_string(), locale).await? {
                 if let Some(season) = detail.seasons.iter().find(|season| season.number == number) {
-                    return Ok(Json(with_user_data(&state, &user, season_dto(&state, &detail.show, season, locale)).await?));
+                    return Ok(Json(
+                        with_user_data(
+                            &state,
+                            &user,
+                            season_dto(&state, &detail.show, season, locale),
+                        )
+                        .await?,
+                    ));
                 }
                 return Err(json_error(StatusCode::NOT_FOUND, "season not found"));
             }
@@ -526,7 +601,9 @@ async fn item_detail(
     }
     if id.starts_with("person:") {
         let locale = metadata_locale(&state, &headers, &params);
-        return Ok(Json(catalog::person_value_with_locale(&state, &user, &id, locale).await?));
+        return Ok(Json(
+            catalog::person_value_with_locale(&state, &user, &id, locale).await?,
+        ));
     }
     let locale = metadata_locale(&state, &headers, &params);
     if let Some((detail, _)) = merged_detail(&state, &user, locale, &id).await? {
@@ -592,7 +669,6 @@ async fn item_counts(
     })))
 }
 
-
 async fn notifications_summary(
     State(state): State<SharedState>,
     headers: HeaderMap,
@@ -635,7 +711,9 @@ async fn playback_progress(
     let played_percent = crate::services::settings::played_percent(&state.settings);
     let uid = user.id.clone();
     let item_id = body.item_id;
-    let duration = item.as_ref().and_then(|item| item.duration_ms.map(|ms| ms as i64));
+    let duration = item
+        .as_ref()
+        .and_then(|item| item.duration_ms.map(|ms| ms as i64));
     query(&state.db, move |pool| {
         db::save_progress(&pool, &uid, &item_id, position_ms, duration, played_percent)
     })
@@ -702,7 +780,10 @@ async fn unmark_favorite(
     let id = path.get("id").cloned().unwrap_or_default();
     crate::api::visibility::gate_item(&state, &user, &id).await?;
     let uid = user.id.clone();
-    query(&state.db, move |pool| db::remove_from_list(&pool, &uid, &id)).await?;
+    query(&state.db, move |pool| {
+        db::remove_from_list(&pool, &uid, &id)
+    })
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -737,7 +818,9 @@ async fn apply_user_data(
     .into_iter()
     .map(|entry| (entry.item_id, (entry.position_ms, entry.duration_ms)))
     .collect();
-    let folders = items.iter().any(|item| matches!(item["Type"].as_str(), Some("Series" | "Season")));
+    let folders = items
+        .iter()
+        .any(|item| matches!(item["Type"].as_str(), Some("Series" | "Season")));
     let descendants = if folders {
         let mut all = query(&state.db, |pool| db::list_items(&pool, None)).await?;
         crate::api::visibility::keep_items(user, &mut all);
@@ -772,31 +855,57 @@ async fn apply_user_data(
         }
         if matches!(item["Type"].as_str(), Some("Series" | "Season")) {
             let (show_id, season) = if item["Type"] == "Season" {
-                (item["SeriesId"].as_str().unwrap_or(""), item["IndexNumber"].as_u64())
+                (
+                    item["SeriesId"].as_str().unwrap_or(""),
+                    item["IndexNumber"].as_u64(),
+                )
             } else {
                 (id.as_str(), None)
             };
             // One series may currently live in several rows that matched the
             // same provider show: their episodes belong to the one card.
-            let members: HashSet<&str> = series.iter()
+            let members: HashSet<&str> = series
+                .iter()
                 .find(|show| show.id == show_id)
-                .map(|target| series.iter()
-                    .filter(|show| same_series(show, target))
-                    .map(|show| show.id.as_str())
-                    .collect())
+                .map(|target| {
+                    series
+                        .iter()
+                        .filter(|show| same_series(show, target))
+                        .map(|show| show.id.as_str())
+                        .collect()
+                })
                 .unwrap_or_else(|| std::iter::once(show_id).collect());
-            let episodes: Vec<_> = descendants.iter().filter(|episode| {
-                episode.show_id.as_deref().is_some_and(|id| members.contains(id))
-                    && season.is_none_or(|number| episode.season.map(u64::from) == Some(number))
-            }).collect();
+            let episodes: Vec<_> = descendants
+                .iter()
+                .filter(|episode| {
+                    episode
+                        .show_id
+                        .as_deref()
+                        .is_some_and(|id| members.contains(id))
+                        && season.is_none_or(|number| episode.season.map(u64::from) == Some(number))
+                })
+                .collect();
             let count = episodes.len();
-            let seen = episodes.iter().filter(|episode| watched.contains(&episode.id)).count();
+            let seen = episodes
+                .iter()
+                .filter(|episode| watched.contains(&episode.id))
+                .count();
             user_data["Played"] = json!(count > 0 && seen == count);
             user_data["UnplayedItemCount"] = json!(count - seen);
-            user_data["PlayedPercentage"] = json!(if count == 0 { 0.0 } else { seen as f64 * 100.0 / count as f64 });
+            user_data["PlayedPercentage"] = json!(if count == 0 {
+                0.0
+            } else {
+                seen as f64 * 100.0 / count as f64
+            });
             item["RecursiveItemCount"] = json!(count);
-            item["ChildCount"] = json!(if season.is_some() { count } else {
-                episodes.iter().filter_map(|episode| episode.season).collect::<HashSet<_>>().len()
+            item["ChildCount"] = json!(if season.is_some() {
+                count
+            } else {
+                episodes
+                    .iter()
+                    .filter_map(|episode| episode.season)
+                    .collect::<HashSet<_>>()
+                    .len()
             });
         }
         item["UserData"] = user_data;
@@ -804,14 +913,12 @@ async fn apply_user_data(
     Ok(())
 }
 
-async fn with_user_data(
-    state: &SharedState,
-    user: &User,
-    item: Value,
-) -> Result<Value, Response> {
+async fn with_user_data(state: &SharedState, user: &User, item: Value) -> Result<Value, Response> {
     let mut items = vec![item];
     apply_user_data(state, user, &mut items).await?;
-    items.pop().ok_or_else(|| json_error(StatusCode::NOT_FOUND, "item not found"))
+    items
+        .pop()
+        .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "item not found"))
 }
 
 async fn resume_items(
@@ -826,13 +933,23 @@ async fn resume_items(
     let mut shows = localized_shows(&state, locale).await?;
     crate::api::visibility::keep_shows(&user, &mut shows);
     let canonical_shows = dedupe_series(shows.clone());
-    let show_for: HashMap<String, &Show> = shows.iter().map(|show| {
-        let id = canonical_shows.iter()
-            .find(|other| same_series(other, show))
-            .map(|other| other.id.clone())
-            .unwrap_or_else(|| show.id.clone());
-        (show.id.clone(), canonical_shows.iter().find(|other| other.id == id).unwrap_or(show))
-    }).collect();
+    let show_for: HashMap<String, &Show> = shows
+        .iter()
+        .map(|show| {
+            let id = canonical_shows
+                .iter()
+                .find(|other| same_series(other, show))
+                .map(|other| other.id.clone())
+                .unwrap_or_else(|| show.id.clone());
+            (
+                show.id.clone(),
+                canonical_shows
+                    .iter()
+                    .find(|other| other.id == id)
+                    .unwrap_or(show),
+            )
+        })
+        .collect();
     let uid = user.id.clone();
     let rows = query(&state.db, move |pool| {
         db::continue_watching(&pool, &uid, played_percent)
@@ -841,12 +958,21 @@ async fn resume_items(
     let mut items: Vec<Value> = rows
         .iter()
         .filter(|row| match row.item.show_id.as_deref() {
-            Some(show_id) => show_for.get(show_id).is_some_and(|show| user.sees_library(&show.library)),
+            Some(show_id) => show_for
+                .get(show_id)
+                .is_some_and(|show| user.sees_library(&show.library)),
             None => user.sees_library(&row.item.library),
         })
-        .map(|row| match row.item.show_id.as_deref().and_then(|id| show_for.get(id).copied()) {
-            Some(show) => episode_detail_dto(&state, &headers, &row.item, Some(show), &access),
-            None => movie_dto(&state, &row.item),
+        .map(|row| {
+            match row
+                .item
+                .show_id
+                .as_deref()
+                .and_then(|id| show_for.get(id).copied())
+            {
+                Some(show) => episode_detail_dto(&state, &headers, &row.item, Some(show), &access),
+                None => movie_dto(&state, &row.item),
+            }
         })
         .collect();
     apply_user_data(&state, &user, &mut items).await?;
@@ -894,18 +1020,20 @@ fn backdrop_urls(meta: Option<&crate::model::Metadata>) -> Vec<String> {
     urls
 }
 
-fn tagged_backdrop<'a>(
-    meta: &'a crate::model::Metadata,
-    tag: &str,
-) -> Option<&'a String> {
-    meta.backdrop_url.iter()
+fn tagged_backdrop<'a>(meta: &'a crate::model::Metadata, tag: &str) -> Option<&'a String> {
+    meta.backdrop_url
+        .iter()
         .chain(meta.backdrops.iter())
         .find(|url| library_image_tag_value(url) == tag)
 }
 
 /// Jellyfin expects one tag per backdrop, index-aligned to the images it serves.
 fn backdrop_tags(urls: &[String]) -> Value {
-    Value::Array(urls.iter().map(|url| json!(library_image_tag_value(url))).collect())
+    Value::Array(
+        urls.iter()
+            .map(|url| json!(library_image_tag_value(url)))
+            .collect(),
+    )
 }
 
 /// The backdrop at `index` of an item's gallery: 0 is the primary art the DTO
@@ -915,7 +1043,11 @@ fn backdrop_tags(urls: &[String]) -> Value {
 fn backdrop_at(meta: &crate::model::Metadata, index: usize) -> Option<String> {
     match index {
         0 => meta.backdrop_url.clone(),
-        n => meta.backdrops.get(n - 1).cloned().or_else(|| meta.backdrop_url.clone()),
+        n => meta
+            .backdrops
+            .get(n - 1)
+            .cloned()
+            .or_else(|| meta.backdrop_url.clone()),
     }
 }
 
@@ -968,7 +1100,12 @@ fn series_dto(state: &SharedState, show: &Show) -> Value {
 }
 
 fn studios_of(meta: &crate::model::Metadata) -> Value {
-    Value::Array(meta.studios.iter().map(|name| json!({ "Name": name, "Id": name })).collect())
+    Value::Array(
+        meta.studios
+            .iter()
+            .map(|name| json!({ "Name": name, "Id": name }))
+            .collect(),
+    )
 }
 
 fn provider_ids(meta: Option<&crate::model::Metadata>) -> Value {
@@ -983,26 +1120,33 @@ fn provider_ids(meta: Option<&crate::model::Metadata>) -> Value {
     Value::Object(ids)
 }
 
-
 /// TMDB's zh-Hans catalog leaves a few combined genres in English; the card
 /// row should read as one language.
 fn localized_genres(genres: &[String]) -> Vec<String> {
-    genres.iter().map(|genre| match genre.as_str() {
-        "Sci-Fi & Fantasy" => "科幻奇幻",
-        "Action & Adventure" => "动作冒险",
-        "War & Politics" => "战争与政治",
-        "Animation" => "动画",
-        "Comedy" => "喜剧",
-        "Drama" => "剧情",
-        "Mystery" => "悬疑",
-        "Romance" => "爱情",
-        other => other,
-    }).map(str::to_string).collect()
+    genres
+        .iter()
+        .map(|genre| match genre.as_str() {
+            "Sci-Fi & Fantasy" => "科幻奇幻",
+            "Action & Adventure" => "动作冒险",
+            "War & Politics" => "战争与政治",
+            "Animation" => "动画",
+            "Comedy" => "喜剧",
+            "Drama" => "剧情",
+            "Mystery" => "悬疑",
+            "Romance" => "爱情",
+            other => other,
+        })
+        .map(str::to_string)
+        .collect()
 }
 
 fn reduced_ratio(width: u32, height: u32) -> Option<String> {
     fn gcd(a: u32, b: u32) -> u32 {
-        if b == 0 { a } else { gcd(b, a % b) }
+        if b == 0 {
+            a
+        } else {
+            gcd(b, a % b)
+        }
     }
     (width > 0 && height > 0).then(|| {
         let divisor = gcd(width, height).max(1);
@@ -1014,8 +1158,12 @@ fn media_streams(item: &MediaItem) -> Value {
     let mut streams = Vec::new();
     if let Some(video) = item.video.as_ref() {
         let technical = video.technical.as_ref();
-        let aspect = technical.and_then(|t| t.aspect_ratio.clone())
-            .or_else(|| video.width.zip(video.height).and_then(|(w, h)| reduced_ratio(w, h)));
+        let aspect = technical.and_then(|t| t.aspect_ratio.clone()).or_else(|| {
+            video
+                .width
+                .zip(video.height)
+                .and_then(|(w, h)| reduced_ratio(w, h))
+        });
         streams.push(json!({
             "Type": "Video",
             "Index": technical.and_then(|t| t.stream_index).unwrap_or(0),
@@ -1039,7 +1187,10 @@ fn media_streams(item: &MediaItem) -> Value {
     // A file flag wins. Without one, the client should not be invited to start
     // with a commentary/Dolby track when a standard AAC mix is present: Jellyfin
     // clients pick the compatible stereo mix, so say which one that is.
-    let default_audio = item.audio_tracks.iter().position(|audio| audio.default)
+    let default_audio = item
+        .audio_tracks
+        .iter()
+        .position(|audio| audio.default)
         .or_else(|| {
             let standard = |audio: &crate::model::AudioStream| {
                 audio.codec.eq_ignore_ascii_case("aac")
@@ -1047,8 +1198,14 @@ fn media_streams(item: &MediaItem) -> Value {
                         title.contains("标准") || title.to_lowercase().contains("standard")
                     })
             };
-            item.audio_tracks.iter().position(standard)
-                .or_else(|| item.audio_tracks.iter().position(|audio| audio.codec.eq_ignore_ascii_case("aac")))
+            item.audio_tracks
+                .iter()
+                .position(standard)
+                .or_else(|| {
+                    item.audio_tracks
+                        .iter()
+                        .position(|audio| audio.codec.eq_ignore_ascii_case("aac"))
+                })
                 .or((!item.audio_tracks.is_empty()).then_some(0))
         });
     for (i, audio) in item.audio_tracks.iter().enumerate() {
@@ -1082,30 +1239,30 @@ fn media_streams(item: &MediaItem) -> Value {
 }
 
 fn source_size(item: &MediaItem) -> Option<u64> {
-    item.files.iter()
+    item.files
+        .iter()
         .find(|file| item.default_file_id.as_deref() == Some(file.id.as_str()))
         .or_else(|| item.files.first())
         .and_then(|file| file.size)
 }
 
-fn media_source(
-    state: &SharedState,
-    headers: &HeaderMap,
-    item: &MediaItem,
-    access: &str,
-) -> Value {
+fn media_source(state: &SharedState, headers: &HeaderMap, item: &MediaItem, access: &str) -> Value {
     let ticket = crate::services::media_ticket::for_access_token(&state.media_ticket_key, access);
     // Never put the drive's signed URL in a DTO: media info would show the
     // module/115 address. The server stream is the same bytes and the module
     // sign is logged when the redirect is served.
     let path = format!("/api/items/{}/stream?t={ticket}", item.id);
-    let name = item.rel_path.as_deref()
+    let name = item
+        .rel_path
+        .as_deref()
         .and_then(|path| std::path::Path::new(path).file_stem())
         .and_then(|stem| stem.to_str())
         .map(str::to_string)
         .unwrap_or_else(|| item.title.clone());
     let size = source_size(item);
-    let bitrate = size.zip(item.duration_ms).filter(|(_, ms)| *ms > 0)
+    let bitrate = size
+        .zip(item.duration_ms)
+        .filter(|(_, ms)| *ms > 0)
         .map(|(bytes, ms)| bytes.saturating_mul(8000) / ms);
     json!({
         "Id": item.id,
@@ -1185,9 +1342,24 @@ fn episode_detail_dto(
 ) -> Value {
     let metadata = item.metadata.as_ref();
     let show_metadata = show.and_then(|show| show.metadata.as_ref());
-    let poster = metadata.and_then(|meta| meta.backdrop_url.clone().or_else(|| meta.poster_url.clone()))
-        .or_else(|| item.metadata.as_ref().and_then(|meta| meta.poster_url.clone()))
-        .or_else(|| show_metadata.and_then(|meta| meta.backdrop_url.clone().or_else(|| meta.poster_url.clone())));
+    let poster = metadata
+        .and_then(|meta| {
+            meta.backdrop_url
+                .clone()
+                .or_else(|| meta.poster_url.clone())
+        })
+        .or_else(|| {
+            item.metadata
+                .as_ref()
+                .and_then(|meta| meta.poster_url.clone())
+        })
+        .or_else(|| {
+            show_metadata.and_then(|meta| {
+                meta.backdrop_url
+                    .clone()
+                    .or_else(|| meta.poster_url.clone())
+            })
+        });
     let fallback_name = match (&item.show_title, item.season, item.episode) {
         (Some(show), Some(season), Some(episode)) => {
             format!("{show} S{season:02}E{episode:02}")
@@ -1195,7 +1367,9 @@ fn episode_detail_dto(
         (_, Some(season), Some(episode)) => format!("S{season:02}E{episode:02}"),
         _ => format!("Episode {}", item.episode.unwrap_or(0)),
     };
-    let name = item.episode_title.clone()
+    let name = item
+        .episode_title
+        .clone()
         .or_else(|| metadata.and_then(|meta| meta.title.clone()))
         .unwrap_or(fallback_name);
     json!({
@@ -1253,8 +1427,8 @@ async fn items(
         .get("StartIndex")
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(0);
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
-        .unwrap_or_default();
+    let defs =
+        crate::services::settings::library_defs(&state.settings, &state.config).unwrap_or_default();
     let wanted = defs
         .iter()
         .find(|def| def.id == parent || def.name == parent);
@@ -1264,7 +1438,16 @@ async fn items(
     if wanted.is_none() && !parent.is_empty() {
         if let Some((show_id, number)) = parent.split_once(":s") {
             if let Ok(number) = number.parse::<u32>() {
-                return episodes_payload(&state, &user, &headers, &params, &access, show_id.to_string(), Some(number)).await;
+                return episodes_payload(
+                    &state,
+                    &user,
+                    &headers,
+                    &params,
+                    &access,
+                    show_id.to_string(),
+                    Some(number),
+                )
+                .await;
             }
         }
         let wanted_show = parent.clone();
@@ -1272,7 +1455,13 @@ async fn items(
             .await?
             .is_some()
         {
-            return seasons_payload(&state, &user, parent.clone(), metadata_locale(&state, &headers, &params)).await;
+            return seasons_payload(
+                &state,
+                &user,
+                parent.clone(),
+                metadata_locale(&state, &headers, &params),
+            )
+            .await;
         }
     }
     // A person id browses everything that person is credited in.
@@ -1339,17 +1528,32 @@ async fn items(
     crate::api::visibility::keep_shows(&user, &mut all_shows);
     let canonical_shows = dedupe_series(all_shows.clone());
     let canonical: Vec<&Show> = canonical_shows.iter().collect();
-    let canonical_of: HashMap<String, String> = all_shows.iter().map(|show| {
-        let id = canonical_shows.iter()
-            .find(|other| same_series(other, show))
-            .map(|other| other.id.clone())
-            .unwrap_or_else(|| show.id.clone());
-        (show.id.clone(), id)
-    }).collect();
-    let show_map: HashMap<String, &Show> = all_shows.iter()
+    let canonical_of: HashMap<String, String> = all_shows
+        .iter()
         .map(|show| {
-            let id = canonical_of.get(&show.id).cloned().unwrap_or_else(|| show.id.clone());
-            (show.id.clone(), canonical.iter().find(|other| other.id == id).copied().unwrap_or(show))
+            let id = canonical_shows
+                .iter()
+                .find(|other| same_series(other, show))
+                .map(|other| other.id.clone())
+                .unwrap_or_else(|| show.id.clone());
+            (show.id.clone(), id)
+        })
+        .collect();
+    let show_map: HashMap<String, &Show> = all_shows
+        .iter()
+        .map(|show| {
+            let id = canonical_of
+                .get(&show.id)
+                .cloned()
+                .unwrap_or_else(|| show.id.clone());
+            (
+                show.id.clone(),
+                canonical
+                    .iter()
+                    .find(|other| other.id == id)
+                    .copied()
+                    .unwrap_or(show),
+            )
         })
         .collect();
     let person_params = person_parent.as_ref().map(|person| {
@@ -1370,12 +1574,20 @@ async fn items(
                 continue;
             }
             if !matches_genres(item.metadata.as_ref())
-                || !catalog::matches_metadata(item.metadata.as_ref(), item.year, effective) {
+                || !catalog::matches_metadata(item.metadata.as_ref(), item.year, effective)
+            {
                 continue;
             }
             let text = item.title.to_lowercase();
-            let original = item.metadata.as_ref().and_then(|m| m.title.as_ref()).map(|t| t.to_lowercase());
-            if !search.is_empty() && !text.contains(&search) && !original.is_some_and(|t| t.contains(&search)) {
+            let original = item
+                .metadata
+                .as_ref()
+                .and_then(|m| m.title.as_ref())
+                .map(|t| t.to_lowercase());
+            if !search.is_empty()
+                && !text.contains(&search)
+                && !original.is_some_and(|t| t.contains(&search))
+            {
                 continue;
             }
             out.push(movie_dto(&state, item));
@@ -1390,12 +1602,20 @@ async fn items(
                 continue;
             }
             if !matches_genres(show.metadata.as_ref())
-                || !catalog::matches_metadata(show.metadata.as_ref(), show.year, effective) {
+                || !catalog::matches_metadata(show.metadata.as_ref(), show.year, effective)
+            {
                 continue;
             }
             let text = show.title.to_lowercase();
-            let original = show.metadata.as_ref().and_then(|m| m.title.as_ref()).map(|t| t.to_lowercase());
-            if !search.is_empty() && !text.contains(&search) && !original.is_some_and(|t| t.contains(&search)) {
+            let original = show
+                .metadata
+                .as_ref()
+                .and_then(|m| m.title.as_ref())
+                .map(|t| t.to_lowercase());
+            if !search.is_empty()
+                && !text.contains(&search)
+                && !original.is_some_and(|t| t.contains(&search))
+            {
                 continue;
             }
             out.push(series_dto(&state, show));
@@ -1412,14 +1632,33 @@ async fn items(
             if ids.as_ref().is_some_and(|ids| !ids.contains(&item.id)) {
                 continue;
             }
-            let show = item.show_id.as_deref().and_then(|id| show_map.get(id).copied());
+            let show = item
+                .show_id
+                .as_deref()
+                .and_then(|id| show_map.get(id).copied());
             if !matches_genres(show.and_then(|show| show.metadata.as_ref()))
-                || !catalog::matches_metadata(show.and_then(|show| show.metadata.as_ref()), item.year, effective) {
+                || !catalog::matches_metadata(
+                    show.and_then(|show| show.metadata.as_ref()),
+                    item.year,
+                    effective,
+                )
+            {
                 continue;
             }
-            let text = item.episode_title.as_deref().unwrap_or(&item.title).to_lowercase();
-            let original = item.metadata.as_ref().and_then(|m| m.title.as_ref()).map(|t| t.to_lowercase());
-            if !search.is_empty() && !text.contains(&search) && !original.is_some_and(|t| t.contains(&search)) {
+            let text = item
+                .episode_title
+                .as_deref()
+                .unwrap_or(&item.title)
+                .to_lowercase();
+            let original = item
+                .metadata
+                .as_ref()
+                .and_then(|m| m.title.as_ref())
+                .map(|t| t.to_lowercase());
+            if !search.is_empty()
+                && !text.contains(&search)
+                && !original.is_some_and(|t| t.contains(&search))
+            {
                 continue;
             }
             out.push(episode_detail_dto(&state, &headers, item, show, &access));
@@ -1436,7 +1675,10 @@ async fn items(
                         .to_string(),
                     "productionyear" => format!(
                         "{:010}",
-                        value.get("ProductionYear").and_then(Value::as_i64).unwrap_or(0)
+                        value
+                            .get("ProductionYear")
+                            .and_then(Value::as_i64)
+                            .unwrap_or(0)
                     ),
                     "communityrating" => format!(
                         "{:012.4}",
@@ -1447,7 +1689,10 @@ async fn items(
                     ),
                     "runtime" => format!(
                         "{:014}",
-                        value.get("RunTimeTicks").and_then(Value::as_i64).unwrap_or(0)
+                        value
+                            .get("RunTimeTicks")
+                            .and_then(Value::as_i64)
+                            .unwrap_or(0)
                     ),
                     _ => value
                         .get("SortName")
@@ -1489,8 +1734,8 @@ async fn latest(
 ) -> Result<Json<Value>, Response> {
     let (user, access) = user_of(&state, &headers, &params).await?;
     let parent = params.get("ParentId").cloned().unwrap_or_default();
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
-        .unwrap_or_default();
+    let defs =
+        crate::services::settings::library_defs(&state.settings, &state.config).unwrap_or_default();
     let wanted = defs
         .iter()
         .find(|def| def.id == parent || def.name == parent);
@@ -1502,12 +1747,18 @@ async fn latest(
     let mut all = localized_items(&state, locale).await?;
     crate::api::visibility::keep_items(&user, &mut all);
     let uid = user.id.clone();
-    let watched: HashSet<String> = query(&state.db, move |pool| db::list_watched(&pool, &uid)).await?
-        .into_iter().collect();
-    if let Some(played) = query_value(&params, "IsPlayed").and_then(|value| value.parse::<bool>().ok()) {
+    let watched: HashSet<String> = query(&state.db, move |pool| db::list_watched(&pool, &uid))
+        .await?
+        .into_iter()
+        .collect();
+    if let Some(played) =
+        query_value(&params, "IsPlayed").and_then(|value| value.parse::<bool>().ok())
+    {
         if tv {
             all.retain(|item| {
-                item.show_id.as_ref().is_some_and(|_| watched.contains(&item.id) == played)
+                item.show_id
+                    .as_ref()
+                    .is_some_and(|_| watched.contains(&item.id) == played)
             });
         } else {
             all.retain(|item| watched.contains(&item.id) == played);
@@ -1516,36 +1767,70 @@ async fn latest(
     if let Some(def) = wanted {
         all.retain(|item| item.library == def.id || item.library == def.name);
     }
-    let include = query_value(&params, "IncludeItemTypes").map(String::as_str).unwrap_or("");
+    let include = query_value(&params, "IncludeItemTypes")
+        .map(String::as_str)
+        .unwrap_or("");
     all.retain(|item| {
-        let kind = if item.kind == Kind::Episode { "Episode" } else { "Movie" };
-        let included = include.is_empty() || include.split(',').any(|wanted| wanted.eq_ignore_ascii_case(kind));
-        included && match (tv, &item.kind) {
-            (true, Kind::Episode) => item.show_id.is_some(),
-            (true, _) => false,
-            (false, Kind::Episode) => wanted.is_none() && item.show_id.is_some(),
-            (false, _) => item.show_id.is_none(),
-        }
+        let kind = if item.kind == Kind::Episode {
+            "Episode"
+        } else {
+            "Movie"
+        };
+        let included = include.is_empty()
+            || include
+                .split(',')
+                .any(|wanted| wanted.eq_ignore_ascii_case(kind));
+        included
+            && match (tv, &item.kind) {
+                (true, Kind::Episode) => item.show_id.is_some(),
+                (true, _) => false,
+                (false, Kind::Episode) => wanted.is_none() && item.show_id.is_some(),
+                (false, _) => item.show_id.is_none(),
+            }
     });
-    all.sort_by(|a, b| b.added_at.cmp(&a.added_at).then_with(|| b.title.cmp(&a.title)).then_with(|| a.id.cmp(&b.id)));
+    all.sort_by(|a, b| {
+        b.added_at
+            .cmp(&a.added_at)
+            .then_with(|| b.title.cmp(&a.title))
+            .then_with(|| a.id.cmp(&b.id))
+    });
     let mut shows = localized_shows(&state, locale).await?;
     crate::api::visibility::keep_shows(&user, &mut shows);
     let canonical_shows = dedupe_series(shows.clone());
-    let show_for: HashMap<String, &Show> = shows.iter().map(|show| {
-        let id = canonical_shows.iter()
-            .find(|other| same_series(other, show))
-            .map(|other| other.id.clone())
-            .unwrap_or_else(|| show.id.clone());
-        (show.id.clone(), canonical_shows.iter().find(|other| other.id == id).unwrap_or(show))
-    }).collect();
-    let take = query_value(&params, "Limit").and_then(|value| value.parse::<usize>().ok()).unwrap_or(20);
-    let skip = query_value(&params, "StartIndex").and_then(|value| value.parse::<usize>().ok()).unwrap_or(0);
-    let grouped = !query_value(&params, "GroupItems").is_some_and(|value| value.eq_ignore_ascii_case("false"));
+    let show_for: HashMap<String, &Show> = shows
+        .iter()
+        .map(|show| {
+            let id = canonical_shows
+                .iter()
+                .find(|other| same_series(other, show))
+                .map(|other| other.id.clone())
+                .unwrap_or_else(|| show.id.clone());
+            (
+                show.id.clone(),
+                canonical_shows
+                    .iter()
+                    .find(|other| other.id == id)
+                    .unwrap_or(show),
+            )
+        })
+        .collect();
+    let take = query_value(&params, "Limit")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(20);
+    let skip = query_value(&params, "StartIndex")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    let grouped = !query_value(&params, "GroupItems")
+        .is_some_and(|value| value.eq_ignore_ascii_case("false"));
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for item in &all {
         if item.kind == Kind::Episode {
-            let show = item.show_id.as_deref().and_then(|id| show_for.get(id)).copied();
+            let show = item
+                .show_id
+                .as_deref()
+                .and_then(|id| show_for.get(id))
+                .copied();
             if grouped {
                 if let Some(show) = show {
                     if seen.insert(show.id.clone()) {
@@ -1571,13 +1856,28 @@ async fn seasons(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Response> {
     let (user, _) = user_of(&state, &headers, &params).await?;
-    seasons_payload(&state, &user, id, metadata_locale(&state, &headers, &params)).await
+    seasons_payload(
+        &state,
+        &user,
+        id,
+        metadata_locale(&state, &headers, &params),
+    )
+    .await
 }
 
-fn season_dto(state: &SharedState, show: &Show, season: &crate::model::Season, locale: &str) -> Value {
-    let poster = season.poster_url.as_ref()
+fn season_dto(
+    state: &SharedState,
+    show: &Show,
+    season: &crate::model::Season,
+    locale: &str,
+) -> Value {
+    let poster = season
+        .poster_url
+        .as_ref()
         .or_else(|| show.metadata.as_ref().and_then(|m| m.poster_url.as_ref()));
-    let year = season.air_date.as_deref()
+    let year = season
+        .air_date
+        .as_deref()
         .and_then(|date| date.get(..4))
         .and_then(|year| year.parse::<u32>().ok())
         .or(show.year);
@@ -1600,13 +1900,25 @@ fn season_dto(state: &SharedState, show: &Show, season: &crate::model::Season, l
     })
 }
 
-async fn seasons_payload(state: &SharedState, user: &User, id: String, locale: &'static str) -> Result<Json<Value>, Response> {
+async fn seasons_payload(
+    state: &SharedState,
+    user: &User,
+    id: String,
+    locale: &'static str,
+) -> Result<Json<Value>, Response> {
     crate::api::visibility::gate_show(state, user, &id).await?;
-    let (detail, _) = merged_detail(state, user, locale, &id).await?
+    let (detail, _) = merged_detail(state, user, locale, &id)
+        .await?
         .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "show not found"))?;
-    let mut items: Vec<Value> = detail.seasons.iter().map(|season| season_dto(state, &detail.show, season, locale)).collect();
+    let mut items: Vec<Value> = detail
+        .seasons
+        .iter()
+        .map(|season| season_dto(state, &detail.show, season, locale))
+        .collect();
     apply_user_data(state, user, &mut items).await?;
-    Ok(Json(json!({ "Items": items, "TotalRecordCount": items.len() })))
+    Ok(Json(
+        json!({ "Items": items, "TotalRecordCount": items.len() }),
+    ))
 }
 
 async fn episodes(
@@ -1623,7 +1935,11 @@ async fn episodes(
         if show != id {
             return Err(json_error(StatusCode::NOT_FOUND, "season not found"));
         }
-        Some(number.parse::<u32>().map_err(|_| json_error(StatusCode::BAD_REQUEST, "invalid season"))?)
+        Some(
+            number
+                .parse::<u32>()
+                .map_err(|_| json_error(StatusCode::BAD_REQUEST, "invalid season"))?,
+        )
     } else {
         query_value(&params, "Season").and_then(|value| value.parse::<u32>().ok())
     };
@@ -1640,28 +1956,42 @@ async fn episodes_payload(
     wanted_season: Option<u32>,
 ) -> Result<Json<Value>, Response> {
     crate::api::visibility::gate_show(state, user, &id).await?;
-    let (detail, _) = merged_detail(state, user, metadata_locale(state, headers, params), &id).await?
+    let (detail, _) = merged_detail(state, user, metadata_locale(state, headers, params), &id)
+        .await?
         .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "show not found"))?;
-    let mut out: Vec<Value> = detail.seasons.iter()
+    let mut out: Vec<Value> = detail
+        .seasons
+        .iter()
         .filter(|season| wanted_season.is_none_or(|wanted| wanted == season.number))
         .flat_map(|season| season.episodes.iter())
         .map(|episode| episode_detail_dto(state, headers, episode, Some(&detail.show), access))
         .collect();
     apply_user_data(state, user, &mut out).await?;
     filter_user_data(&mut out, params);
-    if query_value(params, "SortOrder").is_some_and(|value| value.eq_ignore_ascii_case("Descending")) {
+    if query_value(params, "SortOrder")
+        .is_some_and(|value| value.eq_ignore_ascii_case("Descending"))
+    {
         out.reverse();
     }
     if let Some(start) = query_value(params, "StartItemId") {
-        if let Some(index) = out.iter().position(|item| item["Id"].as_str() == Some(start)) {
+        if let Some(index) = out
+            .iter()
+            .position(|item| item["Id"].as_str() == Some(start))
+        {
             out.drain(..index);
         }
     }
     let total = out.len();
-    let skip = query_value(params, "StartIndex").and_then(|value| value.parse::<usize>().ok()).unwrap_or(0);
-    let limit = query_value(params, "Limit").and_then(|value| value.parse::<usize>().ok()).unwrap_or(total);
+    let skip = query_value(params, "StartIndex")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    let limit = query_value(params, "Limit")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(total);
     let out: Vec<Value> = out.into_iter().skip(skip).take(limit).collect();
-    Ok(Json(json!({ "Items": out, "TotalRecordCount": total, "StartIndex": skip })))
+    Ok(Json(
+        json!({ "Items": out, "TotalRecordCount": total, "StartIndex": skip }),
+    ))
 }
 
 fn filter_user_data(items: &mut Vec<Value>, params: &HashMap<String, String>) {
@@ -1821,16 +2151,22 @@ async fn image_art(
         // Extra slides are provider art: an operator override only ever
         // replaces the first backdrop, so later indices bypass it.
         let own = if backdrop && tag.is_some() {
-            item.metadata.as_ref().and_then(|meta| tagged_backdrop(meta, tag.unwrap()).cloned())
+            item.metadata
+                .as_ref()
+                .and_then(|meta| tagged_backdrop(meta, tag.unwrap()).cloned())
         } else if backdrop && index > 0 {
-            item.metadata.as_ref().and_then(|meta| backdrop_at(meta, index))
+            item.metadata
+                .as_ref()
+                .and_then(|meta| backdrop_at(meta, index))
         } else {
             overrides.get(art_key).cloned().or_else(|| {
                 item.metadata.as_ref().and_then(|meta| {
                     // An episode's own still travels in `backdropUrl`; Primary must
                     // use it too, or every card in a season shows the series art.
                     if item.show_id.is_some() {
-                        meta.backdrop_url.clone().or_else(|| meta.poster_url.clone())
+                        meta.backdrop_url
+                            .clone()
+                            .or_else(|| meta.poster_url.clone())
                     } else if backdrop {
                         meta.backdrop_url.clone()
                     } else {
@@ -1844,7 +2180,8 @@ async fn image_art(
             // An episode carries no art of its own; its series' art stands in.
             None => match item.show_id.clone() {
                 Some(show_id) => {
-                    let detail = query(&state.db, move |pool| db::get_show(&pool, &show_id)).await?;
+                    let detail =
+                        query(&state.db, move |pool| db::get_show(&pool, &show_id)).await?;
                     match detail {
                         Some(detail) => {
                             let show_overrides = query(&state.db, {
@@ -1888,8 +2225,12 @@ async fn image_art(
         };
         if backdrop {
             if let Some(tag) = tag {
-                if let Some(url) = detail.show.metadata.as_ref()
-                    .and_then(|meta| tagged_backdrop(meta, tag).cloned()) {
+                if let Some(url) = detail
+                    .show
+                    .metadata
+                    .as_ref()
+                    .and_then(|meta| tagged_backdrop(meta, tag).cloned())
+                {
                     return redirect(&client_url(headers, &url));
                 }
             }
@@ -1905,17 +2246,24 @@ async fn image_art(
         })
     } else if let Some((detail, season)) = {
         // A season id ("<show>:s1") prefers its own poster, else the series'.
-        let parsed = id.split_once(":s").and_then(|(show_id, number)| {
-            Some((show_id.to_string(), number.parse::<u32>().ok()?))
-        });
+        let parsed = id
+            .split_once(":s")
+            .and_then(|(show_id, number)| Some((show_id.to_string(), number.parse::<u32>().ok()?)));
         match parsed {
-            Some((show_id, number)) => query(&state.db, move |pool| {
-                let detail = db::get_show(&pool, &show_id)?;
-                let season = detail.as_ref().and_then(|detail| {
-                    detail.seasons.iter().find(|season| season.number == number).cloned()
-                });
-                Ok(detail.map(|detail| (detail, season)))
-            }).await?,
+            Some((show_id, number)) => {
+                query(&state.db, move |pool| {
+                    let detail = db::get_show(&pool, &show_id)?;
+                    let season = detail.as_ref().and_then(|detail| {
+                        detail
+                            .seasons
+                            .iter()
+                            .find(|season| season.number == number)
+                            .cloned()
+                    });
+                    Ok(detail.map(|detail| (detail, season)))
+                })
+                .await?
+            }
             None => None,
         }
     } {
@@ -1941,7 +2289,7 @@ async fn image_art(
         // A library has no row of its own; an operator-picked cover wins,
         // otherwise the first title's art is what a CollectionFolder shows.
         let defs = crate::services::settings::library_defs(&state.settings, &state.config)
-        .unwrap_or_default();
+            .unwrap_or_default();
         if let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) {
             let picked = query(&state.db, {
                 let id = def.id.clone();
@@ -2135,30 +2483,49 @@ async fn next_up(
     let uid = user.id.clone();
     let progress = query(&state.db, move |pool| db::list_progress(&pool, &uid)).await?;
     let uid = user.id.clone();
-    let watched: HashSet<String> = query(&state.db, move |pool| db::list_watched(&pool, &uid)).await?
-        .into_iter().collect();
+    let watched: HashSet<String> = query(&state.db, move |pool| db::list_watched(&pool, &uid))
+        .await?
+        .into_iter()
+        .collect();
     let canonical = dedupe_series(shows.clone());
-    let canonical_of: HashMap<String, String> = shows.iter().map(|show| {
-        let id = canonical.iter()
-            .find(|other| same_series(other, show))
-            .map(|other| other.id.clone())
-            .unwrap_or_else(|| show.id.clone());
-        (show.id.clone(), id)
-    }).collect();
+    let canonical_of: HashMap<String, String> = shows
+        .iter()
+        .map(|show| {
+            let id = canonical
+                .iter()
+                .find(|other| same_series(other, show))
+                .map(|other| other.id.clone())
+                .unwrap_or_else(|| show.id.clone());
+            (show.id.clone(), id)
+        })
+        .collect();
     let series_filter = query_value(&params, "SeriesId").cloned();
-    let started: HashSet<String> = progress.iter().filter(|entry| entry.position_ms > 0)
-        .chain(progress.iter().filter(|entry| entry.position_ms == 0 && watched.contains(&entry.item_id)))
+    let started: HashSet<String> = progress
+        .iter()
+        .filter(|entry| entry.position_ms > 0)
+        .chain(
+            progress
+                .iter()
+                .filter(|entry| entry.position_ms == 0 && watched.contains(&entry.item_id)),
+        )
         .filter_map(|entry| episodes.iter().find(|item| item.id == entry.item_id))
         .filter_map(|item| item.show_id.as_deref())
         .filter_map(|id| canonical_of.get(id).cloned())
-        .chain(watched.iter().filter_map(|id| episodes.iter().find(|item| &item.id == id))
-            .filter_map(|item| item.show_id.as_deref())
-            .filter_map(|id| canonical_of.get(id).cloned()))
+        .chain(
+            watched
+                .iter()
+                .filter_map(|id| episodes.iter().find(|item| &item.id == id))
+                .filter_map(|item| item.show_id.as_deref())
+                .filter_map(|id| canonical_of.get(id).cloned()),
+        )
         .collect();
-    let limit = query_value(&params, "Limit").and_then(|value| value.parse::<usize>().ok()).unwrap_or(20);
+    let limit = query_value(&params, "Limit")
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(20);
     let mut out = Vec::new();
     for show in &canonical {
-        let member_ids: Vec<&String> = canonical_of.iter()
+        let member_ids: Vec<&String> = canonical_of
+            .iter()
             .filter(|(_, canonical_id)| *canonical_id == &show.id)
             .map(|(id, _)| id)
             .collect();
@@ -2169,18 +2536,33 @@ async fn next_up(
         } else if !started.contains(&show.id) {
             continue;
         }
-        let mut ordered: Vec<&MediaItem> = episodes.iter()
-            .filter(|item| item.show_id.as_ref().is_some_and(|id| member_ids.iter().any(|member| *member == id)))
+        let mut ordered: Vec<&MediaItem> = episodes
+            .iter()
+            .filter(|item| {
+                item.show_id
+                    .as_ref()
+                    .is_some_and(|id| member_ids.iter().any(|member| *member == id))
+            })
             .collect();
         ordered.sort_by_key(|item| (item.season.unwrap_or(0), item.episode.unwrap_or(0)));
-        if ordered.is_empty() { continue; }
-        let resumable = progress.iter()
+        if ordered.is_empty() {
+            continue;
+        }
+        let resumable = progress
+            .iter()
             .filter(|entry| entry.position_ms > 15_000)
-            .filter(|entry| entry.duration_ms.is_none_or(|duration| entry.position_ms * 100 < duration * 95))
+            .filter(|entry| {
+                entry
+                    .duration_ms
+                    .is_none_or(|duration| entry.position_ms * 100 < duration * 95)
+            })
             .filter(|entry| ordered.iter().any(|item| item.id == entry.item_id))
             .max_by(|a, b| a.updated_at.cmp(&b.updated_at));
         let chosen = if let Some(resume) = resumable {
-            ordered.iter().find(|item| item.id == resume.item_id).copied()
+            ordered
+                .iter()
+                .find(|item| item.id == resume.item_id)
+                .copied()
         } else {
             let highest = ordered.iter().rposition(|item| watched.contains(&item.id));
             match highest {
@@ -2189,8 +2571,16 @@ async fn next_up(
             }
         };
         let Some(episode) = chosen else { continue };
-        out.push(episode_detail_dto(&state, &headers, episode, Some(show), &access));
-        if out.len() >= limit { break; }
+        out.push(episode_detail_dto(
+            &state,
+            &headers,
+            episode,
+            Some(show),
+            &access,
+        ));
+        if out.len() >= limit {
+            break;
+        }
     }
     apply_user_data(&state, &user, &mut out).await?;
     Ok(Json(json!({ "Items": out, "TotalRecordCount": out.len() })))
@@ -2242,8 +2632,8 @@ async fn grouping_options(
     Path(_params): Path<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
-        .unwrap_or_default();
+    let defs =
+        crate::services::settings::library_defs(&state.settings, &state.config).unwrap_or_default();
     let options: Vec<Value> = defs
         .iter()
         .map(|def| json!({ "Name": def.name, "Id": def.id }))
@@ -2257,8 +2647,8 @@ async fn virtual_folders(
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, Response> {
     user_of(&state, &headers, &params).await?;
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
-        .unwrap_or_default();
+    let defs =
+        crate::services::settings::library_defs(&state.settings, &state.config).unwrap_or_default();
     let folders: Vec<Value> = defs
         .iter()
         .map(|def| {
@@ -2279,8 +2669,6 @@ async fn virtual_folders(
         .collect();
     Ok(Json(json!(folders)))
 }
-
-
 
 async fn empty_sessions(
     State(state): State<SharedState>,
@@ -2316,9 +2704,7 @@ async fn search_hints(
         .map(|value| value.to_lowercase())
         .unwrap_or_default();
     if term.is_empty() {
-        return Ok(Json(
-            json!({ "SearchHints": [], "TotalRecordCount": 0 }),
-        ));
+        return Ok(Json(json!({ "SearchHints": [], "TotalRecordCount": 0 })));
     }
     let locale = metadata_locale(&state, &headers, &params);
     let mut items = localized_items(&state, locale).await?;
@@ -2381,7 +2767,10 @@ mod tests {
 
         assert_eq!(
             backdrop_urls(Some(&art)),
-            vec!["/api/images/hero.webp".to_string(), "/api/images/two.webp".to_string()]
+            vec![
+                "/api/images/hero.webp".to_string(),
+                "/api/images/two.webp".to_string()
+            ]
         );
 
         // A stored gallery that still repeats the hero only advertises it once.
@@ -2404,8 +2793,14 @@ mod tests {
         let tags = backdrop_tags(&backdrop_urls(Some(&art)));
 
         assert_eq!(tags.as_array().unwrap().len(), 3);
-        assert_eq!(tags[0], json!(library_image_tag_value("/api/images/hero.webp")));
-        assert_eq!(tags[2], json!(library_image_tag_value("/api/images/three.webp")));
+        assert_eq!(
+            tags[0],
+            json!(library_image_tag_value("/api/images/hero.webp"))
+        );
+        assert_eq!(
+            tags[2],
+            json!(library_image_tag_value("/api/images/three.webp"))
+        );
     }
 
     #[test]
@@ -2419,7 +2814,10 @@ mod tests {
             backdrop_at(&art, 0).as_deref(),
             Some("/api/images/hero.webp")
         );
-        assert_eq!(backdrop_at(&art, 2).as_deref(), Some("/api/images/three.webp"));
+        assert_eq!(
+            backdrop_at(&art, 2).as_deref(),
+            Some("/api/images/three.webp")
+        );
         // Past the last slide a stale client still gets the primary image.
         assert_eq!(
             backdrop_at(&art, 9).as_deref(),

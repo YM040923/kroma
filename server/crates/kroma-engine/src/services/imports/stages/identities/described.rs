@@ -54,7 +54,7 @@ pub(super) fn storable(path: String) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     use super::*;
 

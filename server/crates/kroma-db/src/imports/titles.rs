@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use kroma_domain::import::Title;
 
-use crate::{Pool, Result, params, query_by_subject_ids};
+use crate::{params, query_by_subject_ids, Pool, Result};
 
 /// Keeps what the other server says each title is. A title it described the
 /// same way before is not written again.

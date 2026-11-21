@@ -52,7 +52,7 @@ fn answering(modules: Vec<CatalogModule>, point: &str) -> Vec<Offer> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::admin::store::catalog::{Form, test_module};
+    use crate::api::admin::store::catalog::{test_module, Form};
 
     fn field(key: &str) -> ConfigField {
         ConfigField {

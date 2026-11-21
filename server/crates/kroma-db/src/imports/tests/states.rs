@@ -106,7 +106,12 @@ fn saved(pool: &Pool) -> Vec<String> {
 fn a_resume_point_lands_at_its_millisecond_with_the_time_the_other_server_recorded() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
 
-    let merged = merge(&pool, &ana, Place::Title("heat"), stopped(5_025_000, LAST_WEEK));
+    let merged = merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(5_025_000, LAST_WEEK),
+    );
 
     assert_eq!(merged, Merged::Changed);
     assert_eq!(
@@ -131,7 +136,12 @@ fn a_person_who_watched_further_here_is_not_moved_back() {
     crate::upsert_progress(&pool, &ana, "heat", 6_000_000, Some(10_200_000)).unwrap();
     let held = resume_points(&pool);
 
-    let merged = merge(&pool, &ana, Place::Title("heat"), stopped(1_200_000, YESTERDAY));
+    let merged = merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(1_200_000, YESTERDAY),
+    );
 
     assert_eq!(merged, Merged::Unchanged);
     assert_eq!(resume_points(&pool), held);
@@ -140,9 +150,19 @@ fn a_person_who_watched_further_here_is_not_moved_back() {
 #[test]
 fn a_resume_point_newer_than_the_one_here_replaces_it() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
-    merge(&pool, &ana, Place::Title("heat"), stopped(600_000, LAST_WEEK));
+    merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(600_000, LAST_WEEK),
+    );
 
-    let merged = merge(&pool, &ana, Place::Title("heat"), stopped(1_200_000, YESTERDAY));
+    let merged = merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(1_200_000, YESTERDAY),
+    );
 
     assert_eq!(merged, Merged::Changed);
     assert_eq!(
@@ -204,7 +224,12 @@ fn a_time_this_server_cannot_read_stands_against_any_other() {
         .execute("UPDATE progress SET updated_at = ''", [])
         .unwrap();
 
-    let merged = merge(&pool, &ana, Place::Title("heat"), stopped(1_200_000, YESTERDAY));
+    let merged = merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(1_200_000, YESTERDAY),
+    );
 
     assert_eq!(merged, Merged::Unchanged);
     assert_eq!(resume_points(&pool), ["heat at 6000000 of ? on "]);
@@ -214,7 +239,12 @@ fn a_time_this_server_cannot_read_stands_against_any_other() {
 fn a_state_whose_title_left_the_catalogue_is_answered_as_gone() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
 
-    let merged = merge(&pool, &ana, Place::Title("ronin"), stopped(600_000, LAST_WEEK));
+    let merged = merge(
+        &pool,
+        &ana,
+        Place::Title("ronin"),
+        stopped(600_000, LAST_WEEK),
+    );
 
     assert_eq!(merged, Merged::Gone);
     assert_eq!(resume_points(&pool), Vec::<String>::new());

@@ -237,8 +237,7 @@ fn parse(xml: &str) -> Option<Nfo> {
         plot: text(xml, &lower, "plot"),
         genres: texts(xml, &lower, "genre"),
         studios: texts(xml, &lower, "studio"),
-        certification: text(xml, &lower, "mpaa")
-            .or_else(|| text(xml, &lower, "certification")),
+        certification: text(xml, &lower, "mpaa").or_else(|| text(xml, &lower, "certification")),
         premiered: text(xml, &lower, "premiered").or_else(|| text(xml, &lower, "releasedate")),
         rating: text(xml, &lower, "rating").and_then(|value| value.parse().ok()),
         tmdb_id: unique_id(xml, &lower, "tmdb").and_then(|id| id.parse().ok()),

@@ -40,7 +40,18 @@ const SHORT_LIVED: &[&str] = &[
     "whisper_jobs",
 ];
 
-const THIS_MACHINE_ONLY: &[&str] = &["downloads", "metric_samples", "upgrade_tasks"];
+const THIS_MACHINE_ONLY: &[&str] = &[
+    "acquisition_attempts",
+    "acquisition_jobs",
+    "downloads",
+    "media_locations",
+    "media_units",
+    "metric_samples",
+    "share_files",
+    "share_subscriptions",
+    "upgrade_tasks",
+    "watch_titles",
+];
 
 const READ_AGAIN_BY_THE_NEXT_IMPORT: &[&str] = &["import_titles"];
 

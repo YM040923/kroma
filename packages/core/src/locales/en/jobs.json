@@ -15,6 +15,8 @@
   "jobs.acquisition.rss.name": "RSS sync",
   "jobs.acquisition.search.desc": "Searches the indexers for what monitored titles are missing, then for better copies of what they hold, and starts the downloads.",
   "jobs.acquisition.search.name": "Missing and upgrade search",
+  "jobs.acquisition.staging.desc": "After a BitTorrent import, stages eligible movie files in 115. The module verifies the remote file and writes the STRM replacement before removing the local copy.",
+  "jobs.acquisition.staging.name": "Cloud staging to 115",
   "jobs.cache.cleanup.desc": "Clears the HLS transcode cache (regenerated on playback) and trims the poster cache to the configured size (oldest first).",
   "jobs.cache.cleanup.name": "Cache cleanup",
   "jobs.cloud115.sync.desc": "Walks the mapped 115 folders, writes missing .strm entries and prunes stale ones; the 115 page also has an immediate sync button.",

@@ -16,7 +16,9 @@ pub(super) struct HostConnection {
 }
 
 fn failure_of(error: rusqlite::Error) -> SqlFailure {
-    let code = error.sqlite_error().map_or(SQLITE_ERROR, |e| e.extended_code);
+    let code = error
+        .sqlite_error()
+        .map_or(SQLITE_ERROR, |e| e.extended_code);
     failure(code, error.to_string())
 }
 
@@ -50,10 +52,16 @@ impl SqlConnection for HostConnection {
     fn run(&mut self, statement: &str, params: &[SqlValue]) -> Result<SqlOutcome, SqlFailure> {
         let conn: &rusqlite::Connection = &self.connection;
         let mut prepared = conn.prepare_cached(statement).map_err(failure_of)?;
-        let columns: Vec<String> = prepared.column_names().iter().map(ToString::to_string).collect();
+        let columns: Vec<String> = prepared
+            .column_names()
+            .iter()
+            .map(ToString::to_string)
+            .collect();
         let width = columns.len();
         let values = params.iter().map(bound);
-        let mut rows = prepared.query(rusqlite::params_from_iter(values)).map_err(failure_of)?;
+        let mut rows = prepared
+            .query(rusqlite::params_from_iter(values))
+            .map_err(failure_of)?;
         let mut collected = Vec::new();
         let mut spent = 0;
         while let Some(row) = rows.next().map_err(failure_of)? {
@@ -63,11 +71,18 @@ impl SqlConnection for HostConnection {
             }
             collected.push(one);
             if spent > MAX_RESULT_BYTES {
-                return Err(failure(SQLITE_TOOBIG, "this result is too large to hand to a module"));
+                return Err(failure(
+                    SQLITE_TOOBIG,
+                    "this result is too large to hand to a module",
+                ));
             }
         }
         drop(rows);
-        let changes = if prepared.readonly() { 0 } else { conn.changes() };
+        let changes = if prepared.readonly() {
+            0
+        } else {
+            conn.changes()
+        };
         Ok(SqlOutcome {
             columns,
             rows: collected,
@@ -77,19 +92,34 @@ impl SqlConnection for HostConnection {
     }
 
     fn batch(&mut self, statements: &str) -> Result<(), SqlFailure> {
-        self.connection.execute_batch(statements).map_err(failure_of)
+        self.connection
+            .execute_batch(statements)
+            .map_err(failure_of)
     }
 
     fn snapshot(&mut self, target: &str) -> Result<(), SqlFailure> {
         let Some(kept) = &self.kept else {
-            return Err(failure(SQLITE_AUTH, "a module keeps no copy of the core database"));
+            return Err(failure(
+                SQLITE_AUTH,
+                "a module keeps no copy of the core database",
+            ));
         };
-        let target = kept
-            .path_of(target)
-            .ok_or_else(|| failure(SQLITE_AUTH, "a copy is one of this module's databases, named like one"))?;
-        let source = self.connection.path().map(PathBuf::from).ok_or_else(|| failure(SQLITE_ERROR, "no file"))?;
+        let target = kept.path_of(target).ok_or_else(|| {
+            failure(
+                SQLITE_AUTH,
+                "a copy is one of this module's databases, named like one",
+            )
+        })?;
+        let source = self
+            .connection
+            .path()
+            .map(PathBuf::from)
+            .ok_or_else(|| failure(SQLITE_ERROR, "no file"))?;
         if target == source {
-            return Err(failure(SQLITE_AUTH, "a copy does not replace the database it copies"));
+            return Err(failure(
+                SQLITE_AUTH,
+                "a copy does not replace the database it copies",
+            ));
         }
         kroma_sqlite::refuse_unowned(&target).map_err(|error| failure_of_any(&error))?;
         match std::fs::remove_file(&target) {
@@ -98,7 +128,8 @@ impl SqlConnection for HostConnection {
             }
             _ => {}
         }
-        let unguarded = kroma_sqlite::open_owned(&source).map_err(|error| failure_of_any(&error))?;
+        let unguarded =
+            kroma_sqlite::open_owned(&source).map_err(|error| failure_of_any(&error))?;
         unguarded
             .execute("VACUUM INTO ?1", [target.to_string_lossy()])
             .map_err(failure_of)?;

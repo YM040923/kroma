@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use kroma_domain::{LibraryTitle, RequestKind};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 use super::monitored_summaries;
 
@@ -126,7 +126,9 @@ pub fn library_index(conn: &Connection, today: &str) -> rusqlite::Result<Vec<Lib
                 rows.len() - 1
             }
         };
-        let Some(row) = rows.get_mut(at) else { continue };
+        let Some(row) = rows.get_mut(at) else {
+            continue;
+        };
         row.monitored = true;
         row.monitored_units = summary.monitored;
         row.available = summary.available;
@@ -143,7 +145,7 @@ pub fn library_index(conn: &Connection, today: &str) -> rusqlite::Result<Vec<Lib
 mod tests {
     use super::*;
     use crate::requests::tests::*;
-    use crate::requests::{WantedRow, insert_wanted, upsert_monitored};
+    use crate::requests::{insert_wanted, upsert_monitored, WantedRow};
     use kroma_domain::{MinAvailability, MonitoredTitle};
 
     const SEVERANCE: u64 = 95396;
@@ -253,8 +255,12 @@ mod tests {
         let conn = p.get().unwrap();
         seed(&conn);
         upsert_monitored(&p, &monitored_show(SEVERANCE, "Severance")).unwrap();
-        insert_wanted(&p, &[wanted("w1", 3, None), wanted("w2", 4, Some("2026-02-01"))], 1)
-            .unwrap();
+        insert_wanted(
+            &p,
+            &[wanted("w1", 3, None), wanted("w2", 4, Some("2026-02-01"))],
+            1,
+        )
+        .unwrap();
 
         let rows = library_index(&conn, "2026-01-10").unwrap();
 

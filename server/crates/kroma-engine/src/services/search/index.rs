@@ -37,7 +37,11 @@ pub(super) fn build_active(schema: Schema, fields: &Fields, catalog: &Catalog) -
         indexer.add_item(movie, HitKind::Movie, catalog.tr_movies.get(&movie.id));
     }
     for episode in catalog.episodes {
-        indexer.add_item(episode, HitKind::Episode, catalog.tr_episodes.get(&episode.id));
+        indexer.add_item(
+            episode,
+            HitKind::Episode,
+            catalog.tr_episodes.get(&episode.id),
+        );
     }
     for show in catalog.shows {
         indexer.add_show(show, catalog.tr_shows.get(&show.id));

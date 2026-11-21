@@ -61,6 +61,7 @@ pub(super) fn expected_rel(
             };
             Some((tpl.movie_rel_path(&ctx, &ext), title))
         }
+        Kind::Photo | Kind::Other => None,
         Kind::Episode => {
             let (season, episode) = (item.season?, item.episode?);
             // Proper show title + year from the enriched show, falling back to

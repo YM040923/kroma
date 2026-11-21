@@ -170,7 +170,9 @@ fn row_to_core_offset(r: &Row, base: usize) -> rusqlite::Result<MetaCore> {
         cast: serde_json::from_str(&cast_json).unwrap_or_default(),
         crew: serde_json::from_str(&crew_json).unwrap_or_default(),
         tmdb_genre_ids: serde_json::from_str(&genre_ids_json).unwrap_or_default(),
-        studios: studios_json.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default(),
+        studios: studios_json
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default(),
     })
 }
 

@@ -5,7 +5,7 @@ use kroma_module_host::NetworkAction;
 mod component_support;
 
 use component_support::wasm::guest_component;
-use component_support::{DECLARES, GUEST, STORES, Server, seed_core, wait_until};
+use component_support::{seed_core, wait_until, Server, DECLARES, GUEST, STORES};
 
 #[test]
 fn a_component_answers_on_the_modules_socket_like_any_other() {
@@ -62,10 +62,9 @@ fn a_second_start_reuses_the_compiled_component() {
     assert_eq!(answered.text(), "still here");
     let said = server.said.lock().unwrap();
     assert!(said.iter().any(|line| line.contains("compiled in")));
-    assert!(
-        said.iter()
-            .any(|line| line.contains("from its compiled copy"))
-    );
+    assert!(said
+        .iter()
+        .any(|line| line.contains("from its compiled copy")));
 }
 
 #[test]

@@ -85,12 +85,11 @@ impl HlsEngine {
             return known;
         }
         let path = input.to_string();
-        let read = tokio::task::spawn_blocking(move || {
-            crate::probe::probe_duration_ms(Path::new(&path))
-        })
-        .await
-        .ok()
-        .flatten();
+        let read =
+            tokio::task::spawn_blocking(move || crate::probe::probe_duration_ms(Path::new(&path)))
+                .await
+                .ok()
+                .flatten();
         self.durations
             .lock()
             .unwrap()

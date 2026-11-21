@@ -148,7 +148,11 @@ mod tests {
         pool
     }
 
-    fn about(id: &str, subject: Option<NotificationSubject>, actor: Option<&str>) -> StoredNotification {
+    fn about(
+        id: &str,
+        subject: Option<NotificationSubject>,
+        actor: Option<&str>,
+    ) -> StoredNotification {
         StoredNotification {
             subject,
             actor_id: actor.map(str::to_string),
@@ -194,8 +198,16 @@ mod tests {
         let pool = seeded();
         let conn = pool.get().unwrap();
         let rows = vec![
-            about("n1", Some(NotificationSubject::request("req-here")), Some("u1")),
-            about("n2", Some(NotificationSubject::request("req-here")), Some("u1")),
+            about(
+                "n1",
+                Some(NotificationSubject::request("req-here")),
+                Some("u1"),
+            ),
+            about(
+                "n2",
+                Some(NotificationSubject::request("req-here")),
+                Some("u1"),
+            ),
             about("n3", Some(NotificationSubject::movie("item-9")), None),
             about("n4", None, None),
         ];

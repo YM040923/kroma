@@ -49,9 +49,30 @@ async fn folder_cid(config: &Config, cid: &str, remote: &str) -> Result<String, 
     if remote.is_empty() {
         return Err(json_error(StatusCode::BAD_REQUEST, "目录号无效"));
     }
+    resolve_folder_cid(config, cid, remote)
+        .await
+        .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))
+}
+
+/// The folder a file should land in: a numeric `cid` as given, or the folder the
+/// drive resolves `remote` to. Shared with the provider point, which needs the
+/// same answer without axum's `Response`.
+pub(crate) async fn resolve_folder_cid(
+    config: &Config,
+    cid: &str,
+    remote: &str,
+) -> Result<String, String> {
+    let cid = cid.trim();
+    if !cid.is_empty() && cid.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Ok(cid.to_string());
+    }
+    let remote = remote.trim();
+    if remote.is_empty() {
+        return Err("目录号无效".into());
+    }
     client::folder_id_by_path(&config.cookie, client::MODULE_UA, remote)
         .await
-        .map_err(failed)
+        .map_err(|error| error.to_string())
 }
 
 #[derive(Serialize)]
@@ -63,14 +84,14 @@ pub(crate) struct RapidResult {
     status: i64,
 }
 
-fn cookie_uid(cookie: &str) -> Option<String> {
+pub(crate) fn cookie_uid(cookie: &str) -> Option<String> {
     cookie.split(';').find_map(|pair| {
         let (key, value) = pair.trim().split_once('=')?;
         (key.eq_ignore_ascii_case("UID")).then(|| value.trim().to_string())
     })
 }
 
-fn status_of(data: &Value) -> i64 {
+pub(crate) fn status_of(data: &Value) -> i64 {
     data.get("status")
         .map(|status| {
             status
@@ -81,7 +102,7 @@ fn status_of(data: &Value) -> i64 {
         .unwrap_or(0)
 }
 
-fn fingerprint(path: &Path) -> std::io::Result<(String, u64)> {
+pub(crate) fn fingerprint(path: &Path) -> std::io::Result<(String, u64)> {
     let mut file = std::fs::File::open(path)?;
     let mut sha = Sha1::new();
     let mut buffer = vec![0u8; 1024 * 1024];
@@ -116,7 +137,7 @@ fn range_sha1(path: &Path, start: u64, length: u64) -> std::io::Result<String> {
 }
 
 /// Resolve `path` only when it sits under one of the configured roots.
-fn allowed_path(raw: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
+pub(crate) fn allowed_path(raw: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
     let path = std::fs::canonicalize(raw).map_err(|error| format!("读不到这个文件：{error}"))?;
     if !path.is_file() {
         return Err("这不是一个文件".into());
@@ -126,7 +147,7 @@ fn allowed_path(raw: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
         path.starts_with(root)
     });
     if !inside {
-        return Err("只能秒传媒体库目录里的文件".into());
+        return Err("只能在媒体库目录范围内读写文件".into());
     }
     Ok(path)
 }
@@ -185,17 +206,17 @@ fn pending() -> &'static Mutex<HashMap<String, Pending>> {
     PENDING.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn part_size_for(size: u64) -> u64 {
+pub(crate) fn part_size_for(size: u64) -> u64 {
     let per_part = size.div_ceil(MAX_PARTS);
     let rounded = per_part.div_ceil(1024 * 1024) * 1024 * 1024;
     rounded.max(MIN_PART)
 }
 
-fn part_count(size: u64, part_size: u64) -> usize {
+pub(crate) fn part_count(size: u64, part_size: u64) -> usize {
     size.div_ceil(part_size.max(1)).max(1) as usize
 }
 
-fn read_part(path: &Path, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
+pub(crate) fn read_part(path: &Path, offset: u64, length: u64) -> std::io::Result<Vec<u8>> {
     let mut file = std::fs::File::open(path)?;
     file.seek(SeekFrom::Start(offset))?;
     let mut data = Vec::with_capacity(length as usize);
@@ -203,7 +224,7 @@ fn read_part(path: &Path, offset: u64, length: u64) -> std::io::Result<Vec<u8>> 
     Ok(data)
 }
 
-fn new_upload_id() -> String {
+pub(crate) fn new_upload_id() -> String {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     SystemTime::now()
@@ -215,7 +236,7 @@ fn new_upload_id() -> String {
 }
 
 /// Run the signed init, answering the range challenge once when the drive asks.
-async fn init_with_challenge(
+pub(crate) async fn init_with_challenge(
     config: &Config,
     userkey: &str,
     userid: &str,
@@ -226,7 +247,7 @@ async fn init_with_challenge(
     size: u64,
 ) -> Result<Value, ApiError> {
     let mut answer = init_once(config, userkey, userid, target, name, fileid, size, "", "").await?;
-    let mut status = status_of(&answer);
+    let status = status_of(&answer);
     if matches!(status, 6 | 7 | 8) {
         if let Some(check) = answer.get("sign_check").and_then(Value::as_str) {
             if let Some((start, end)) = check.split_once('-') {

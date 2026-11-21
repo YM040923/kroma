@@ -127,10 +127,8 @@ fn signing_input(header: &Value, claims: &Value) -> String {
 
 pub fn sign_rs256(key: &RsaPrivateKey, header: &Value, claims: &Value) -> String {
     let input = signing_input(header, claims);
-    let signature = rsa::signature::Signer::sign(
-        &SigningKey::<Sha256>::new(key.clone()),
-        input.as_bytes(),
-    );
+    let signature =
+        rsa::signature::Signer::sign(&SigningKey::<Sha256>::new(key.clone()), input.as_bytes());
     format!("{input}.{}", b64(&signature.to_bytes()))
 }
 

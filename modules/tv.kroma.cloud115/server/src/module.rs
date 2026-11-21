@@ -30,11 +30,9 @@ impl<S: HostCtx + Clone + Send + Sync + 'static> ServerModule<S> for Cloud115Mod
             ModuleJob {
                 key: "cloud115.sync",
                 category: "library",
-                // Four passes a day. A mirror is a listing walk plus the handful of
-                // writes it needs; running it more often would spend the account's
-                // call allowance on folders that did not change. The page has a
-                // button for "now".
-                schedule: Some("20 */6 * * *"),
+                // A ten-minute tick that consults `autoSyncHours`: the interval is
+                // an operator setting, and a cron expression cannot read it.
+                schedule: Some("*/10 * * * *"),
                 run: run_sync::<S>,
             },
         ]
@@ -52,8 +50,24 @@ fn run_sync<S: HostCtx + Clone + Send + Sync + 'static>(host: &S) -> anyhow::Res
     if crate::sync::is_running() {
         return Ok(());
     }
+    let config = crate::settings::Config::load();
+    let hours = config.options.auto_sync_hours;
+    if hours == 0 {
+        return Ok(());
+    }
+    let now = crate::events::unix_now();
+    let last = crate::store::load().last_auto_sync_at;
+    if last > 0 && now.saturating_sub(last) < i64::from(hours) * 3600 {
+        return Ok(());
+    }
+    if crate::budget::background_blocked(config.options.daily_call_budget) {
+        return Ok(());
+    }
     match crate::sync::start(host.clone(), None, false) {
-        Ok(()) => Ok(()),
+        Ok(()) => {
+            let _ = crate::store::patch(|stored| stored.last_auto_sync_at = now);
+            Ok(())
+        }
         Err(reason) if reason.contains("已经在运行") => Ok(()),
         Err(reason) => anyhow::bail!("{reason}"),
     }

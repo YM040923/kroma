@@ -55,7 +55,10 @@ fn rows(store: &Path) -> i64 {
 #[test]
 fn an_old_install_moves_what_the_host_reads_and_keeps_its_database() {
     let dir = kroma_testing::temp_dir("layout-moved");
-    let old = old_install(dir.path(), r#"{"kind":"registry","installedAt":0,"official":true}"#);
+    let old = old_install(
+        dir.path(),
+        r#"{"kind":"registry","installedAt":0,"official":true}"#,
+    );
     let helpers = dir.path().join("helpers").join(ID);
     std::fs::create_dir_all(&helpers).unwrap();
     for name in ["module.cwasm", "module.stamp", "rqbit"] {
@@ -73,7 +76,12 @@ fn an_old_install_moves_what_the_host_reads_and_keeps_its_database() {
         origin.component_sha256,
         Some(hex::encode(sha2::Sha256::digest(COMPONENT)))
     );
-    for name in [MODULE_COMPONENT, "icon.svg", "fe/remoteEntry.js", "locales/en.json"] {
+    for name in [
+        MODULE_COMPONENT,
+        "icon.svg",
+        "fe/remoteEntry.js",
+        "locales/en.json",
+    ] {
         assert!(installed.join(name).is_file(), "{name}");
         assert!(!old.join(name).exists(), "{name}");
     }
@@ -90,7 +98,10 @@ fn an_old_install_moves_what_the_host_reads_and_keeps_its_database() {
 fn a_modules_own_folder_is_read_as_an_install_only_on_the_first_start() {
     let dir = kroma_testing::temp_dir("layout-once");
     supervisor(dir.path());
-    old_install(dir.path(), r#"{"kind":"registry","installedAt":0,"official":true}"#);
+    old_install(
+        dir.path(),
+        r#"{"kind":"registry","installedAt":0,"official":true}"#,
+    );
 
     let sup = supervisor(dir.path());
 
@@ -103,7 +114,11 @@ fn a_link_or_a_shared_file_in_an_old_install_is_not_carried_over() {
     let dir = kroma_testing::temp_dir("layout-links");
     let old = old_install(dir.path(), "{}");
     let elsewhere = dir.path().join("elsewhere.json");
-    std::fs::write(&elsewhere, r#"{"kind":"registry","installedAt":0,"official":true}"#).unwrap();
+    std::fs::write(
+        &elsewhere,
+        r#"{"kind":"registry","installedAt":0,"official":true}"#,
+    )
+    .unwrap();
     std::fs::remove_file(old.join("origin.json")).unwrap();
     std::os::unix::fs::symlink(&elsewhere, old.join("origin.json")).unwrap();
     std::fs::remove_file(old.join("module.json")).unwrap();
@@ -117,7 +132,9 @@ fn a_link_or_a_shared_file_in_an_old_install_is_not_carried_over() {
     let sup = supervisor(dir.path());
     std::fs::write(old.join("manifest.txt"), "rewritten by the module").unwrap();
 
-    let manifest = std::fs::read_to_string(dir.path().join(INSTALLED_DIR).join(ID).join("module.json")).unwrap();
+    let manifest =
+        std::fs::read_to_string(dir.path().join(INSTALLED_DIR).join(ID).join("module.json"))
+            .unwrap();
     assert!(!sup.origin(ID).official);
     assert!(manifest.contains(r#""version": "1.0.0""#), "{manifest}");
 }

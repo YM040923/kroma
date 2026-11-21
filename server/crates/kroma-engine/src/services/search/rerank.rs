@@ -34,7 +34,11 @@ impl Intent {
             .map(|(token, _)| token.text.clone())
             .collect();
         Self {
-            words: if kept.is_empty() { parsed.words() } else { kept },
+            words: if kept.is_empty() {
+                parsed.words()
+            } else {
+                kept
+            },
             year: parsed.year(),
             kind: parsed.kind(),
             locator: parsed.locator,
@@ -47,7 +51,9 @@ impl Intent {
         };
         entry.kind == HitKind::Episode
             && entry.season == Some(locator.season)
-            && locator.episode.is_none_or(|episode| entry.episode == Some(episode))
+            && locator
+                .episode
+                .is_none_or(|episode| entry.episode == Some(episode))
     }
 
     /// The factor a candidate's raw score is multiplied by.

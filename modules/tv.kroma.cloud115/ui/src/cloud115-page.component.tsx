@@ -156,6 +156,14 @@ export function Cloud115Settings() {
   const [receiveBusy, setReceiveBusy] = useState(false);
   const [receiveFiles, setReceiveFiles] = useState<number | null>(null);
   const [receiveErrors, setReceiveErrors] = useState<string[]>([]);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [aliasOpen, setAliasOpen] = useState(false);
+  const [aliasDraft, setAliasDraft] = useState('');
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [opsMsg, setOpsMsg] = useState<string | null>(null);
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
   const baseMismatch = Boolean(baseUrl) && baseUrl.replace(/\/$/, '') !== origin;
 
@@ -538,6 +546,141 @@ export function Cloud115Settings() {
     }
   };
 
+  const reloadSettings = async () => {
+    const view = await api.settings();
+    savedMappings.current = view.libraries.filter(
+      (library) => library.remote.trim() || library.local.trim(),
+    ).length;
+    setBaseUrl(view.baseUrl);
+    setHasCookie(view.hasCookie);
+    setLibraries(view.libraries.length ? view.libraries : [{ ...EMPTY_LIBRARY }]);
+    setOptions(view.options);
+    setResolved(view.resolvedLocal);
+  };
+
+  const refreshAccount = async () => {
+    setAccountBusy(true);
+    setError(null);
+    try {
+      const [view, board] = await Promise.all([api.account(true), api.status()]);
+      setAccount(view);
+      setStatus(board);
+      setHasCookie(board.cookieSet);
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const saveAlias = async () => {
+    setAccountBusy(true);
+    setError(null);
+    try {
+      const result = await api.accountAlias(aliasDraft.trim());
+      setAccount((current) => (current ? { ...current, alias: result.alias } : current));
+      setAliasOpen(false);
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const removeAccount = async () => {
+    setAccountBusy(true);
+    setError(null);
+    try {
+      await api.accountRemove();
+      setAccount(null);
+      setHasCookie(false);
+      setCookie('');
+      setRemoveOpen(false);
+      api
+        .status()
+        .then((view) => {
+          setStatus(view);
+          setHasCookie(view.cookieSet);
+        })
+        .catch(() => undefined);
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const watchNow = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.watchNow();
+      setOpsMsg(t('cloud115.watchStarted'));
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearCheckpoint = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.checkpointClear();
+      setClearOpen(false);
+      setOpsMsg(t('cloud115.checkpointCleared'));
+      api.status().then(setStatus).catch(() => undefined);
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportConfig = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const view = await api.configExport();
+      const blob = new Blob([JSON.stringify(view, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'cloud115-config.json';
+      link.click();
+      URL.revokeObjectURL(url);
+      setOpsMsg(t('cloud115.exportDone'));
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importConfig = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const parsed = JSON.parse(importText) as unknown;
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error(t('cloud115.importInvalid'));
+      }
+      await api.configImport(parsed as never);
+      await reloadSettings();
+      setDirty(false);
+      setSaved(true);
+      setSavedAt(new Date());
+      setImportOpen(false);
+      setImportText('');
+      setOpsMsg(t('cloud115.importDone'));
+    } catch (reason) {
+      setError(reason instanceof SyntaxError ? t('cloud115.importInvalid') : errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const replaceAddresses = async (preview: boolean) => {
     setReplaceBusy(true);
     setReplaceMsg(null);
@@ -563,6 +706,7 @@ export function Cloud115Settings() {
   const usedText = account ? account.usedText || formatSize(account.used) || '0' : '—';
   const totalText = account ? account.totalText || formatSize(account.total) || '0' : '—';
   const capacity = account && account.total > 0 ? account.used / account.total : 0;
+  const displayName = account?.alias || account?.userName || '115 Cloud';
   const shareTitle = (share: ShareView) =>
     share.title && share.title !== UNTITLED_SHARE ? share.title : t('cloud115.transferUntitled');
   const selectedCount = shares.reduce(
@@ -598,14 +742,14 @@ export function Cloud115Settings() {
                       />
                     ) : (
                       <Text variant="title" color="accentText">
-                        {account?.userName?.slice(0, 1) || '1'}
+                        {displayName.slice(0, 1)}
                       </Text>
                     )}
                   </Box>
                   <Box shrink={1} minW={0} gap={4}>
                     <Row wrap gap={8} align="center">
                       <Text variant="title" lines={1}>
-                        {account?.userName || '115 Cloud'}
+                        {displayName}
                       </Text>
                       <Badge tone={hasCookie ? 'success' : 'warning'}>
                         {hasCookie ? t('cloud115.cookieSet') : t('cloud115.cookieMissing')}
@@ -646,6 +790,34 @@ export function Cloud115Settings() {
                 </Box>
               </Row>
 
+              <Row wrap gap={8} align="center" mt={14}>
+                <Button
+                  label={t('cloud115.refreshAccount')}
+                  icon="refresh"
+                  variant="ghost"
+                  size="sm"
+                  loading={accountBusy}
+                  onPress={() => void refreshAccount()}
+                />
+                <Button
+                  label={t('cloud115.renameAccount')}
+                  variant="ghost"
+                  size="sm"
+                  disabled={!hasCookie}
+                  onPress={() => {
+                    setAliasDraft(account?.alias || account?.userName || '');
+                    setAliasOpen(true);
+                  }}
+                />
+                <Button
+                  label={t('cloud115.removeAccount')}
+                  variant="ghost"
+                  size="sm"
+                  disabled={!hasCookie}
+                  onPress={() => setRemoveOpen(true)}
+                />
+              </Row>
+
               <Row wrap gap={12} align="center" mt={20}>
                 <Text variant="meta" color="textDim">
                   {t('cloud115.qrApp')}
@@ -661,7 +833,7 @@ export function Cloud115Settings() {
                   ))}
                 </Select.Root>
                 <Button
-                  label={t('cloud115.qrLogin')}
+                  label={hasCookie ? t('cloud115.relogin') : t('cloud115.qrLogin')}
                   icon="qrcode"
                   variant="glass"
                   size="sm"
@@ -817,6 +989,28 @@ export function Cloud115Settings() {
                     onValueChange={(maxEntriesPerFolder) => patchOptions({ maxEntriesPerFolder })}
                   />
                 </SettingRow>
+                <SettingRow
+                  label={t('cloud115.dailyBudget')}
+                  hint={t('cloud115.dailyBudgetHint')}
+                >
+                  <NumberField
+                    label={t('cloud115.dailyBudget')}
+                    value={options.dailyCallBudget}
+                    min={0}
+                    max={1000000}
+                    step={100}
+                    w={140}
+                    onValueChange={(dailyCallBudget) => patchOptions({ dailyCallBudget })}
+                  />
+                </SettingRow>
+                {status.dailyCallBudget > 0 ? (
+                  <Text variant="meta" color="textDim">
+                    {t('cloud115.dailyUsed', {
+                      calls: status.callsToday,
+                      total: status.dailyCallBudget,
+                    })}
+                  </Text>
+                ) : null}
                 <SettingRow label={t('cloud115.linkTtl')} hint={t('cloud115.linkTtlHint')}>
                   <NumberField
                     label={t('cloud115.linkTtl')}
@@ -1219,6 +1413,20 @@ export function Cloud115Settings() {
                     onValueChange={(minVideoSizeMb) => patchOptions({ minVideoSizeMb })}
                   />
                 </SettingRow>
+                <SettingRow
+                  label={t('cloud115.prefetchNext')}
+                  hint={t('cloud115.prefetchNextHint')}
+                >
+                  <NumberField
+                    label={t('cloud115.prefetchNext')}
+                    value={options.prefetchNext}
+                    min={0}
+                    max={3}
+                    step={1}
+                    w={140}
+                    onValueChange={(prefetchNext) => patchOptions({ prefetchNext })}
+                  />
+                </SettingRow>
               </Box>
             </Panel>
 
@@ -1293,11 +1501,20 @@ export function Cloud115Settings() {
               title={t('cloud115.watch')}
               hint={t('cloud115.watchHint')}
               actions={
-                <Switch
-                  checked={options.watchEnabled}
-                  onCheckedChange={(watchEnabled) => patchOptions({ watchEnabled })}
-                  label={t('cloud115.watch')}
-                />
+                <Row gap={10} align="center">
+                  <Button
+                    label={t('cloud115.watchNow')}
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => void watchNow()}
+                    disabled={busy || !hasCookie}
+                  />
+                  <Switch
+                    checked={options.watchEnabled}
+                    onCheckedChange={(watchEnabled) => patchOptions({ watchEnabled })}
+                    label={t('cloud115.watch')}
+                  />
+                </Row>
               }
             >
               <Box gap={18}>
@@ -1329,6 +1546,64 @@ export function Cloud115Settings() {
                   </Text>
                 ) : null}
               </Box>
+            </Panel>
+
+            <Panel title={t('cloud115.schedule')} hint={t('cloud115.scheduleHint')}>
+              <Box gap={12}>
+                <SettingRow label={t('cloud115.autoSync')} hint={t('cloud115.autoSyncHint')}>
+                  <Select.Root
+                    value={String(options.autoSyncHours)}
+                    onValueChange={(value) => patchOptions({ autoSyncHours: Number(value) })}
+                    label={t('cloud115.autoSync')}
+                  >
+                    <Select.Trigger size="sm" />
+                    <Select.Item value="0" label={t('cloud115.autoSyncOff')} />
+                    <Select.Item value="6" label={t('cloud115.autoSyncEvery', { hours: 6 })} />
+                    <Select.Item value="12" label={t('cloud115.autoSyncEvery', { hours: 12 })} />
+                    <Select.Item value="24" label={t('cloud115.autoSyncDaily')} />
+                  </Select.Root>
+                </SettingRow>
+                <Text variant="meta" color="textDim">
+                  {status.lastAutoSyncAt
+                    ? t('cloud115.lastAutoSync', {
+                        time: new Date(status.lastAutoSyncAt * 1000).toLocaleString(),
+                      })
+                    : t('cloud115.neverAutoSync')}
+                </Text>
+                {opsMsg ? (
+                  <Text variant="meta" color="accentText">
+                    {opsMsg}
+                  </Text>
+                ) : null}
+              </Box>
+            </Panel>
+
+            <Panel title={t('cloud115.syncOps')} hint={t('cloud115.syncOpsHint')}>
+              <Row wrap gap={8} align="center">
+                <Button
+                  label={t('cloud115.clearCheckpoint')}
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setClearOpen(true)}
+                  disabled={busy || !hasCookie}
+                />
+                <Button
+                  label={t('cloud115.exportConfig')}
+                  icon="download"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => void exportConfig()}
+                  disabled={busy}
+                />
+                <Button
+                  label={t('cloud115.importConfig')}
+                  icon="upload"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setImportOpen(true)}
+                  disabled={busy}
+                />
+              </Row>
             </Panel>
 
             <Panel
@@ -1552,6 +1827,129 @@ export function Cloud115Settings() {
             setTargetOpen(false);
           }}
         />
+      ) : null}
+
+      {aliasOpen ? (
+        <Dialog.Root
+          open
+          title={t('cloud115.renameAccount')}
+          onClose={() => setAliasOpen(false)}
+          width="sm"
+        >
+          <Dialog.Header>
+            <Text variant="title">{t('cloud115.renameAccount')}</Text>
+          </Dialog.Header>
+          <Dialog.Panel>
+            <Field.Root
+              label={t('cloud115.accountAlias')}
+              value={aliasDraft}
+              onValueChange={setAliasDraft}
+            >
+              <Field.Input placeholder={account?.userName || '115 Cloud'} />
+              <Field.Hint>{t('cloud115.accountAliasHint')}</Field.Hint>
+            </Field.Root>
+          </Dialog.Panel>
+          <Dialog.Footer>
+            <Dialog.Actions
+              onCancel={() => setAliasOpen(false)}
+              cancelLabel={t('cloud115.cancel')}
+              onConfirm={() => void saveAlias()}
+              confirmLabel={t('cloud115.save')}
+              busy={accountBusy}
+            />
+          </Dialog.Footer>
+        </Dialog.Root>
+      ) : null}
+
+      {removeOpen ? (
+        <Dialog.Root
+          open
+          title={t('cloud115.removeAccount')}
+          onClose={() => setRemoveOpen(false)}
+          width="sm"
+        >
+          <Dialog.Header>
+            <Text variant="title">{t('cloud115.removeAccount')}</Text>
+          </Dialog.Header>
+          <Dialog.Panel>
+            <Callout.Root tone="danger" icon="alert-triangle">
+              <Callout.Title>{t('cloud115.removeAccountWarn')}</Callout.Title>
+              <Callout.Detail>{t('cloud115.removeAccountHint')}</Callout.Detail>
+            </Callout.Root>
+          </Dialog.Panel>
+          <Dialog.Footer>
+            <Dialog.Actions
+              onCancel={() => setRemoveOpen(false)}
+              cancelLabel={t('cloud115.cancel')}
+              onConfirm={() => void removeAccount()}
+              confirmLabel={t('cloud115.removeAccount')}
+              destructive
+              busy={accountBusy}
+            />
+          </Dialog.Footer>
+        </Dialog.Root>
+      ) : null}
+
+      {clearOpen ? (
+        <Dialog.Root
+          open
+          title={t('cloud115.clearCheckpoint')}
+          onClose={() => setClearOpen(false)}
+          width="sm"
+        >
+          <Dialog.Header>
+            <Text variant="title">{t('cloud115.clearCheckpoint')}</Text>
+          </Dialog.Header>
+          <Dialog.Panel>
+            <Callout.Root tone="accent" icon="alert-triangle">
+              <Callout.Title>{t('cloud115.clearCheckpointWarn')}</Callout.Title>
+              <Callout.Detail>{t('cloud115.clearCheckpointHint')}</Callout.Detail>
+            </Callout.Root>
+          </Dialog.Panel>
+          <Dialog.Footer>
+            <Dialog.Actions
+              onCancel={() => setClearOpen(false)}
+              cancelLabel={t('cloud115.cancel')}
+              onConfirm={() => void clearCheckpoint()}
+              confirmLabel={t('cloud115.clearCheckpoint')}
+              destructive
+              busy={busy}
+            />
+          </Dialog.Footer>
+        </Dialog.Root>
+      ) : null}
+
+      {importOpen ? (
+        <Dialog.Root
+          open
+          title={t('cloud115.importConfig')}
+          onClose={() => setImportOpen(false)}
+          width="md"
+        >
+          <Dialog.Header>
+            <Text variant="title">{t('cloud115.importConfig')}</Text>
+          </Dialog.Header>
+          <Dialog.Panel>
+            <Field.Root
+              label={t('cloud115.importConfigLabel')}
+              value={importText}
+              onValueChange={setImportText}
+            >
+              <Field.Textarea rows={12} placeholder='{ "baseUrl": "http://192.168.1.10:4040", … }' />
+              <Field.Hint>{t('cloud115.importConfigHint')}</Field.Hint>
+            </Field.Root>
+          </Dialog.Panel>
+          <Dialog.Footer>
+            <Dialog.Actions
+              onCancel={() => setImportOpen(false)}
+              cancelLabel={t('cloud115.cancel')}
+              onConfirm={() => void importConfig()}
+              confirmLabel={t('cloud115.importConfig')}
+              busy={busy}
+              disabled={!importText.trim()}
+            />
+          </Dialog.Footer>
+        </Dialog.Root>
       ) : null}
     </>
   );

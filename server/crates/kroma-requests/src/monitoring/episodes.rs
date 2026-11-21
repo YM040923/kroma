@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashSet};
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use kroma_module_host::HostStorage;
 use kroma_primitives::now_ms;

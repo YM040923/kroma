@@ -14,10 +14,10 @@ use kroma_requests::tmdb::common;
 
 pub use cache::Cache;
 pub use client::{
-    lookup, lookup_all, lookup_all_by_id, images, season_images, ArtImage, ArtLists, Target,
+    images, lookup, lookup_all, lookup_all_by_id, season_images, ArtImage, ArtLists, Target,
 };
 pub(crate) use find::{find_id, Catalogue};
-pub use videos::{title_videos, TitleVideos};
 pub use kroma_requests::tmdb::{
     discover, season_episodes, season_episodes_multi, EpisodeArt, SeasonData,
 };
+pub use videos::{title_videos, TitleVideos};

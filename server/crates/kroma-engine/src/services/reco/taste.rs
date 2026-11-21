@@ -104,7 +104,9 @@ impl Taste {
                 taste.liked.push((id.clone(), weight));
             }
         }
-        taste.liked.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        taste
+            .liked
+            .sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         taste.norm = taste.features.values().map(|w| w * w).sum::<f32>().sqrt();
         taste
     }
@@ -135,8 +137,15 @@ impl Taste {
         title
             .features
             .iter()
-            .map(|(feature, value)| (feature, value * self.features.get(feature).copied().unwrap_or(0.0)))
-            .filter(|(feature, pull)| *pull > 0.0 && !matches!(feature, Feature::Show(_) | Feature::Decade(_)))
+            .map(|(feature, value)| {
+                (
+                    feature,
+                    value * self.features.get(feature).copied().unwrap_or(0.0),
+                )
+            })
+            .filter(|(feature, pull)| {
+                *pull > 0.0 && !matches!(feature, Feature::Show(_) | Feature::Decade(_))
+            })
             .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.0.cmp(a.0)))
             .map(|(feature, _)| feature)
     }
@@ -151,7 +160,9 @@ impl Taste {
     ) -> Vec<(Feature, f32)> {
         let mut carried: HashMap<&Feature, usize> = HashMap::new();
         for (id, _) in &self.liked {
-            let Some(title) = catalog.get(id) else { continue };
+            let Some(title) = catalog.get(id) else {
+                continue;
+            };
             for (feature, _) in &title.features {
                 *carried.entry(feature).or_default() += 1;
             }
@@ -160,7 +171,9 @@ impl Taste {
             .features
             .iter()
             .filter(|(feature, weight)| {
-                **weight > 0.0 && wanted(feature) && carried.get(feature).copied().unwrap_or(0) >= support
+                **weight > 0.0
+                    && wanted(feature)
+                    && carried.get(feature).copied().unwrap_or(0) >= support
             })
             .map(|(feature, weight)| (feature.clone(), *weight))
             .collect();

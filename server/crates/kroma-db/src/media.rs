@@ -7,8 +7,8 @@
 use rusqlite::OptionalExtension;
 
 use super::{
-    attach_files, attach_files_batch, items_by_ids_ordered, params, row_to_item, ITEM_COLS,
-    MediaItem, Pool, Result,
+    attach_files, attach_files_batch, items_by_ids_ordered, params, row_to_item, MediaItem, Pool,
+    Result, ITEM_COLS,
 };
 use kroma_domain::{Season, Show, ShowDetail, SplashEntry};
 
@@ -128,7 +128,8 @@ pub fn show_certifications(
         "SELECT id, NULLIF(json_extract(metadata,'$.certification'), '') \
          FROM shows WHERE id IN ({placeholders})"
     ))?;
-    let params: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+    let params: Vec<&dyn rusqlite::ToSql> =
+        ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
     let rows = stmt.query_map(params.as_slice(), |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
     })?;
@@ -368,7 +369,9 @@ mod tests {
             seed_movie(&conn, "m4", "Same Name, Other Series", "lib");
             // Release dates out of title order, so the order can only be the date's.
             let set = |id: &str, tmdb: Option<i64>, name: &str, date: &str| {
-                let id_part = tmdb.map(|t| format!(r#","collectionId":{t}"#)).unwrap_or_default();
+                let id_part = tmdb
+                    .map(|t| format!(r#","collectionId":{t}"#))
+                    .unwrap_or_default();
                 let meta = format!(
                     r#"{{"tmdbId":1,"collectionName":"{name}","tmdbUrl":"x","releaseDate":"{date}"{id_part}}}"#
                 );
@@ -407,7 +410,10 @@ mod tests {
             let set = |id: &str, name: &str| {
                 conn.execute(
                     "UPDATE items SET metadata=?2 WHERE id=?1",
-                    params![id, format!(r#"{{"tmdbId":0,"collectionName":"{name}","tmdbUrl":"x"}}"#)],
+                    params![
+                        id,
+                        format!(r#"{{"tmdbId":0,"collectionName":"{name}","tmdbUrl":"x"}}"#)
+                    ],
                 )
                 .unwrap();
             };
@@ -417,7 +423,10 @@ mod tests {
         }
         let (name, items) = collection_members(&p, "m1").unwrap();
         assert_eq!(name.as_deref(), Some("Local Set"));
-        assert_eq!(items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), ["m2"]);
+        assert_eq!(
+            items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            ["m2"]
+        );
     }
 
     #[test]

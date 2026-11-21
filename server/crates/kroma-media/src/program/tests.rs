@@ -50,7 +50,9 @@ fn engine(root: &Path) -> HlsEngine {
 }
 
 async fn body_of(resp: Response) -> String {
-    let bytes = to_bytes(resp.into_body(), 1 << 20).await.expect("read the body");
+    let bytes = to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .expect("read the body");
     String::from_utf8(bytes.to_vec()).expect("a text body")
 }
 
@@ -155,7 +157,10 @@ async fn a_program_answers_its_playlist_with_the_start_and_the_true_length() {
         resp.headers().get(header::CONTENT_TYPE).unwrap(),
         "application/vnd.apple.mpegurl"
     );
-    assert_eq!(resp.headers().get(header::CACHE_CONTROL).unwrap(), "no-store");
+    assert_eq!(
+        resp.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
     assert_eq!(resp.headers().get("X-Hls-Start").unwrap(), "0.000");
     assert_eq!(resp.headers().get("X-Media-Duration").unwrap(), "8.000");
     let body = body_of(resp).await;
@@ -196,7 +201,10 @@ async fn an_unprobed_program_takes_its_length_off_the_file_itself() {
         .unwrap()
         .parse()
         .unwrap();
-    assert!((4.0..6.0).contains(&length), "read {length}s off a five second clip");
+    assert!(
+        (4.0..6.0).contains(&length),
+        "read {length}s off a five second clip"
+    );
 }
 
 #[tokio::test]
@@ -212,7 +220,10 @@ async fn a_segment_no_session_is_producing_is_a_miss_nothing_may_cache() {
     let resp = file(&engine, "it1", session, "seg_00000.m4s", Unmetered).await;
 
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    assert_eq!(resp.headers().get(header::CACHE_CONTROL).unwrap(), "no-store");
+    assert_eq!(
+        resp.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
     assert!(body_of(resp).await.contains("session expired"));
 }
 

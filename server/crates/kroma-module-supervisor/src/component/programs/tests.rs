@@ -72,7 +72,10 @@ fn a_placeholder_becomes_the_gateway_with_a_token_the_module_never_saw() {
 
     let filled = programs.with_gateway("--socks-url={gateway:peers.public}");
 
-    assert_eq!(filled, "--socks-url=socks5://peers.public:secret@127.0.0.1:9");
+    assert_eq!(
+        filled,
+        "--socks-url=socks5://peers.public:secret@127.0.0.1:9"
+    );
 }
 
 #[test]
@@ -131,7 +134,10 @@ fn what_an_earlier_server_left_of_a_helper_is_stopped_and_what_this_one_runs_is_
 
     let recorded = std::fs::read_to_string(later.pid_file("stand-in")).unwrap();
     assert_eq!(recorded.trim(), current_pid.to_string());
-    assert!(earlier.wait(left, Duration::from_secs(2)).unwrap().is_some());
+    assert!(earlier
+        .wait(left, Duration::from_secs(2))
+        .unwrap()
+        .is_some());
     assert_eq!(later.wait(current, Duration::ZERO).unwrap(), None);
 }
 

@@ -9,9 +9,15 @@ mod component_support;
 mod install_support;
 
 use component_support::wasm::guest_component;
-use component_support::{DECLARES, FIRST_PARTY, GUEST, STORES, Server, place_component, seed_core};
+use component_support::{place_component, seed_core, Server, DECLARES, FIRST_PARTY, GUEST, STORES};
 
-const HOST_FILES: [&str; 5] = ["module.json", "origin.json", MODULE_COMPONENT, "module.cwasm", "module.stamp"];
+const HOST_FILES: [&str; 5] = [
+    "module.json",
+    "origin.json",
+    MODULE_COMPONENT,
+    "module.cwasm",
+    "module.stamp",
+];
 
 fn ask(server: &Server, how: &str, path: &Path) -> String {
     let endpoint = server.supervisor.endpoint_of(GUEST).unwrap();
@@ -38,7 +44,10 @@ fn a_module_holding_its_own_folder_reaches_none_of_what_the_host_installed() {
         .collect();
 
     assert_eq!(kept, r#"Ok("kept")"#);
-    assert!(reached.iter().all(|answer| answer.starts_with("Err(")), "{reached:?}");
+    assert!(
+        reached.iter().all(|answer| answer.starts_with("Err(")),
+        "{reached:?}"
+    );
     let after: Vec<Vec<u8>> = HOST_FILES
         .iter()
         .map(|name| std::fs::read(installed.join(name)).unwrap())
@@ -105,10 +114,16 @@ fn a_compiled_copy_changed_after_it_was_kept_is_compiled_again() {
     assert_eq!(answered.text(), "still here");
     let said = server.said.lock().unwrap();
     assert!(
-        said.iter().any(|line| line.contains("is not the one recorded beside it")),
+        said.iter()
+            .any(|line| line.contains("is not the one recorded beside it")),
         "{said:?}"
     );
-    assert!(!said.iter().any(|line| line.contains("from its compiled copy")), "{said:?}");
+    assert!(
+        !said
+            .iter()
+            .any(|line| line.contains("from its compiled copy")),
+        "{said:?}"
+    );
 }
 
 #[test]

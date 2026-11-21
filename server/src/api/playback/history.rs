@@ -31,17 +31,25 @@ pub async fn history(
         let ids: Vec<String> = marks.iter().map(|(id, _)| id.clone()).collect();
         let mut items = db::get_items_by_ids(&pool, &ids)?;
         db::localize::overlay_items(&pool, &mut items, locale)?;
-        let mut by_id: HashMap<String, _> =
-            items.into_iter().map(|item| (item.id.clone(), item)).collect();
+        let mut by_id: HashMap<String, _> = items
+            .into_iter()
+            .map(|item| (item.id.clone(), item))
+            .collect();
         let watched = marks
             .into_iter()
             .filter_map(|(id, watched_at)| {
-                by_id.remove(&id).map(|item| WatchedEntry { item, watched_at })
+                by_id
+                    .remove(&id)
+                    .map(|item| WatchedEntry { item, watched_at })
             })
             .collect::<Vec<_>>();
 
         let mut in_progress = db::continue_watching(&pool, &uid, played_percent)?;
-        db::localize::overlay_each(&pool, in_progress.iter_mut().map(|row| &mut row.item), locale)?;
+        db::localize::overlay_each(
+            &pool,
+            in_progress.iter_mut().map(|row| &mut row.item),
+            locale,
+        )?;
         Ok(HistoryView {
             watched,
             in_progress,

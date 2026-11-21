@@ -153,11 +153,9 @@ mod tests {
             .media
             .decode_audio(asked(Path::new("/etc/hosts"), "/tmp/pcm"));
 
-        assert!(
-            refused
-                .unwrap_err()
-                .contains("not in a folder this module holds")
-        );
+        assert!(refused
+            .unwrap_err()
+            .contains("not in a folder this module holds"));
     }
 
     #[test]
@@ -198,11 +196,9 @@ mod tests {
             .media
             .decode_audio(asked(&at.library.join("film.wav"), &into_the_library));
 
-        assert!(
-            refused
-                .unwrap_err()
-                .contains("not in a folder this module may write")
-        );
+        assert!(refused
+            .unwrap_err()
+            .contains("not in a folder this module may write"));
         assert!(!at.library.join("pcm").exists());
     }
 }

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use crate::model::MonitorPreset;
 use crate::lifecycle::shift_ymd;
+use crate::model::MonitorPreset;
 
 const RECENT_DAYS: i64 = 90;
 

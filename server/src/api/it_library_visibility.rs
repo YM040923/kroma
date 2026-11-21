@@ -97,7 +97,11 @@ async fn naming_an_ungranted_library_outright_lists_nothing_rather_than_everythi
     assert_eq!(items.as_array().map(Vec::len), Some(0));
 }
 
-fn set_certification(app: &crate::api::test_support::TestApp, id: &str, certification: Option<&str>) {
+fn set_certification(
+    app: &crate::api::test_support::TestApp,
+    id: &str,
+    certification: Option<&str>,
+) {
     let meta: crate::model::Metadata = serde_json::from_value(json!({
         "tmdbId": 1,
         "genres": [],
@@ -111,12 +115,8 @@ fn set_certification(app: &crate::api::test_support::TestApp, id: &str, certific
 #[tokio::test]
 async fn a_limited_account_sees_and_opens_only_titles_within_its_age() {
     let app = test_app();
-    let (viewer_id, viewer) = seed_session(
-        &app.state,
-        "kid@test.dev",
-        "kid",
-        &[Permission::Playback],
-    );
+    let (viewer_id, viewer) =
+        seed_session(&app.state, "kid@test.dev", "kid", &[Permission::Playback]);
     crate::db::set_user_content_limit(&app.state.db, &viewer_id, Some(Some(12)), Some(false))
         .unwrap();
     let rated = demo_item_id("Blade Runner 2049");

@@ -4,9 +4,9 @@ use anyhow::Result;
 use rusqlite::{params, OptionalExtension};
 
 use crate::hydrate::{attach_files, attach_files_batch};
-use crate::Pool;
 use crate::rows::row_to_item;
 use crate::schema::ITEM_COLS;
+use crate::Pool;
 use kroma_domain::MediaItem;
 
 /// The episode to play to CONTINUE a show, for a user: the most-recent in-progress

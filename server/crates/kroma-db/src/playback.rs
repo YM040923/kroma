@@ -149,9 +149,8 @@ pub fn delete_progress_many(pool: &Pool, user_id: &str, item_ids: &[String]) -> 
     let mut removed = 0;
     for chunk in item_ids.chunks(IN_CHUNK) {
         let placeholders = vec!["?"; chunk.len() + 1].join(",");
-        let sql = format!(
-            "DELETE FROM progress WHERE user_id = ?1 AND item_id IN ({placeholders})"
-        );
+        let sql =
+            format!("DELETE FROM progress WHERE user_id = ?1 AND item_id IN ({placeholders})");
         let mut stmt = conn.prepare(&sql)?;
         removed += stmt.execute(rusqlite::params_from_iter(
             std::iter::once(user_id).chain(chunk.iter().map(String::as_str)),
@@ -163,10 +162,7 @@ pub fn delete_progress_many(pool: &Pool, user_id: &str, item_ids: &[String]) -> 
 /// Forget every saved position a user holds ("clear Continue watching").
 pub fn delete_progress_all(pool: &Pool, user_id: &str) -> Result<usize> {
     let conn = pool.get()?;
-    Ok(conn.execute(
-        "DELETE FROM progress WHERE user_id = ?1",
-        params![user_id],
-    )?)
+    Ok(conn.execute("DELETE FROM progress WHERE user_id = ?1", params![user_id])?)
 }
 
 /// Forget a show's resume positions: every episode the catalog still links to

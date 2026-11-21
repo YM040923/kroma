@@ -1,7 +1,7 @@
 use rusqlite::params;
 
-use crate::Pool;
 use crate::testing::TempPool;
+use crate::Pool;
 use kroma_domain::Permission;
 
 // Fresh DB with one user and one movie item `m1` (so `progress` which has an

@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use axum::http::StatusCode;
 use axum::response::Response;
-use kroma_sqlite::Pool;
 use kroma_module_wire::{Audience, NotificationSpec, Permission, User};
+use kroma_sqlite::Pool;
 
 use super::log::{records_into_log, Log, Published};
 use crate::{Event, HostCtx, HostStorage, LibraryFolders};
@@ -118,11 +118,7 @@ impl<H: HostCtx> HostCtx for Recording<H> {
         self.inner.metadata_candidates(query, kind, year)
     }
 
-    fn metadata_episodes(
-        &self,
-        tmdb_id: u64,
-        season: u32,
-    ) -> Vec<kroma_module_wire::EpisodeInfo> {
+    fn metadata_episodes(&self, tmdb_id: u64, season: u32) -> Vec<kroma_module_wire::EpisodeInfo> {
         self.inner.metadata_episodes(tmdb_id, season)
     }
     fn contributions(&self, point: &str) -> Vec<crate::Contribution> {

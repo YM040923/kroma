@@ -1,10 +1,10 @@
 use axum::http::StatusCode;
 use kroma_engine::services::importers::POINT;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::api::test_support::{
-    IMPORTER, get, importer_answering, installed_module, point_store_at, registry_serving,
-    seed_session, send, test_app,
+    get, importer_answering, installed_module, point_store_at, registry_serving, seed_session,
+    send, test_app, IMPORTER,
 };
 
 const NOWHERE: &str = "http://127.0.0.1:1/registry.json";

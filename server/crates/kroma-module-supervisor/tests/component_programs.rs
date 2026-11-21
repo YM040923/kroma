@@ -5,7 +5,7 @@ use kroma_module_host::NetworkAction;
 mod component_support;
 
 use component_support::wasm::guest_component;
-use component_support::{GUEST, Server, THIRD_PARTY, http_server};
+use component_support::{http_server, Server, GUEST, THIRD_PARTY};
 
 const RUNS_ECHO: &str = r#", "storage": {}, "permissions": { "run": ["echo"] }"#;
 const STAND_IN: &str = "#!/bin/sh\necho from the helper\n";
@@ -103,15 +103,13 @@ fn a_helper_that_does_not_match_its_pin_is_refused_and_not_kept() {
         "{}",
         after.text()
     );
-    assert!(
-        !server
-            .dir
-            .path()
-            .join("helpers")
-            .join(GUEST)
-            .join("stand-in")
-            .exists()
-    );
+    assert!(!server
+        .dir
+        .path()
+        .join("helpers")
+        .join(GUEST)
+        .join("stand-in")
+        .exists());
 }
 
 #[test]
@@ -172,14 +170,23 @@ fn a_helper_changed_after_it_was_fetched_is_refused_at_start_and_fetched_again()
     let manifest = manifest_with_helper(port, &sha256_of(STAND_IN.as_bytes()));
     let endpoint = server.started(GUEST, guest_component(), &manifest);
     server.get(&endpoint, "/ensure/stand-in");
-    let helper = server.dir.path().join("helpers").join(GUEST).join("stand-in");
+    let helper = server
+        .dir
+        .path()
+        .join("helpers")
+        .join(GUEST)
+        .join("stand-in");
     std::fs::write(&helper, "#!/bin/sh\necho changed\n").unwrap();
 
     let changed = server.get(&endpoint, "/run/stand-in");
     let fetched = server.get(&endpoint, "/ensure/stand-in");
     let after = server.get(&endpoint, "/run/stand-in");
 
-    assert!(changed.text().contains("no longer matches"), "{}", changed.text());
+    assert!(
+        changed.text().contains("no longer matches"),
+        "{}",
+        changed.text()
+    );
     assert_eq!(fetched.text(), "Ok(())");
     assert_eq!(after.text(), "0 from the helper\n");
 }

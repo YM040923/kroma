@@ -162,14 +162,11 @@ fn one_title_losing_every_file_at_once_is_held_back_too() {
     db::insert_wanted(host.db(), &rows, 0).unwrap();
     grace_over(&host);
 
-    crate::monitoring::reconcile::reconcile_title(&host, RequestKind::Show, SHOW)
-        .unwrap();
+    crate::monitoring::reconcile::reconcile_title(&host, RequestKind::Show, SHOW).unwrap();
 
-    assert!(
-        units(&host, RequestKind::Show, SHOW)
-            .iter()
-            .all(|(_, _, status)| status == "available")
-    );
+    assert!(units(&host, RequestKind::Show, SHOW)
+        .iter()
+        .all(|(_, _, status)| status == "available"));
 }
 
 #[test]

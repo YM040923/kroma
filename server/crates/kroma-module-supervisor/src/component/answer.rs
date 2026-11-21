@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::extract::{Request as HttpRequest, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response as HttpResponse};
 use kroma_wasm_host::{Header, Request};
 
-use super::pool::{Pool, with_a_slot};
+use super::pool::{with_a_slot, Pool};
 
 const MAX_REQUEST_BYTES: usize = 64 * 1024 * 1024;
 

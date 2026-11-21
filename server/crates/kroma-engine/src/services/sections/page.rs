@@ -91,7 +91,8 @@ impl Page<'_, '_> {
                 }
             }
             if held.len() == draft.min {
-                self.promised.extend(held.into_iter().map(|key| (key, slot)));
+                self.promised
+                    .extend(held.into_iter().map(|key| (key, slot)));
             }
         }
     }
@@ -105,7 +106,8 @@ impl Page<'_, '_> {
                 let key = self.title_key(id);
                 let mine = self.promised.get(&key) == Some(&slot);
                 let free = draft.factual
-                    || (!self.offered.contains(&key) && self.promised.get(&key).is_none_or(|_| mine));
+                    || (!self.offered.contains(&key)
+                        && self.promised.get(&key).is_none_or(|_| mine));
                 (free && in_row.insert(key)).then_some((id.as_str(), mine))
             })
             .collect();
@@ -266,7 +268,13 @@ mod tests {
         let some = Accepts::parse(Some("ranked,carousel"));
 
         assert!(all.hero && all.spotlight && all.ranked && all.wide);
-        assert_eq!(some, Accepts { ranked: true, ..Accepts::default() });
+        assert_eq!(
+            some,
+            Accepts {
+                ranked: true,
+                ..Accepts::default()
+            }
+        );
         assert_eq!(Accepts::parse(None), Accepts::default());
     }
 }

@@ -1,9 +1,9 @@
 use super::*;
-use crate::model::RequestKind;
 use crate::lifecycle::test_fixtures::{wanted, wr};
 use crate::lifecycle::test_support::{
     insert_req, seed_movie_item, seed_show, status_of_req, test_host,
 };
+use crate::model::RequestKind;
 
 #[test]
 fn tally_wanted_counts_aired_present_and_newly_available() {

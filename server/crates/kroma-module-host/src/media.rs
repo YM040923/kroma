@@ -4,7 +4,7 @@ use std::path::Path;
 
 pub use kroma_primitives::pcm::{Pcm, SampleFormat};
 
-use crate::outside::{DecodeSpec, outside};
+use crate::outside::{outside, DecodeSpec};
 
 /// Decode audio track `track` of `source` into raw `pcm` at `destination`, with
 /// the core's ffmpeg under its budget, and answer the bytes written. Needs

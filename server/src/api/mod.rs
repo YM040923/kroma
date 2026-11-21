@@ -11,6 +11,7 @@ pub mod poster;
 pub mod ws;
 
 mod accounts;
+mod acquisition;
 mod cast;
 mod content_limit;
 mod diagnostics;
@@ -61,6 +62,7 @@ mod trailers;
 mod util;
 mod visibility;
 
+mod artwork;
 #[cfg(test)]
 mod it_account_identifiers;
 #[cfg(test)]
@@ -83,7 +85,6 @@ mod it_backup;
 mod it_cast;
 #[cfg(test)]
 mod it_content;
-mod artwork;
 #[cfg(test)]
 mod it_device_versions;
 #[cfg(test)]
@@ -120,10 +121,6 @@ mod it_imports_people;
 mod it_invites;
 #[cfg(test)]
 mod it_library_visibility;
-#[cfg(test)]
-mod it_share;
-#[cfg(test)]
-mod it_settings_libraries;
 #[cfg(test)]
 mod it_mail_relay;
 #[cfg(test)]
@@ -188,6 +185,10 @@ mod it_search;
 mod it_server_restart;
 #[cfg(test)]
 mod it_server_status;
+#[cfg(test)]
+mod it_settings_libraries;
+#[cfg(test)]
+mod it_share;
 #[cfg(test)]
 mod it_sso;
 #[cfg(test)]
@@ -335,6 +336,7 @@ pub fn router(state: SharedState, supervisor: Arc<Supervisor>) -> Router {
         .merge(rematch::routes())
         .merge(monitoring::routes())
         .merge(requests::routes())
+        .merge(acquisition::routes())
         .merge(reports::routes())
         .merge(notifications::routes())
         .merge(releases::routes())

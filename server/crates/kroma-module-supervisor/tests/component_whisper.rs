@@ -9,8 +9,8 @@ use kroma_module_supervisor::Endpoint;
 
 mod component_support;
 
-use component_support::Server;
 use component_support::wasm::{build_with, module_source};
+use component_support::Server;
 
 const WHISPER: &str = "tv.kroma.whisper";
 const WHISPER_JOB: &str = "wj-test";
@@ -95,14 +95,12 @@ fn the_real_whisper_module_answers_nothing_when_it_cannot_get_its_model() {
 
     assert_eq!(text, None);
     assert_eq!(whisper_job(&server).0, "model");
-    assert!(
-        !server
-            .said
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|line| line.contains("component stopped"))
-    );
+    assert!(!server
+        .said
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line.contains("component stopped")));
 }
 
 #[test]
@@ -121,11 +119,9 @@ fn the_real_whisper_module_transcribes_speech_and_reports_on_its_row() {
     assert!(text.to_lowercase().contains("lighthouse"), "{text}");
     assert_eq!(stage, "transcribe");
     assert!(total > 0 && done == total, "{done}/{total}");
-    assert!(
-        !module_folder
-            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-            .any(|name| name.starts_with("pcm-"))
-    );
+    assert!(!module_folder
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .any(|name| name.starts_with("pcm-")));
 }
 
 #[test]
@@ -145,12 +141,10 @@ fn a_transcription_the_core_cancels_stops_and_answers_nothing() {
     let text = transcribed(&server, &endpoint, &clip);
 
     assert_eq!(text, None);
-    assert!(
-        !server
-            .said
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|line| line.contains("component stopped"))
-    );
+    assert!(!server
+        .said
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line.contains("component stopped")));
 }

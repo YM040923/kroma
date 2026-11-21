@@ -58,7 +58,13 @@ fn the_first_matching_rule_wins() {
     let rules = policy(
         DefaultAction::Allow,
         vec![
-            rule("vpn-peers", None, Some("peers-announce"), None, Action::Network("vpn".to_string())),
+            rule(
+                "vpn-peers",
+                None,
+                Some("peers-announce"),
+                None,
+                Action::Network("vpn".to_string()),
+            ),
             rule("block-all", None, None, None, Action::Block),
         ],
     );
@@ -103,7 +109,10 @@ fn a_rule_scoped_to_a_caller_leaves_every_other_caller_alone() {
     );
 
     let cases = [
-        ("tv.kroma.indexer", (Action::Network("vpn".to_string()), Some("indexer-vpn"))),
+        (
+            "tv.kroma.indexer",
+            (Action::Network("vpn".to_string()), Some("indexer-vpn")),
+        ),
         ("tv.kroma.torznab", (Action::Direct, None)),
         (CORE, (Action::Direct, None)),
     ];
@@ -263,14 +272,23 @@ fn a_download_client_on_this_machine_stays_reachable() {
 fn a_vpn_rule_for_a_local_host_goes_direct() {
     let rules = policy(
         DefaultAction::Allow,
-        vec![rule("all-vpn", None, None, None, Action::Network("vpn".to_string()))],
+        vec![rule(
+            "all-vpn",
+            None,
+            None,
+            None,
+            Action::Network("vpn".to_string()),
+        )],
     );
 
     let cases = [
         ("192.168.1.20", (Action::Direct, Some("all-vpn"))),
         ("nas.local", (Action::Direct, Some("all-vpn"))),
         ("qbittorrent", (Action::Direct, Some("all-vpn"))),
-        ("tracker.example", (Action::Network("vpn".to_string()), Some("all-vpn"))),
+        (
+            "tracker.example",
+            (Action::Network("vpn".to_string()), Some("all-vpn")),
+        ),
     ];
 
     for (host, expected) in cases {

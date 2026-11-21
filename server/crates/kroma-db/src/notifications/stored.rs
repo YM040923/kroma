@@ -101,7 +101,9 @@ pub(super) fn row_to_notification(r: &Row) -> rusqlite::Result<StoredNotificatio
             .zip(subject_id)
             .map(|(kind, id)| NotificationSubject { kind, id }),
         actor_id: r.get(14)?,
-        data: data.as_deref().and_then(|raw| serde_json::from_str(raw).ok()),
+        data: data
+            .as_deref()
+            .and_then(|raw| serde_json::from_str(raw).ok()),
         dedupe_key: r.get(16)?,
         group_key: r.get(17)?,
         module_type: r.get(22)?,

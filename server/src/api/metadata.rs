@@ -49,7 +49,9 @@ pub async fn item_metadata(
     .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "item not found"))?;
 
     if item.kind == Kind::Episode {
-        return item.metadata.map(|meta| Json(meta).into_response())
+        return item
+            .metadata
+            .map(|meta| Json(meta).into_response())
             .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "no episode metadata"));
     }
     let api_key = require_tmdb_key(&state)?;

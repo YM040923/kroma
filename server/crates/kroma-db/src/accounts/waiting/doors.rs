@@ -5,9 +5,9 @@ use kroma_domain::User;
 use crate::accounts::identities::ProviderIdentity;
 use crate::accounts::test_support::{mk_user, pool, waiting, FUTURE};
 use crate::accounts::{
-    access_token_user, access_token_user_by_id, create_access_token, create_reset,
-    create_session, find_user_by_login, get_reset, identity_user, link_identity, list_users,
-    renew_session, session_user, DeviceHints,
+    access_token_user, access_token_user_by_id, create_access_token, create_reset, create_session,
+    find_user_by_login, get_reset, identity_user, link_identity, list_users, renew_session,
+    session_user, DeviceHints,
 };
 use crate::{insert_passkey, passkey_user_ids, Pool};
 
@@ -15,7 +15,15 @@ const ISSUER: &str = "https://id.test";
 
 fn holding_every_credential(pool: &Pool) -> User {
     let ana = mk_user(pool, "ana@test.dev", "ana");
-    create_access_token(pool, "device", &ana.id, FUTURE, true, &DeviceHints::default()).unwrap();
+    create_access_token(
+        pool,
+        "device",
+        &ana.id,
+        FUTURE,
+        true,
+        &DeviceHints::default(),
+    )
+    .unwrap();
     create_session(pool, "session", &ana.id, FUTURE, Some("device")).unwrap();
     insert_passkey(pool, "key", &ana.id, "Phone", "{}").unwrap();
     let identity = ProviderIdentity {
@@ -31,7 +39,10 @@ fn holding_every_credential(pool: &Pool) -> User {
 fn put_to_wait(pool: &Pool, user: &User) {
     pool.get()
         .unwrap()
-        .execute("UPDATE users SET waiting = 1 WHERE id = ?1", params![user.id])
+        .execute(
+            "UPDATE users SET waiting = 1 WHERE id = ?1",
+            params![user.id],
+        )
         .unwrap();
 }
 

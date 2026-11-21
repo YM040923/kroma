@@ -87,9 +87,10 @@ fn report(
     }
     // A refusal is stamped like a delivery: the collector answered, so the next
     // attempt belongs tomorrow rather than in an hour.
-    let stamped = state
-        .settings
-        .set_internal(&state.db, SENT_KEY, json!(kroma_primitives::now_iso8601()));
+    let stamped =
+        state
+            .settings
+            .set_internal(&state.db, SENT_KEY, json!(kroma_primitives::now_iso8601()));
     if let Err(error) = stamped {
         tracing::warn!(%error, "could not store the send date; the next start sends again today");
     }
@@ -129,7 +130,8 @@ fn post(url: &str, payload: &Payload) -> Result<Outcome> {
     let Ok(res) = kroma_http::Fetch::new()
         .purpose("stats")
         .max_time(15)
-        .post_json(url, &body) else {
+        .post_json(url, &body)
+    else {
         return Ok(Outcome::Transient(0));
     };
     if res.status < 400 {

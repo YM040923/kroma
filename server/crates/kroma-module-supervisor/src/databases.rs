@@ -16,11 +16,15 @@ const MAX_NAME: usize = 128;
 
 pub(crate) fn is_database_name(name: &str) -> bool {
     let mut chars = name.chars();
-    let starts_well = chars.next().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+    let starts_well = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
     starts_well
         && name.len() <= MAX_NAME
         && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
-        && !kroma_sqlite::JOURNALS.iter().any(|suffix| name.ends_with(suffix))
+        && !kroma_sqlite::JOURNALS
+            .iter()
+            .any(|suffix| name.ends_with(suffix))
 }
 
 impl Supervisor {

@@ -75,12 +75,19 @@ fn write_show(eng: &Engine, id: &str, library: &str) {
     } else {
         parent
     };
-    write_file(&show_dir.join("tvshow.nfo"), &show_xml(meta, detail.show.year));
+    write_file(
+        &show_dir.join("tvshow.nfo"),
+        &show_xml(meta, detail.show.year),
+    );
 }
 
 // A streamed library stores the play URL in `abs_path`; its scanned `.strm`
 // is `rel_path` under one of the library's folders.
-fn local_paths(eng: &Engine, library: &str, files: Vec<db::local_paths::LocalFile>) -> Vec<PathBuf> {
+fn local_paths(
+    eng: &Engine,
+    library: &str,
+    files: Vec<db::local_paths::LocalFile>,
+) -> Vec<PathBuf> {
     let folders = eng.folders.get(library);
     files
         .into_iter()
@@ -155,7 +162,10 @@ fn show_xml(meta: &Metadata, year: Option<u32>) -> String {
 fn push_common(out: &mut String, meta: &Metadata, year: Option<u32>) {
     if let Some(title) = meta.title.as_deref() {
         out.push_str(&format!("  <title>{}</title>\n", esc(title)));
-        out.push_str(&format!("  <originaltitle>{}</originaltitle>\n", esc(title)));
+        out.push_str(&format!(
+            "  <originaltitle>{}</originaltitle>\n",
+            esc(title)
+        ));
     }
     if let Some(year) = year {
         out.push_str(&format!("  <year>{year}</year>\n"));
@@ -187,7 +197,10 @@ fn push_common(out: &mut String, meta: &Metadata, year: Option<u32>) {
         ));
     }
     if let Some(imdb) = meta.imdb_id.as_deref() {
-        out.push_str(&format!("  <uniqueid type=\"imdb\">{}</uniqueid>\n", esc(imdb)));
+        out.push_str(&format!(
+            "  <uniqueid type=\"imdb\">{}</uniqueid>\n",
+            esc(imdb)
+        ));
     }
     if let Some(set) = meta.collection_name.as_deref() {
         out.push_str("  <set>\n");
@@ -239,7 +252,10 @@ mod tests {
 
         meta.tmdb_id = 7;
         let xml = movie_xml(&meta, None);
-        assert!(xml.contains("<uniqueid type=\"tmdb\" default=\"true\">7</uniqueid>"), "{xml}");
+        assert!(
+            xml.contains("<uniqueid type=\"tmdb\" default=\"true\">7</uniqueid>"),
+            "{xml}"
+        );
     }
 
     #[test]

@@ -21,11 +21,12 @@ pub(super) fn run(ctx: &JobContext) -> Result<()> {
         ctx.warn("no TMDB API key configured nothing to refresh");
         return Ok(());
     }
-    let configured = crate::services::settings::all_library_scrape(&settings)
-        .values()
-        .any(|options| options.artwork_refresh_days.unwrap_or(0) > 0);
+    let configured = crate::services::settings::scrape_defaults(&settings, &state.config)
+        .artwork_refresh_days
+        .unwrap_or(0)
+        > 0;
     if !configured {
-        ctx.info("no library has scheduled artwork refresh");
+        ctx.info("scheduled artwork refresh is off");
         return Ok(());
     }
     let (checked, refreshed) = crate::services::enrich::refresh_artwork(

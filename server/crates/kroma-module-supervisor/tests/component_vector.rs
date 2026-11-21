@@ -9,8 +9,8 @@ use kroma_module_supervisor::Endpoint;
 
 mod component_support;
 
-use component_support::Server;
 use component_support::wasm::{build_with, module_source};
+use component_support::Server;
 
 const VECTOR: &str = "tv.kroma.vector";
 
@@ -94,12 +94,10 @@ fn the_real_vector_module_ranks_by_meaning_with_a_real_model() {
     let dot = |a: &[f32], b: &[f32]| a.iter().zip(b).map(|(x, y)| x * y).sum::<f32>();
     assert_eq!(vectors[0].len(), 384);
     assert!(dot(&vectors[0], &vectors[1]) > dot(&vectors[0], &vectors[2]) + 0.1);
-    assert!(
-        !server
-            .said
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|line| line.contains("component stopped"))
-    );
+    assert!(!server
+        .said
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line.contains("component stopped")));
 }

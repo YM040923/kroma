@@ -63,16 +63,24 @@ impl Shared {
     pub(super) fn grant(&self, asked: &HashMap<String, String>, claims: Value) -> String {
         let field = |name: &str| asked.get(name).cloned().unwrap_or_default();
         let code = random_token();
-        self.book.lock().expect("the provider's book").grants.insert(
-            code.clone(),
-            Grant {
-                claims: claims.as_object().cloned().expect("claims are an object"),
-                nonce: field("nonce"),
-                challenge: field("code_challenge"),
-                redirect_uri: field("redirect_uri"),
-            },
-        );
-        format!("{}?code={code}&state={}", field("redirect_uri"), field("state"))
+        self.book
+            .lock()
+            .expect("the provider's book")
+            .grants
+            .insert(
+                code.clone(),
+                Grant {
+                    claims: claims.as_object().cloned().expect("claims are an object"),
+                    nonce: field("nonce"),
+                    challenge: field("code_challenge"),
+                    redirect_uri: field("redirect_uri"),
+                },
+            );
+        format!(
+            "{}?code={code}&state={}",
+            field("redirect_uri"),
+            field("state")
+        )
     }
 }
 
@@ -105,8 +113,7 @@ fn serve(listener: std::net::TcpListener, shared: Arc<Shared>) {
         .build()
         .expect("a runtime for the provider")
         .block_on(async move {
-            let listener =
-                tokio::net::TcpListener::from_std(listener).expect("adopt the listener");
+            let listener = tokio::net::TcpListener::from_std(listener).expect("adopt the listener");
             let _ = axum::serve(listener, app).await;
         });
 }
@@ -135,9 +142,10 @@ impl FakeProvider {
     }
 
     fn bound(port: u16) -> (FakeProvider, std::net::TcpListener) {
-        let listener =
-            std::net::TcpListener::bind(("127.0.0.1", port)).expect("bind the provider");
-        listener.set_nonblocking(true).expect("a non-blocking listener");
+        let listener = std::net::TcpListener::bind(("127.0.0.1", port)).expect("bind the provider");
+        listener
+            .set_nonblocking(true)
+            .expect("a non-blocking listener");
         let issuer = format!("http://{}", listener.local_addr().expect("its address"));
         let shared = Arc::new(Shared {
             issuer: issuer.clone(),

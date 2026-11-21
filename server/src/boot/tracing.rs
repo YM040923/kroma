@@ -25,7 +25,8 @@ const KEEP_DAYS: usize = 30;
 pub fn init_tracing(
     log_dir: &std::path::Path,
 ) -> Option<tracing_appender::non_blocking::WorkerGuard> {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER));
 
     let (file_layer, guard) = match std::fs::create_dir_all(log_dir) {
         Ok(()) => {

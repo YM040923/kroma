@@ -8,6 +8,14 @@
       "broke": 1,
       "changed": 1
     },
+    "acquisition_attempts": {
+      "broke": 29,
+      "changed": 29
+    },
+    "acquisition_jobs": {
+      "broke": 30,
+      "changed": 30
+    },
     "art_overrides": {
       "broke": 25,
       "changed": 25
@@ -132,9 +140,17 @@
       "broke": 1,
       "changed": 1
     },
+    "media_locations": {
+      "broke": 29,
+      "changed": 29
+    },
     "media_share": {
       "broke": 28,
       "changed": 28
+    },
+    "media_units": {
+      "broke": 29,
+      "changed": 29
     },
     "metadata_core": {
       "broke": 26,
@@ -224,6 +240,14 @@
       "broke": 1,
       "changed": 1
     },
+    "share_files": {
+      "broke": 30,
+      "changed": 30
+    },
+    "share_subscriptions": {
+      "broke": 30,
+      "changed": 30
+    },
     "shows": {
       "broke": 1,
       "changed": 1
@@ -252,6 +276,10 @@
       "broke": 1,
       "changed": 1
     },
+    "watch_titles": {
+      "broke": 30,
+      "changed": 30
+    },
     "watched": {
       "broke": 1,
       "changed": 1
@@ -261,5 +289,5 @@
       "changed": 1
     }
   },
-  "version": 28
+  "version": 30
 }

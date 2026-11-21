@@ -63,11 +63,7 @@ pub struct RawCreatedBy {
 /// `max_cast`; empty characters dropped and photos absolutized to `w342`. With
 /// `drop_unnamed` set, rows with an empty name are filtered first (the discover
 /// path does this; enrichment keeps TMDB's list as-is).
-pub fn build_cast(
-    mut raw: Vec<RawCast>,
-    max_cast: usize,
-    drop_unnamed: bool,
-) -> Vec<CastMember> {
+pub fn build_cast(mut raw: Vec<RawCast>, max_cast: usize, drop_unnamed: bool) -> Vec<CastMember> {
     raw.sort_by_key(|m| m.order.unwrap_or(u32::MAX));
     raw.into_iter()
         .filter(|m| !drop_unnamed || !m.name.is_empty())

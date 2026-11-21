@@ -47,6 +47,8 @@ struct State {
     /// weighs a rename or a move more heavily than a listing.
     write_interval: Duration,
     budget: u32,
+    /// The day's allowance across every run and every player; 0 is no ceiling.
+    daily_budget: u32,
     calls: u32,
     /// The earliest instant the next call may start.
     next_at: Option<Instant>,
@@ -71,6 +73,7 @@ impl Pacer {
                 interval: Duration::from_millis(options.interval_ms),
                 write_interval: Duration::from_millis(options.write_pause_ms),
                 budget: options.max_calls_per_run,
+                daily_budget: options.daily_call_budget,
                 calls: 0,
                 next_at: None,
                 until: None,
@@ -86,6 +89,7 @@ impl Pacer {
         state.interval = Duration::from_millis(options.interval_ms);
         state.write_interval = Duration::from_millis(options.write_pause_ms);
         state.budget = options.max_calls_per_run;
+        state.daily_budget = options.daily_call_budget;
     }
 
     /// Start a new run: the budget is per run, the cooldown is not (a refusal
@@ -95,6 +99,7 @@ impl Pacer {
         state.interval = Duration::from_millis(options.interval_ms);
         state.write_interval = Duration::from_millis(options.write_pause_ms);
         state.budget = options.max_calls_per_run;
+        state.daily_budget = options.daily_call_budget;
         state.calls = 0;
     }
 
@@ -108,6 +113,14 @@ impl Pacer {
                     return Err(format!(
                         "本轮已达到 {} 次调用上限，剩余内容留给下一轮",
                         state.budget
+                    ));
+                }
+                if state.daily_budget > 0
+                    && crate::budget::calls_today() >= u64::from(state.daily_budget)
+                {
+                    return Err(format!(
+                        "今日 {} 次调用上限已用完，明天再继续",
+                        state.daily_budget
                     ));
                 }
                 let now = Instant::now();
@@ -124,6 +137,7 @@ impl Pacer {
                         } else {
                             state.calls += 1;
                             state.next_at = Some(now + state.interval);
+                            crate::budget::spend();
                             return Ok(());
                         }
                     }

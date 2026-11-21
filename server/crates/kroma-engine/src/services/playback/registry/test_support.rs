@@ -31,12 +31,7 @@ pub fn beat(reg: &Registry, ping: Ping, user: Option<&str>) -> Beat {
     beat_for(reg, ping, user, None)
 }
 
-pub fn beat_for(
-    reg: &Registry,
-    ping: Ping,
-    user: Option<&str>,
-    item: Option<&MediaItem>,
-) -> Beat {
+pub fn beat_for(reg: &Registry, ping: Ping, user: Option<&str>, item: Option<&MediaItem>) -> Beat {
     reg.upsert(
         ping,
         user.map(str::to_owned),

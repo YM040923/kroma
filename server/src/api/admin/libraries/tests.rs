@@ -168,6 +168,7 @@ async fn an_update_touches_only_the_fields_it_names() {
         folders: None,
         auto_scan: None,
         scrape: None,
+        acquisition_mode: None,
     };
     let res = update_library(
         State(state.clone()),
@@ -198,6 +199,7 @@ async fn an_update_can_turn_auto_scan_off_without_touching_anything_else() {
         folders: None,
         auto_scan: Some(false),
         scrape: None,
+        acquisition_mode: None,
     };
     update_library(
         State(state.clone()),
@@ -214,6 +216,45 @@ async fn an_update_can_turn_auto_scan_off_without_touching_anything_else() {
 }
 
 #[tokio::test]
+async fn a_library_acquisition_mode_is_saved_and_returned_to_the_admin_client() {
+    let harness = app();
+    let state = harness.state.clone();
+    let id = create(&state, "Films", vec!["/media/films"]).await.unwrap();
+
+    update_library(
+        State(state.clone()),
+        AuthUser(admin()),
+        AxPath(id.clone()),
+        Json(UpdateLibraryBody {
+            name: None,
+            kind: None,
+            folders: None,
+            auto_scan: None,
+            scrape: None,
+            acquisition_mode: Some(kroma_domain::AcquisitionMode::HybridLocalFirst),
+        }),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        settings::library_acquisition(&state.settings, &id),
+        kroma_domain::AcquisitionMode::HybridLocalFirst
+    );
+    let response = list_libraries(State(state), AuthUser(admin()))
+        .await
+        .unwrap();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        body["libraries"][0]["acquisitionMode"],
+        "hybrid_local_first"
+    );
+}
+
+#[tokio::test]
 async fn a_blank_new_name_is_ignored_rather_than_applied() {
     let harness = app();
     let state = harness.state.clone();
@@ -225,6 +266,7 @@ async fn a_blank_new_name_is_ignored_rather_than_applied() {
         folders: None,
         auto_scan: None,
         scrape: None,
+        acquisition_mode: None,
     };
     update_library(
         State(state.clone()),
@@ -254,6 +296,7 @@ async fn replacing_the_folders_cleans_them_too() {
         ]),
         auto_scan: None,
         scrape: None,
+        acquisition_mode: None,
     };
     update_library(
         State(state.clone()),
@@ -281,6 +324,7 @@ async fn editing_a_library_that_is_not_there_is_a_404() {
         folders: None,
         auto_scan: None,
         scrape: None,
+        acquisition_mode: None,
     };
     let err = update_library(
         State(state.clone()),

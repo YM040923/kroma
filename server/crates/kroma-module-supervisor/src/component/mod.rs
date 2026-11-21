@@ -14,8 +14,8 @@ mod roots;
 mod startup;
 
 use answer::answer;
-pub(crate) use pool::{Pool, WORKER_LIFETIME};
 use pool::tick_forever;
+pub(crate) use pool::{Pool, WORKER_LIFETIME};
 pub use roots::{FolderRoots, Folders};
 
 use std::sync::atomic::{AtomicBool, AtomicU32};
@@ -45,7 +45,9 @@ const LOG_FILTERS: [&str; 2] = ["KROMA_MODULE_LOG", "RUST_LOG"];
 fn limits_of(needs: ComponentNeeds) -> Limits {
     Limits {
         memory_bytes: needs.memory_mib.unwrap_or(DEFAULT_MEMORY_MIB) as usize * 1024 * 1024,
-        cpu_budget: Duration::from_secs(u64::from(needs.cpu_seconds.unwrap_or(DEFAULT_CPU_SECONDS))),
+        cpu_budget: Duration::from_secs(u64::from(
+            needs.cpu_seconds.unwrap_or(DEFAULT_CPU_SECONDS),
+        )),
     }
 }
 
@@ -53,7 +55,10 @@ impl Supervisor {
     /// How long a worker instance with nothing left running outlives its last
     /// call, for the modules started after this. A minute unless set.
     pub fn keep_idle_workers_for(&self, lifetime: Duration) {
-        *self.worker_lifetime.write().unwrap_or_else(PoisonError::into_inner) = lifetime;
+        *self
+            .worker_lifetime
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = lifetime;
     }
 
     fn wasm_host(&self) -> anyhow::Result<&WasmHost> {
@@ -90,7 +95,10 @@ impl Supervisor {
             .manifest_on_disk(id)
             .ok_or_else(|| anyhow::anyhow!("'{id}' has no readable manifest"))?;
         let storage = manifest.storage.clone();
-        let kept_in = storage.as_ref().map(|_| self.module_databases(id)).transpose()?;
+        let kept_in = storage
+            .as_ref()
+            .map(|_| self.module_databases(id))
+            .transpose()?;
         let first_party = self.origin(id).official;
         let no_network = manifest.permissions.is_none();
         let token = self.module_token(id);
@@ -175,25 +183,37 @@ impl Supervisor {
             .filter(|p| p.media.contains(&MediaTool::Decode))
             .map(|_| Arc::new(media::ModuleMedia::new(roots.clone())));
         let watch = Watch::over(id, self.watching.get().cloned());
-        let programs = Arc::new(programs::Programs::new(
-            id,
-            own_dir,
-            helpers_dir,
-            manifest.permissions.as_ref().map(|p| p.run.clone()).unwrap_or_default(),
-            manifest.helpers.clone(),
-            gateway.clone(),
-            first_party,
-        )
-        .watched(watch.clone()));
+        let programs = Arc::new(
+            programs::Programs::new(
+                id,
+                own_dir,
+                helpers_dir,
+                manifest
+                    .permissions
+                    .as_ref()
+                    .map(|p| p.run.clone())
+                    .unwrap_or_default(),
+                manifest.helpers.clone(),
+                gateway.clone(),
+                first_party,
+            )
+            .watched(watch.clone()),
+        );
         programs.reap_all_stale();
         let port_token = self.port_token(id);
         let mut env = vec![
             ("KROMA_MODULE_ID".to_string(), id.to_string()),
             ("KROMA_HOST_TOKEN".to_string(), port_token.clone()),
             ("KROMA_CORE_URL".to_string(), "http://core".to_string()),
-            ("KROMA_CORE_PORT".to_string(), self.cfg.core_port.to_string()),
+            (
+                "KROMA_CORE_PORT".to_string(),
+                self.cfg.core_port.to_string(),
+            ),
             ("KROMA_DB_PATH".to_string(), CORE_DATABASE.to_string()),
-            ("KROMA_DATA_DIR".to_string(), self.cfg.data_dir.to_string_lossy().into_owned()),
+            (
+                "KROMA_DATA_DIR".to_string(),
+                self.cfg.data_dir.to_string_lossy().into_owned(),
+            ),
             ("TMPDIR".to_string(), "/tmp".to_string()),
         ];
         for name in LOG_FILTERS {
@@ -233,14 +253,19 @@ impl Supervisor {
             slots: Arc::new(Semaphore::new(1)),
             capacity: AtomicU32::new(1),
             instances,
-            worker_lifetime: *self.worker_lifetime.read().unwrap_or_else(PoisonError::into_inner),
+            worker_lifetime: *self
+                .worker_lifetime
+                .read()
+                .unwrap_or_else(PoisonError::into_inner),
             port_token,
             started_up: AtomicBool::new(false),
             primary_up: AtomicBool::new(false),
             awake: AtomicBool::new(true),
             say,
         });
-        let app = axum::Router::new().fallback(answer).with_state(pool.clone());
+        let app = axum::Router::new()
+            .fallback(answer)
+            .with_state(pool.clone());
         tasks.push(
             wiring
                 .runtime
@@ -249,7 +274,12 @@ impl Supervisor {
                 })
                 .abort_handle(),
         );
-        tasks.push(wiring.runtime.spawn(tick_forever(pool.clone())).abort_handle());
+        tasks.push(
+            wiring
+                .runtime
+                .spawn(tick_forever(pool.clone()))
+                .abort_handle(),
+        );
         self.procs.write().unwrap().insert(
             id.to_string(),
             Proc {

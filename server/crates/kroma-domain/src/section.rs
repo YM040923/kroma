@@ -178,9 +178,15 @@ mod tests {
         let cards = serde_json::to_value(CardSection::from(section)).unwrap();
 
         assert_eq!(cards["items"][0]["type"], json!("movie"));
-        assert_eq!(cards["items"][0]["item"]["metadata"]["posterUrl"], json!("/p.webp"));
+        assert_eq!(
+            cards["items"][0]["item"]["metadata"]["posterUrl"],
+            json!("/p.webp")
+        );
         assert_eq!(cards["items"][1]["show"]["seasonCount"], json!(5));
-        assert_eq!(cards["items"][1]["show"]["metadata"]["genres"], json!(["Crime"]));
+        assert_eq!(
+            cards["items"][1]["show"]["metadata"]["genres"],
+            json!(["Crime"])
+        );
     }
 
     #[test]

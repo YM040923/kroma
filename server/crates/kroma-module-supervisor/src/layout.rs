@@ -11,7 +11,13 @@ use super::{Supervisor, HELPERS_DIR, LOCALES_DIR, MODULE_COMPONENT, NATIVE_BINAR
 
 const MOVING: &str = ".installed-moving";
 const MANIFEST: &str = "module.json";
-const HOST_FILES: [&str; 5] = [MANIFEST, MODULE_COMPONENT, NATIVE_BINARY, "icon.svg", "icon.png"];
+const HOST_FILES: [&str; 5] = [
+    MANIFEST,
+    MODULE_COMPONENT,
+    NATIVE_BINARY,
+    "icon.svg",
+    "icon.png",
+];
 const HOST_FOLDERS: [&str; 2] = ["fe", LOCALES_DIR];
 const OLD_COMPILED_COPY: [&str; 2] = ["module.cwasm", "module.stamp"];
 
@@ -108,7 +114,10 @@ fn copy_install(own: &Path, dest: &Path) -> std::io::Result<()> {
 fn copy_file(from: &Path, to: &Path) -> std::io::Result<()> {
     std::fs::write(to, std::fs::read(from)?)?;
     let modified = std::fs::symlink_metadata(from)?.modified()?;
-    std::fs::File::options().write(true).open(to)?.set_modified(modified)
+    std::fs::File::options()
+        .write(true)
+        .open(to)?
+        .set_modified(modified)
 }
 
 fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {

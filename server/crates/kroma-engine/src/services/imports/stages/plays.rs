@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 
-use super::{Importing, Outcome, PlayRow, untouched};
+use super::{untouched, Importing, Outcome, PlayRow};
 
 pub(super) fn add(_importing: &Importing<'_>, page: &[PlayRow<'_>]) -> Result<Vec<Outcome>> {
     Ok(untouched(page.len()))

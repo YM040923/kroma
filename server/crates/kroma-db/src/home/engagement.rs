@@ -97,7 +97,10 @@ pub fn engagements(
         "SELECT item_id, CAST(strftime('%s', added_at) AS INTEGER) FROM my_list WHERE user_id = ?1",
     )?;
     let rows = stmt.query_map(params![user_id], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, Option<i64>>(1)?.unwrap_or(0)))
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, Option<i64>>(1)?.unwrap_or(0),
+        ))
     })?;
     for row in rows {
         let (id, at) = row?;
@@ -191,7 +194,11 @@ mod tests {
     fn the_household_s_plays_fold_episodes_and_drop_anonymous_ones() {
         let pool = seeded();
         let conn = pool.get().unwrap();
-        for (id, user, item) in [("p1", Some("u1"), "e1"), ("p2", Some("u1"), "e1"), ("p3", None, "c1")] {
+        for (id, user, item) in [
+            ("p1", Some("u1"), "e1"),
+            ("p2", Some("u1"), "e1"),
+            ("p3", None, "c1"),
+        ] {
             conn.execute(
                 "INSERT INTO play_history (id,user_id,item_id,kind,title,started_at,ended_at) \
                  VALUES (?1,?2,?3,'movie','T',0,1)",

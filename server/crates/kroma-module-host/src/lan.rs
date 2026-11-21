@@ -3,8 +3,8 @@
 
 use std::time::Duration;
 
-pub use crate::outside::{LanReply, LanService};
 use crate::outside::outside;
+pub use crate::outside::{LanReply, LanService};
 
 /// Publish `service` until [`withdraw`] or until the module stops.
 pub fn announce(service: LanService) -> Result<u64, String> {
@@ -24,5 +24,7 @@ pub fn search(target: &str, wait: Duration) -> Result<Vec<LanReply>, String> {
 
 /// This machine's LAN addresses, the primary one first.
 pub fn addresses() -> Vec<String> {
-    outside().map(|outside| outside.addresses()).unwrap_or_default()
+    outside()
+        .map(|outside| outside.addresses())
+        .unwrap_or_default()
 }

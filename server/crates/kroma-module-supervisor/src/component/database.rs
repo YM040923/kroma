@@ -127,7 +127,10 @@ impl Databases for ModuleDatabases {
             (self.core_pool()?.clone(), None)
         } else {
             let name = self.kept.name_of(path).ok_or_else(|| {
-                failure(SQLITE_AUTH, format!("{path} is not one of this module's databases"))
+                failure(
+                    SQLITE_AUTH,
+                    format!("{path} is not one of this module's databases"),
+                )
             })?;
             (self.own_pool(name)?, Some(self.kept.clone()))
         };

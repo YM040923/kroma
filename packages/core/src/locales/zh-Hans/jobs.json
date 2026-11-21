@@ -15,6 +15,8 @@
   "jobs.acquisition.rss.name": "RSS 同步",
   "jobs.acquisition.search.desc": "先搜索监控片目缺失的内容，再搜索其现有内容的更好版本，并开始下载。",
   "jobs.acquisition.search.name": "缺失与升级搜索",
+  "jobs.acquisition.staging.desc": "BT 电影入库后，将暂存文件上传到 115；远端校验并写入 STRM 替代项后，才删除本地文件。",
+  "jobs.acquisition.staging.name": "115 云端暂存",
   "jobs.cache.cleanup.desc": "清除 HLS 转码缓存（播放时会重新生成），并把海报缓存裁剪到配置的大小（最旧优先）。",
   "jobs.cache.cleanup.name": "缓存清理",
   "jobs.cloud115.sync.desc": "遍历 115 映射目录，补写缺失的 .strm 并清理失效项；也可在 115 页面手动“立即同步”。",
@@ -104,6 +106,6 @@
   "jobs.trigger.watch": "文件变更",
   "jobs.update.check.desc": "每六小时检查你选择的发布通道。显示可用更新，并且仅在已选择的情况下，于空闲时准备自动更新。",
   "jobs.update.check.name": "检查更新",
-  "jobs.update.install.desc": "每十分钟检查一次，仅在启用自动安装、宿主更新器在线且没有活跃串流时安装可用更新。安装前会先保存备份。",
-  "jobs.update.install.name": "服务器自动更新"
+  "jobs.update.install.name": "服务器自动更新",
+  "jobs.update.install.desc": "每十分钟检查一次，仅在启用自动安装、宿主更新器在线且没有活跃串流时安装可用更新。安装前会先保存备份。"
 }

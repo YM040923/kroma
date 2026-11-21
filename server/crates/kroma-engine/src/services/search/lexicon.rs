@@ -36,7 +36,10 @@ impl Lexicon {
             (folded.len() == 1).then(|| folded.remove(0))
         };
         let mut set = |key: &str| -> HashSet<String> {
-            vocab::words(key).iter().filter_map(|word| fold(word)).collect()
+            vocab::words(key)
+                .iter()
+                .filter_map(|word| fold(word))
+                .collect()
         };
         let movie = set("vocab.movie");
         let show = set("vocab.show");

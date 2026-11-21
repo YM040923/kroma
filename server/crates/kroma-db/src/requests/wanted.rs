@@ -102,12 +102,7 @@ pub fn unit_id(kind: &str, tmdb_id: u64, season: Option<u32>, episode: Option<u3
 /// Puts a request's rows in the ledger: a unit nobody monitored yet joins it,
 /// and one already there answers to this request from now on, keeping its
 /// state, unless an open request already holds it.
-pub fn claim_wanted(
-    pool: &Pool,
-    request_id: &str,
-    rows: &[WantedRow],
-    now_ms: i64,
-) -> Result<()> {
+pub fn claim_wanted(pool: &Pool, request_id: &str, rows: &[WantedRow], now_ms: i64) -> Result<()> {
     let mut conn = pool.get()?;
     let tx = conn.transaction()?;
     insert_wanted_rows(
@@ -513,8 +508,10 @@ mod tests {
 
     fn owner(p: &Pool, id: &str) -> Option<String> {
         let conn = p.get().unwrap();
-        conn.query_row("SELECT request_id FROM wanted WHERE id = ?1", [id], |r| r.get(0))
-            .unwrap()
+        conn.query_row("SELECT request_id FROM wanted WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .unwrap()
     }
 
     #[test]
@@ -532,7 +529,10 @@ mod tests {
         let conn = p.get().unwrap();
         let rows = wanted_for_request(&conn, "r1").unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!((rows[0].id.as_str(), rows[0].status.as_str()), ("w-held", "available"));
+        assert_eq!(
+            (rows[0].id.as_str(), rows[0].status.as_str()),
+            ("w-held", "available")
+        );
     }
 
     #[test]
@@ -605,7 +605,12 @@ mod tests {
 
         let conn = p.get().unwrap();
         assert_eq!(removed, 1);
-        assert_eq!(wanted_for_title(&conn, RequestKind::Show, 1396).unwrap().len(), 1);
+        assert_eq!(
+            wanted_for_title(&conn, RequestKind::Show, 1396)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]

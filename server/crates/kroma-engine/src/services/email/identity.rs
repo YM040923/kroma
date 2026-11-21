@@ -38,7 +38,8 @@ impl RelayIdentity {
         let bytes = URL_SAFE_NO_PAD
             .decode(private.trim())
             .context("relay identity is not base64url")?;
-        let secret = SecretKey::from_slice(&bytes).context("relay identity is not a P-256 scalar")?;
+        let secret =
+            SecretKey::from_slice(&bytes).context("relay identity is not a P-256 scalar")?;
         Ok(Self { secret })
     }
 
@@ -84,12 +85,8 @@ mod tests {
     #[test]
     fn a_signature_verifies_under_the_public_point_the_relay_is_given() {
         let identity = RelayIdentity::generate();
-        let public = URL_SAFE_NO_PAD
-            .decode(identity.public_base64url())
-            .unwrap();
-        let signature = URL_SAFE_NO_PAD
-            .decode(identity.sign("nonce"))
-            .unwrap();
+        let public = URL_SAFE_NO_PAD.decode(identity.public_base64url()).unwrap();
+        let signature = URL_SAFE_NO_PAD.decode(identity.sign("nonce")).unwrap();
 
         let key = VerifyingKey::from_sec1_bytes(&public).unwrap();
         let signature = Signature::from_slice(&signature).unwrap();
@@ -124,7 +121,10 @@ mod tests {
     fn an_identity_that_could_not_be_stored_is_an_error_rather_than_a_key_the_relay_outlives() {
         let pool = crate::db::testing::temp_pool("relay-identity-unwritable");
         let settings = Settings::load(&pool);
-        pool.get().unwrap().execute_batch("DROP TABLE settings").unwrap();
+        pool.get()
+            .unwrap()
+            .execute_batch("DROP TABLE settings")
+            .unwrap();
 
         assert!(ensure_identity(&settings, &pool).is_err());
     }

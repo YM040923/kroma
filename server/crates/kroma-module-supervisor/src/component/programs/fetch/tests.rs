@@ -161,11 +161,9 @@ fn a_download_that_does_not_match_its_pin_is_not_installed() {
 
     let installed = programs.install(PROGRAM, &asset);
 
-    assert!(
-        installed
-            .unwrap_err()
-            .contains("does not match its pinned sha256")
-    );
+    assert!(installed
+        .unwrap_err()
+        .contains("does not match its pinned sha256"));
     assert_eq!(left_in_helpers(dir.path()), Vec::<String>::new());
 }
 

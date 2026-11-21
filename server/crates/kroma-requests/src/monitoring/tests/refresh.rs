@@ -48,11 +48,10 @@ fn an_episode_announced_since_joins_and_wakes_the_search() {
 
     assert_eq!(refreshed, 1);
     assert!(held(&host).contains(&(Some(1), Some(3))));
-    assert!(
-        host.jobs()
-            .iter()
-            .any(|(key, _)| *key == "acquisition.search")
-    );
+    assert!(host
+        .jobs()
+        .iter()
+        .any(|(key, _)| *key == "acquisition.search"));
 }
 
 #[test]
@@ -220,7 +219,9 @@ fn a_season_counting_the_episodes_already_known_is_not_read_again() {
         .unwrap();
     }
     age(&host);
-    let known = monitored(&host, RequestKind::Show, SHOW).unwrap().known_episodes;
+    let known = monitored(&host, RequestKind::Show, SHOW)
+        .unwrap()
+        .known_episodes;
     let seasons: Vec<serde_json::Value> = known
         .iter()
         .map(|(season, last)| json!({ "season_number": season, "episode_count": last }))
@@ -327,9 +328,8 @@ fn an_undated_episode_gets_its_date_and_wakes_the_search() {
     let conn = host.db().get().unwrap();
     let rows = db::wanted_for_title(&conn, RequestKind::Show, SHOW).unwrap();
     assert!(rows.iter().all(|r| r.air_date.is_some()));
-    assert!(
-        host.jobs()
-            .iter()
-            .any(|(key, _)| *key == "acquisition.search")
-    );
+    assert!(host
+        .jobs()
+        .iter()
+        .any(|(key, _)| *key == "acquisition.search"));
 }

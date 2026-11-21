@@ -102,7 +102,9 @@ pub fn build(
     services.insert(std::any::TypeId::of::<TranscriberClient>(), transcriber);
     services.insert(
         std::any::TypeId::of::<kroma_engine::services::trailers::Trailers>(),
-        Arc::new(kroma_engine::services::trailers::Trailers::in_data_dir(&config.data_dir)),
+        Arc::new(kroma_engine::services::trailers::Trailers::in_data_dir(
+            &config.data_dir,
+        )),
     );
     services.insert(
         std::any::TypeId::of::<Importers>(),

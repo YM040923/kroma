@@ -60,9 +60,21 @@ fn a_christmas_slasher_is_not_a_christmas_film() {
         facts("heat", &[CRIME]),
     ]);
     let search = engine(&[
-        ("klaus", "Klaus", "A postman and a toymaker invent Christmas."),
-        ("black-christmas", "Black Christmas", "Sorority sisters are stalked over the holidays."),
-        ("violent-night", "Violent Night", "Santa Claus fights mercenaries on Christmas Eve."),
+        (
+            "klaus",
+            "Klaus",
+            "A postman and a toymaker invent Christmas.",
+        ),
+        (
+            "black-christmas",
+            "Black Christmas",
+            "Sorority sisters are stalked over the holidays.",
+        ),
+        (
+            "violent-night",
+            "Violent Night",
+            "Santa Claus fights mercenaries on Christmas Eve.",
+        ),
         ("heat", "Heat", "A crew of thieves in Los Angeles."),
     ]);
 
@@ -81,8 +93,16 @@ fn a_family_film_that_never_mentions_christmas_is_not_one_either() {
 fn a_theme_is_carried_in_whatever_language_the_synopsis_was_stored() {
     let catalog = Catalog::build(vec![facts("fr", &[COMEDY]), facts("en", &[CRIME])]);
     let search = engine(&[
-        ("fr", "Le Père Noël est une ordure", "Une permanence téléphonique le soir de Noël."),
-        ("en", "Inside Man", "A perfect bank heist turns into a hostage standoff."),
+        (
+            "fr",
+            "Le Père Noël est une ordure",
+            "Une permanence téléphonique le soir de Noël.",
+        ),
+        (
+            "en",
+            "Inside Man",
+            "A perfect bank heist turns into a hostage standoff.",
+        ),
     ]);
 
     assert_eq!(member_ids(theme("christmas"), &catalog, &search), ["fr"]);
@@ -98,7 +118,10 @@ fn a_genre_theme_admits_by_genre_alone_and_refuses_what_it_excludes() {
     ]);
     let search = engine(&[]);
 
-    assert_eq!(member_ids(theme("halloween"), &catalog, &search), ["scream"]);
+    assert_eq!(
+        member_ids(theme("halloween"), &catalog, &search),
+        ["scream"]
+    );
     assert_eq!(member_ids(theme("family"), &catalog, &search), ["coco"]);
 }
 
@@ -142,7 +165,11 @@ fn every_theme_has_a_rule_to_stand_on() {
 fn every_theme_that_asks_for_evidence_names_a_vocabulary_that_exists() {
     for theme in BANK {
         if let Some(key) = theme.evidence {
-            assert!(!vocab::words(key).is_empty(), "{} reads {key}, which says nothing", theme.key);
+            assert!(
+                !vocab::words(key).is_empty(),
+                "{} reads {key}, which says nothing",
+                theme.key
+            );
         }
     }
 }

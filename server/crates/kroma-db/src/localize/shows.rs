@@ -63,7 +63,9 @@ pub fn overlay_show_detail(pool: &Pool, detail: &mut ShowDetail, locale: &str) -
             }
         }
         let season_id = format!("{}:{}", detail.show.id, season.number);
-        if let Some(t) = translations::resolve_many(&conn, "season", &[&season_id], locale)?.get(&season_id) {
+        if let Some(t) =
+            translations::resolve_many(&conn, "season", &[&season_id], locale)?.get(&season_id)
+        {
             if t.title.is_some() {
                 season.name = t.title.clone();
             }
@@ -260,7 +262,10 @@ mod tests {
             detail.seasons[0].cast[0].character.as_deref(),
             Some("Perso Saison")
         );
-        assert_eq!(detail.seasons[0].missing[0].title.as_deref(), Some("Listé FR"));
+        assert_eq!(
+            detail.seasons[0].missing[0].title.as_deref(),
+            Some("Listé FR")
+        );
         assert_eq!(
             detail.seasons[0].missing[0].overview.as_deref(),
             Some("Original")

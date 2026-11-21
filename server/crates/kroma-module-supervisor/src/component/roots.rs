@@ -110,7 +110,11 @@ impl Supervisor {
         let own_writable = fs.write.contains(&FsRoot::Module) || manifest.storage.is_some();
         roots.push(held(self.own_dir(id), own_writable));
         if first_party {
-            for name in manifest.data_dirs.iter().filter(|name| is_data_dir_name(name)) {
+            for name in manifest
+                .data_dirs
+                .iter()
+                .filter(|name| is_data_dir_name(name))
+            {
                 let dir = self.cfg.data_dir.join(name);
                 private_folder(&dir)?;
                 roots.push(held(dir, own_writable));
@@ -168,7 +172,11 @@ mod tests {
         let data = root.path().join("kroma");
         std::fs::create_dir_all(&data).unwrap();
 
-        let held = (holds(root.path(), &data), holds(&data, &data), holds(&data, root.path()));
+        let held = (
+            holds(root.path(), &data),
+            holds(&data, &data),
+            holds(&data, root.path()),
+        );
 
         assert_eq!(held, (true, true, false));
     }

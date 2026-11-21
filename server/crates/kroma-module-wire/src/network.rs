@@ -156,7 +156,6 @@ pub enum NetworkSeal {
     Down,
 }
 
-
 /// What a middleware is asked about one connection, as it answers the
 /// core-called point `network-policy`: who is calling, why, where to, and the
 /// decision the guards and the operator's rules reached. Never a URL path, a

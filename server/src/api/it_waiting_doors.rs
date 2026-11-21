@@ -127,7 +127,14 @@ async fn a_waiting_account_cannot_pair_a_television_by_code_or_by_handoff() {
     let t = test_app();
     let ana = ana(&t);
     put_to_wait(&t.state, &ana.id);
-    let (_, shown) = send(&t.app, "POST", "/api/auth/quickconnect/initiate", None, None).await;
+    let (_, shown) = send(
+        &t.app,
+        "POST",
+        "/api/auth/quickconnect/initiate",
+        None,
+        None,
+    )
+    .await;
     let secret = shown["secret"].as_str().expect("a poll secret");
 
     let approve = as_bearer(
@@ -187,7 +194,10 @@ async fn a_device_credential_of_a_waiting_account_is_not_exchanged_even_with_its
 async fn a_provider_identity_on_a_waiting_account_signs_nobody_in() {
     let round = at_provider(|p| p.new_people = NewPeople::Create);
     let first = round.sign_in(lea()).await;
-    let account = first["user"]["id"].as_str().expect("an account").to_string();
+    let account = first["user"]["id"]
+        .as_str()
+        .expect("an account")
+        .to_string();
     put_to_wait(&round.t.state, &account);
 
     let again = round.sign_in(lea()).await;

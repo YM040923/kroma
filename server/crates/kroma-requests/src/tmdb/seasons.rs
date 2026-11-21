@@ -80,7 +80,10 @@ pub fn season_episodes(api_key: &str, language: &str, tv_id: u64, season: u32) -
     SeasonData {
         name: resp.name.filter(|s| !s.trim().is_empty()),
         overview: resp.overview.filter(|s| !s.trim().is_empty()),
-        poster_url: resp.poster_path.filter(|s| !s.is_empty()).map(|p| format!("{IMG}/w500{p}")),
+        poster_url: resp
+            .poster_path
+            .filter(|s| !s.is_empty())
+            .map(|p| format!("{IMG}/w500{p}")),
         air_date: resp.air_date.filter(|s| !s.is_empty()),
         episodes,
         cast,

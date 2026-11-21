@@ -58,7 +58,8 @@ async fn superseded_siblings_are_reclaimed_only_once_quiet() {
     .await;
     {
         let mut map = s.inner.lock().await;
-        s.reap_superseded(&mut map, "itA:aac-night:900:a0", None).await;
+        s.reap_superseded(&mut map, "itA:aac-night:900:a0", None)
+            .await;
     }
     assert_eq!(
         keys(&s).await,

@@ -1,12 +1,12 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
-use kroma_module_host::{ServerModule, async_trait};
+use kroma_module_host::{async_trait, ServerModule};
 use kroma_module_wire::{JobSpec, Role};
 
-use crate::RemoteHost;
 use crate::env::Startup;
 use crate::lifecycle::declared;
+use crate::RemoteHost;
 
 struct Counted(Arc<AtomicUsize>);
 

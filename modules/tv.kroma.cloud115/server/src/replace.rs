@@ -77,10 +77,23 @@ fn plan(config: &Config) -> Vec<(PathBuf, String)> {
                 let prefix = trimmed[..at].trim_end_matches('/');
                 let suffix = trimmed[at + marker.len()..].trim();
                 let http = prefix.starts_with("http://") || prefix.starts_with("https://");
-                let pick_code = !suffix.is_empty()
-                    && suffix.len() <= 64
-                    && suffix.chars().all(|c| c.is_ascii_hexdigit());
-                if !http || !pick_code || prefix == base {
+                let mut parts = suffix.splitn(2, "&next=");
+                let pick = parts.next().unwrap_or_default();
+                let pick_code = !pick.is_empty()
+                    && pick.len() <= 64
+                    && pick.chars().all(|c| c.is_ascii_hexdigit());
+                let next_ok = match parts.next() {
+                    None => true,
+                    Some(list) => {
+                        !list.is_empty()
+                            && list.split(',').all(|code| {
+                                !code.is_empty()
+                                    && code.len() <= 64
+                                    && code.chars().all(|c| c.is_ascii_hexdigit())
+                            })
+                    }
+                };
+                if !http || !pick_code || !next_ok || prefix == base {
                     continue;
                 }
                 let next = format!("{base}{marker}{suffix}\n");

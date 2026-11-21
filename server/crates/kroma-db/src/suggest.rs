@@ -28,7 +28,12 @@ pub struct SuggestionRow {
 fn asked_locales(recorded: Option<String>) -> Vec<String> {
     recorded
         .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_else(|| ASKED_BEFORE_THE_RECORD.iter().map(ToString::to_string).collect())
+        .unwrap_or_else(|| {
+            ASKED_BEFORE_THE_RECORD
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        })
 }
 
 /// The cached suggestion for one seed item, if generated. `Some` with empty
@@ -187,7 +192,14 @@ mod tests {
     fn a_row_remembers_the_locales_it_was_generated_for() {
         let p = pool();
 
-        set_suggestion(&p, "m1", &["a".into()], &reason("en", "because"), &["en", "pt-BR"]).unwrap();
+        set_suggestion(
+            &p,
+            "m1",
+            &["a".into()],
+            &reason("en", "because"),
+            &["en", "pt-BR"],
+        )
+        .unwrap();
 
         let row = get_suggestion(&p, "m1").unwrap().unwrap();
         assert_eq!(row.asked_locales, ["en", "pt-BR"]);

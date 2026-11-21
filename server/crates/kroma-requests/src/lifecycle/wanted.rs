@@ -4,8 +4,8 @@ use kroma_module_host::HostStorage;
 use kroma_primitives::now_ms;
 
 use crate::db;
-use crate::tmdb::discover;
 use crate::model::{EpisodeRef, MediaRequest, RequestKind};
+use crate::tmdb::discover;
 
 use super::{language, tmdb_key};
 
@@ -136,8 +136,7 @@ pub(super) fn build_wanted_rows_from<S: HostStorage>(
                 .collect();
             for season in needed {
                 let want_whole = full_seasons.contains(&season);
-                let data =
-                    crate::tmdb::season_episodes(&key, &lang, req.tmdb_id, season);
+                let data = crate::tmdb::season_episodes(&key, &lang, req.tmdb_id, season);
                 for ep in data.episodes {
                     if !want_whole && !individual.contains(&(season, ep.episode)) {
                         continue;
@@ -169,9 +168,9 @@ pub(super) fn build_wanted_rows_from<S: HostStorage>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::RequestStatus;
     use crate::lifecycle::test_fixtures::{ep, movie_detail, raw_detail, req, wanted};
     use crate::lifecycle::test_support::{insert_req, test_host};
+    use crate::model::RequestStatus;
     use crate::testing::FakeTmdb;
 
     #[test]

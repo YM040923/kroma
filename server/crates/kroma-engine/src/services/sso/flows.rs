@@ -20,11 +20,17 @@ const MAX_OPEN_PER_ADDRESS: usize = 32;
 /// What a sign-in is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Intent {
-    SignIn { invite: Option<String> },
+    SignIn {
+        invite: Option<String>,
+    },
     /// Adds the identity to the account that started the flow.
-    Link { user_id: String },
+    Link {
+        user_id: String,
+    },
     /// An admin trying a provider: proves the connection and admits nobody.
-    Test { user_id: String },
+    Test {
+        user_id: String,
+    },
 }
 
 /// Where the browser is sent once the provider is done with it.
@@ -194,7 +200,11 @@ impl Flows {
         if !ct_eq(&entry.secret, &digest(secret)) {
             return Collected::Unknown;
         }
-        let Stage::Back { code: minted, outcome } = &entry.stage else {
+        let Stage::Back {
+            code: minted,
+            outcome,
+        } = &entry.stage
+        else {
             return Collected::Pending;
         };
         if !ct_eq(minted, &digest(code)) {

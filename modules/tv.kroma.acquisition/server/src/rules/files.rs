@@ -6,7 +6,7 @@ use anyhow::Result;
 use kroma_module_sdk::db::{self, TitleFile};
 use kroma_module_sdk::domain::RequestKind;
 use kroma_module_sdk::host::HostStorage;
-use kroma_scene::{Evaluation, Language, QualityProfile, Rules, cutoff_unmet, evaluate};
+use kroma_scene::{cutoff_unmet, evaluate, Evaluation, Language, QualityProfile, Rules};
 use serde::Serialize;
 
 use super::file_facts::file_facts;
@@ -249,6 +249,7 @@ mod tests {
                 audio_tracks: Vec::new(),
                 subtitles: Vec::new(),
                 edition_id: None,
+                probe_version: None,
             },
         }
     }

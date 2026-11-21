@@ -5,8 +5,8 @@ use kroma_module_host::{Event, HostStorage};
 use crate::db;
 use crate::model::{
     ActionKind, ActionSpec, ActionStyle, Audience, MediaRequest, NotificationEvent,
-    NotificationSpec, NotificationSubject, Permission, PushCategory, RequestEventData,
-    RequestKind, RequestStatus, User,
+    NotificationSpec, NotificationSubject, Permission, PushCategory, RequestEventData, RequestKind,
+    RequestStatus, User,
 };
 
 #[cfg(test)]

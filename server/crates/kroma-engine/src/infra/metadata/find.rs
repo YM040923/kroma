@@ -3,7 +3,7 @@
 
 use serde::Deserialize;
 
-use super::client::{Target, api, tmdb_json};
+use super::client::{api, tmdb_json, Target};
 
 /// A catalogue TMDB can be asked by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,7 +61,7 @@ pub(crate) fn find_id(
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     use super::*;
     use crate::test_support::FakeTmdb;

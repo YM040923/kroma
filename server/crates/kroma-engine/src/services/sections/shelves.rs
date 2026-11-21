@@ -128,7 +128,11 @@ impl Board<'_> {
             })
             .collect();
         loved.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(b.0)));
-        let ids = loved.into_iter().map(|(id, _)| id.clone()).take(FETCH).collect();
+        let ids = loved
+            .into_iter()
+            .map(|(id, _)| id.clone())
+            .take(FETCH)
+            .collect();
         Some(
             Draft::rail("watch-again", self.t("content.watchAgain", &[]), ids)
                 .factual()

@@ -3,11 +3,11 @@ use serde_json::json;
 use kroma_domain::ParamValue;
 
 use crate::db;
-use crate::tmdb::discover;
 use crate::model::{
     CreateRequestBody, EpisodeRef, MediaRequest, Permission, RequestKind, RequestStatus, User,
 };
 use crate::testing::FakeTmdb;
+use crate::tmdb::discover;
 
 pub(super) fn ep(season: u32, episode: u32) -> EpisodeRef {
     EpisodeRef { season, episode }
@@ -130,6 +130,8 @@ pub(super) fn user(id: &str, permissions: Vec<Permission>) -> User {
         subtitle_language: None,
         permissions,
         libraries: crate::model::LibraryScope::All,
+        max_age: None,
+        allow_unrated: true,
         created_at: "now".into(),
         has_pin: false,
     }

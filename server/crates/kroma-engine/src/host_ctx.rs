@@ -569,7 +569,10 @@ mod tests {
         );
         assert_eq!(episodes[0].episode, 1);
         assert_eq!(episodes[0].name.as_deref(), Some("Winter Is Coming"));
-        assert_eq!(episodes[0].overview.as_deref(), Some("Ned takes the offer."));
+        assert_eq!(
+            episodes[0].overview.as_deref(),
+            Some("Ned takes the offer.")
+        );
         assert_eq!(episodes[0].air_date.as_deref(), Some("2011-04-17"));
         assert_eq!(
             episodes[0].still_url.as_deref(),

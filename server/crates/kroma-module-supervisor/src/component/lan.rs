@@ -93,7 +93,11 @@ impl Lan for ModuleLan {
             &properties[..],
         )
         .map_err(|error| error.to_string())?;
-        let info = if address.is_none() { info.enable_addr_auto() } else { info };
+        let info = if address.is_none() {
+            info.enable_addr_auto()
+        } else {
+            info
+        };
         let full_name = info.get_fullname().to_string();
         let mut daemon = self.daemon.lock().unwrap_or_else(PoisonError::into_inner);
         if daemon.is_none() {
@@ -135,7 +139,10 @@ impl Lan for ModuleLan {
         if !is_plain_target(target) {
             return Err("a search target has no spaces or line breaks".to_string());
         }
-        let bind = SocketAddr::new(primary_address().unwrap_or(std::net::Ipv4Addr::UNSPECIFIED.into()), 0);
+        let bind = SocketAddr::new(
+            primary_address().unwrap_or(std::net::Ipv4Addr::UNSPECIFIED.into()),
+            0,
+        );
         let socket = UdpSocket::bind(bind).map_err(|error| error.to_string())?;
         let _ = socket.set_multicast_ttl_v4(MULTICAST_TTL);
         socket
@@ -149,7 +156,9 @@ impl Lan for ModuleLan {
             if left.is_zero() {
                 return Ok(replies);
             }
-            socket.set_read_timeout(Some(left)).map_err(|error| error.to_string())?;
+            socket
+                .set_read_timeout(Some(left))
+                .map_err(|error| error.to_string())?;
             let Ok((read, from)) = socket.recv_from(&mut buffer) else {
                 return Ok(replies);
             };
@@ -161,7 +170,10 @@ impl Lan for ModuleLan {
     }
 
     fn addresses(&self) -> Vec<String> {
-        primary_address().map(|ip| ip.to_string()).into_iter().collect()
+        primary_address()
+            .map(|ip| ip.to_string())
+            .into_iter()
+            .collect()
     }
 }
 
@@ -204,7 +216,8 @@ mod tests {
 
     #[test]
     fn a_reply_reads_as_lowercase_names_without_its_status_line() {
-        let headers = headers_of("HTTP/1.1 200 OK\r\nUSN: uuid:roku:ecp:ABC\r\nST: roku:ecp\r\n\r\n");
+        let headers =
+            headers_of("HTTP/1.1 200 OK\r\nUSN: uuid:roku:ecp:ABC\r\nST: roku:ecp\r\n\r\n");
 
         assert_eq!(
             headers,

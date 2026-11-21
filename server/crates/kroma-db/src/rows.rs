@@ -33,7 +33,9 @@ pub(crate) fn row_to_user(r: &Row) -> rusqlite::Result<User> {
         audio_language: r.get(8)?,
         subtitle_language: r.get(9)?,
         libraries: parse_library_scope(r.get::<_, Option<String>>(10)?),
-        max_age: r.get::<_, Option<i64>>(11)?.map(|age| age.clamp(0, 21) as u8),
+        max_age: r
+            .get::<_, Option<i64>>(11)?
+            .map(|age| age.clamp(0, 21) as u8),
         allow_unrated: r.get::<_, Option<bool>>(12)?.unwrap_or(true),
     })
 }
@@ -76,7 +78,10 @@ pub(crate) fn row_to_file(r: &Row) -> rusqlite::Result<MediaFile> {
         matrix: r.get(23).ok().flatten(),
     };
     let video = v_codec.map(|codec| VideoStream {
-        technical: r.get::<_, Option<String>>(24).ok().flatten()
+        technical: r
+            .get::<_, Option<String>>(24)
+            .ok()
+            .flatten()
             .and_then(|json| serde_json::from_str(&json).ok()),
         codec,
         width: r.get(8).ok().flatten(),
@@ -95,8 +100,7 @@ pub(crate) fn row_to_file(r: &Row) -> rusqlite::Result<MediaFile> {
     let subs_json: String = r.get(15)?;
     let subtitles: Vec<SubtitleTrack> = serde_json::from_str(&subs_json).unwrap_or_default();
     let tracks_json: String = r.get(17)?;
-    let mut audio_tracks: Vec<AudioStream> =
-        serde_json::from_str(&tracks_json).unwrap_or_default();
+    let mut audio_tracks: Vec<AudioStream> = serde_json::from_str(&tracks_json).unwrap_or_default();
     for track in audio_tracks.iter_mut().filter(|t| t.region.is_none()) {
         track.region = kroma_primitives::language::track_region(
             track.language.as_deref(),

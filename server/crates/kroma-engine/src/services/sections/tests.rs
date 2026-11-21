@@ -21,7 +21,9 @@ fn somebody_with_no_history_still_opens_on_a_full_page() {
     assert!((1..=5).contains(&hero.items.len()));
     assert!(row(&sections, "for-you").is_some());
     assert_eq!(row(&sections, "recent").unwrap().items.len(), 14);
-    assert!(row(&sections, "because").is_none() && sections.iter().all(|s| !s.id.starts_with("genre:")));
+    assert!(
+        row(&sections, "because").is_none() && sections.iter().all(|s| !s.id.starts_with("genre:"))
+    );
 }
 
 #[test]
@@ -50,7 +52,10 @@ fn a_film_left_half_watched_is_not_offered_again_under_the_continue_rail() {
 
     let sections = build_home(&state, &state.db, "en", &user);
 
-    let offered = sections.iter().filter(|s| s.id != "recent").flat_map(ids_of);
+    let offered = sections
+        .iter()
+        .filter(|s| s.id != "recent")
+        .flat_map(ids_of);
     assert!(offered.into_iter().all(|id| id != "m0"));
 }
 
@@ -66,9 +71,16 @@ fn no_recommendation_row_repeats_a_title_another_one_offered() {
     let sections = build_home(&state, &state.db, "en", &user);
 
     let mut offered = std::collections::HashSet::new();
-    for section in sections.iter().filter(|s| !matches!(s.id.as_str(), "recent" | "trending")) {
+    for section in sections
+        .iter()
+        .filter(|s| !matches!(s.id.as_str(), "recent" | "trending"))
+    {
         for id in ids_of(section) {
-            assert!(offered.insert(id.to_string()), "{id} is in {} and in an earlier row", section.id);
+            assert!(
+                offered.insert(id.to_string()),
+                "{id} is in {} and in an earlier row",
+                section.id
+            );
         }
     }
 }
@@ -87,7 +99,9 @@ fn a_genre_somebody_keeps_finishing_gets_its_own_row_of_only_that_genre() {
 
     let leaning = row(&sections, &format!("genre:{HORROR}")).expect("a horror row");
     assert_eq!(leaning.title, "Horror for you");
-    assert!(ids_of(leaning).iter().all(|id| horror.iter().any(|h| h == id)));
+    assert!(ids_of(leaning)
+        .iter()
+        .all(|id| horror.iter().any(|h| h == id)));
     assert!(row(&sections, &format!("genre:{COMEDY}")).is_none());
 }
 
@@ -117,7 +131,13 @@ fn a_director_somebody_follows_gets_a_row_named_after_them() {
     let state = test_support::test_state();
     for n in 0..12 {
         let id = format!("v{n}");
-        seed(&state, Film { director: "Denis Villeneuve", ..film(&id, &[SCIENCE_FICTION]) });
+        seed(
+            &state,
+            Film {
+                director: "Denis Villeneuve",
+                ..film(&id, &[SCIENCE_FICTION])
+            },
+        );
     }
     seed_many(&state, "c", 12, &[COMEDY]);
     let user = viewer(&state, "aut");
@@ -126,7 +146,10 @@ fn a_director_somebody_follows_gets_a_row_named_after_them() {
 
     let sections = build_home(&state, &state.db, "en", &user);
 
-    let by = sections.iter().find(|s| s.id.starts_with("person:")).expect("a person row");
+    let by = sections
+        .iter()
+        .find(|s| s.id.starts_with("person:"))
+        .expect("a person row");
     assert_eq!(by.title, "From Denis Villeneuve");
     assert!(ids_of(by).iter().all(|id| id.starts_with('v')));
 }
@@ -135,8 +158,20 @@ fn a_director_somebody_follows_gets_a_row_named_after_them() {
 fn a_title_the_library_holds_twice_is_recommended_once() {
     let state = test_support::test_state();
     seed_many(&state, "m", 5, &[COMEDY]);
-    seed(&state, Film { tmdb: Some(77), ..film("copy-a", &[COMEDY]) });
-    seed(&state, Film { tmdb: Some(77), ..film("copy-b", &[COMEDY]) });
+    seed(
+        &state,
+        Film {
+            tmdb: Some(77),
+            ..film("copy-a", &[COMEDY])
+        },
+    );
+    seed(
+        &state,
+        Film {
+            tmdb: Some(77),
+            ..film("copy-b", &[COMEDY])
+        },
+    );
     let user = viewer(&state, "twice");
 
     let sections = build_home(&state, &state.db, "en", &user);
@@ -158,7 +193,10 @@ fn a_show_that_gained_episodes_says_what_is_new_in_it() {
     {
         let conn = state.db.get().unwrap();
         conn.execute(
-            &format!("UPDATE items SET added_at = '{}' WHERE id = 'old-e1'", stamp(300)),
+            &format!(
+                "UPDATE items SET added_at = '{}' WHERE id = 'old-e1'",
+                stamp(300)
+            ),
             [],
         )
         .unwrap();
@@ -214,11 +252,23 @@ fn the_christmas_row_holds_christmas_films_and_no_christmas_horror() {
     let state = test_support::test_state();
     for n in 0..7 {
         let id = format!("xmas{n}");
-        seed(&state, Film { overview: "A family saves Christmas with Santa Claus.", ..film(&id, &[FAMILY, COMEDY]) });
+        seed(
+            &state,
+            Film {
+                overview: "A family saves Christmas with Santa Claus.",
+                ..film(&id, &[FAMILY, COMEDY])
+            },
+        );
     }
     for n in 0..4 {
         let id = format!("slasher{n}");
-        seed(&state, Film { overview: "A killer stalks a town on Christmas Eve.", ..film(&id, &[HORROR]) });
+        seed(
+            &state,
+            Film {
+                overview: "A killer stalks a town on Christmas Eve.",
+                ..film(&id, &[HORROR])
+            },
+        );
     }
     seed_many(&state, "cartoon", 8, &[ANIMATION, FAMILY]);
     state.search.reindex_from_db(&state.db).unwrap();
@@ -230,10 +280,16 @@ fn the_christmas_row_holds_christmas_films_and_no_christmas_horror() {
 
     let themed = board.themes();
 
-    let christmas = themed.iter().find(|d| d.id == "themed:christmas").expect("a christmas row");
+    let christmas = themed
+        .iter()
+        .find(|d| d.id == "themed:christmas")
+        .expect("a christmas row");
     assert_eq!(christmas.ids.len(), 7);
     assert!(christmas.ids.iter().all(|id| id.starts_with("xmas")));
-    assert!(themed.iter().all(|d| d.id != "themed:tearjerker"), "a mood needs an embedder");
+    assert!(
+        themed.iter().all(|d| d.id != "themed:tearjerker"),
+        "a mood needs an embedder"
+    );
 }
 
 #[test]
@@ -250,7 +306,10 @@ fn a_client_that_draws_only_rails_is_served_rails() {
     assert_eq!(row(&sections, "trending").unwrap().layout, Layout::Ranked);
 
     let legacy = adapt(&sections, Accepts::parse(None));
-    let modern = adapt(&sections, Accepts::parse(Some("hero, spotlight,ranked,wide")));
+    let modern = adapt(
+        &sections,
+        Accepts::parse(Some("hero, spotlight,ranked,wide")),
+    );
 
     assert!(legacy.iter().all(|s| s.layout == Layout::Rail));
     assert!(row(&legacy, "hero").is_none() && row(&legacy, "spotlight").is_none());

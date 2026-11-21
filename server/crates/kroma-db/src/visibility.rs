@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use rusqlite::OptionalExtension;
 
-use super::{params, Connection, IN_CHUNK, Pool, Result};
+use super::{params, Connection, Pool, Result, IN_CHUNK};
 
 use kroma_domain::{LibraryScope, RequestKind};
 

@@ -10,8 +10,8 @@ use anyhow::{anyhow, bail, Result};
 use crate::peers::downloads::DownloadRow;
 use kroma_module_sdk::db;
 use kroma_module_sdk::domain::RequestKind;
-use kroma_module_sdk::primitives::now_ms;
 use kroma_module_sdk::host::{HostStorage, LibraryFolders};
+use kroma_module_sdk::primitives::now_ms;
 
 mod content;
 mod ledger;
@@ -65,7 +65,9 @@ fn finalize_import<S: HostStorage>(state: &S, row: &DownloadRow, written: &[Stri
 fn record_releases<S: HostStorage>(state: &S, release_title: &str, written: &[String]) {
     for path in written {
         let key = canonical(path);
-        if let Err(e) = crate::rules::store::record_release(state.store(), &key, release_title, now_ms()) {
+        if let Err(e) =
+            crate::rules::store::record_release(state.store(), &key, release_title, now_ms())
+        {
             tracing::debug!(path = %key, error = %format!("{e:#}"), "could not record the release name");
         }
     }
@@ -262,12 +264,27 @@ fn target_library_def<S: HostStorage>(state: &S, kind: RequestKind) -> Result<Li
         RequestKind::Show => ("acqSeriesLibrary", "shows"),
     };
     let preferred = state.setting_str(setting, "Auto");
+    let typed = match kind {
+        RequestKind::Movie => defs
+            .iter()
+            .find(|d| d.kind == "movies")
+            .or_else(|| defs.iter().find(|d| d.kind == "mixed"))
+            .or_else(|| defs.iter().find(|d| d.kind.is_empty())),
+        RequestKind::Show => defs
+            .iter()
+            .find(|d| d.kind == "shows")
+            .or_else(|| defs.iter().find(|d| d.kind.is_empty())),
+    };
+    let compatible = |d: &&LibraryFolders| match kind {
+        RequestKind::Movie => d.kind.is_empty() || matches!(d.kind.as_str(), "movies" | "mixed"),
+        RequestKind::Show => d.kind.is_empty() || d.kind == "shows",
+    };
     let def: &LibraryFolders = defs
         .iter()
         .find(|d| preferred != "Auto" && !preferred.is_empty() && d.name == preferred)
-        .or_else(|| defs.iter().find(|d| d.kind == wanted_kind))
-        .or_else(|| defs.first())
-        .ok_or_else(|| anyhow!("no library configured"))?;
+        .filter(compatible)
+        .or(typed)
+        .ok_or_else(|| anyhow!("no compatible {:?} library configured", wanted_kind))?;
     Ok(def.clone())
 }
 

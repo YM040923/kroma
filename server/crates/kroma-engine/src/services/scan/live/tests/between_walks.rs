@@ -259,9 +259,9 @@ fn a_walk_that_fails_after_it_removed_a_library_says_how_many_it_removed() {
 
     let said = failed.err().map(|error| format!("{error:#}"));
     assert!(
-        said.as_deref()
-            .is_some_and(|said| said.contains("left the configuration: 1")
-                && said.contains("refused")),
+        said.as_deref().is_some_and(
+            |said| said.contains("left the configuration: 1") && said.contains("refused")
+        ),
         "{said:?}"
     );
     assert_eq!(titles(&state), ["Alien", "Dune", "Heat"]);

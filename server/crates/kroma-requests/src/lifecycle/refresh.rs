@@ -4,8 +4,8 @@ use kroma_module_host::HostStorage;
 use kroma_primitives::now_ms;
 
 use crate::db;
-use crate::tmdb::discover;
 use crate::model::{MediaRequest, RequestKind, RequestStatus};
+use crate::tmdb::discover;
 
 use super::wanted::build_wanted_rows_from;
 use super::{language, tmdb_key, today_ymd};

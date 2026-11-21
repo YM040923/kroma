@@ -129,7 +129,8 @@ impl Journal {
     /// Write the tallies gathered since the last flush. A failed write keeps
     /// them for the next one.
     pub fn flush(&self, pool: &Pool) -> anyhow::Result<()> {
-        let taken = std::mem::take(&mut *self.pending.lock().unwrap_or_else(PoisonError::into_inner));
+        let taken =
+            std::mem::take(&mut *self.pending.lock().unwrap_or_else(PoisonError::into_inner));
         let deltas: Vec<FlowTally> = taken
             .iter()
             .map(|(key, tally)| FlowTally {

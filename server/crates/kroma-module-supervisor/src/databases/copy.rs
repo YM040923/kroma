@@ -79,7 +79,11 @@ fn carry(mut source: File, to: &Path) -> anyhow::Result<()> {
         .open(to)
         .with_context(|| format!("create {}", to.display()))?;
     let copied = io::copy(&mut source, &mut copy)?;
-    ensure!(copied == expected, "{} changed while it was copied", to.display());
+    ensure!(
+        copied == expected,
+        "{} changed while it was copied",
+        to.display()
+    );
     copy.sync_all()?;
     Ok(())
 }
@@ -88,6 +92,10 @@ fn settle(copy: &Path) -> anyhow::Result<()> {
     let conn = kroma_sqlite::open_owned(copy)?;
     conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
     let verdict: String = conn.query_row("PRAGMA quick_check", [], |row| row.get(0))?;
-    ensure!(verdict == "ok", "{} does not read back whole: {verdict}", copy.display());
+    ensure!(
+        verdict == "ok",
+        "{} does not read back whole: {verdict}",
+        copy.display()
+    );
     Ok(())
 }

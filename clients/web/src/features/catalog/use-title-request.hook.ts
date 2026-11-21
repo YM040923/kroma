@@ -1,11 +1,10 @@
-import { apiErrorText } from '@kromatv/client';
 import type { EpisodeRef } from '@kromatv/client/requests';
 import { useT } from '@kromatv/ui';
 import { useState } from 'react';
 import { EPISODES_ANCHOR } from '#web/shared/lib/show-search';
 import { epKey, toEpisodeRefs, toggle } from '#web/features/catalog/episode-selection';
-import { useAuth } from '#web/shared/lib/auth';
 import type { TitleView } from '#web/shared/lib/title-view';
+import { useAcquisition } from '#web/shared/lib/use-acquisition.hook';
 
 function nextViewAfterRequest(
   v: TitleView,
@@ -24,6 +23,34 @@ function nextViewAfterRequest(
     requestStatus: status,
     seasons: v.seasons.map((s) => (target.has(s.number) ? { ...s, requested: true } : s)),
   };
+}
+
+/** The library already holds what was asked for: no request exists, so the
+ *  seasons are marked held rather than wanted. */
+function nextViewAfterOwned(v: TitleView, seasons: number[] | null): TitleView {
+  if (v.seasons.length === 0) {
+    return { ...v, requestStatus: 'available' };
+  }
+  const target = new Set(seasons ?? v.seasons.filter((s) => !s.available).map((s) => s.number));
+  return {
+    ...v,
+    requestStatus: 'available',
+    seasons: v.seasons.map((s) => (target.has(s.number) ? { ...s, available: true } : s)),
+  };
+}
+
+/** What an accepted ask changes on screen: already held, or wanted and now in
+ *  flight (a review queue reads as pending, a started acquisition as searching). */
+function nextViewAfterAsk(
+  v: TitleView,
+  state: 'owned' | 'pending_review' | 'started',
+  seasons: number[] | null,
+  episodes?: EpisodeRef[],
+): TitleView {
+  if (state === 'owned') {
+    return nextViewAfterOwned(v, seasons);
+  }
+  return nextViewAfterRequest(v, state === 'started' ? 'searching' : 'pending', seasons, episodes);
 }
 
 function addPendingEpisodes(prev: Set<string>, episodes: EpisodeRef[]): Set<string> {
@@ -48,11 +75,13 @@ export interface TitleRequestState {
   onRequestClick: () => void;
 }
 
-/** Owns the acquisition-request half of the detail page: the locally patched
- * `view`, the episode selection, and every button that files a request. */
+/** Owns the acquisition half of the detail page: the locally patched `view`,
+ * the episode selection, and every button that asks for the title. Every ask
+ * goes through one acquisition, so a cloud-drive candidate is confirmed and
+ * priced in one place whichever button started it. */
 export function useTitleRequest(initial: TitleView): TitleRequestState {
   const t = useT();
-  const { client } = useAuth();
+  const acquire = useAcquisition();
   const [view, setView] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,21 +89,27 @@ export function useTitleRequest(initial: TitleView): TitleRequestState {
   const [pendingEps, setPendingEps] = useState<Set<string>>(() => new Set());
 
   const doRequest = (seasons: number[] | null, episodes?: EpisodeRef[]) => {
-    if (view.tmdbId == null) {
+    const { tmdbId, kind, title, year } = view;
+    if (tmdbId == null) {
       return;
     }
     setBusy(true);
     setError(null);
-    client.requests
-      .create({ kind: view.kind, tmdbId: view.tmdbId, seasons, episodes })
-      .then((req) => {
-        setView((v) => nextViewAfterRequest(v, req.status, seasons, episodes));
-        if (episodes?.length) {
+    void acquire({ kind, tmdbId, title, year }, { seasons, episodes })
+      .then((outcome) => {
+        if (outcome.state === 'failed') {
+          setError(outcome.error || t('discover.requestFailed'));
+          return;
+        }
+        if (outcome.state === 'cancelled') {
+          return;
+        }
+        setView((v) => nextViewAfterAsk(v, outcome.state, seasons, episodes));
+        if (outcome.state !== 'owned' && episodes?.length) {
           setPendingEps((prev) => addPendingEpisodes(prev, episodes));
         }
         setSelected(new Set());
       })
-      .catch((e) => setError(apiErrorText(e, t('discover.requestFailed'))))
       .finally(() => setBusy(false));
   };
 

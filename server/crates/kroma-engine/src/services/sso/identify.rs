@@ -154,14 +154,26 @@ pub fn identify(
     now: i64,
 ) -> Result<Identity, IdentifyError> {
     let (metadata, keys) = directory.lookup(&provider.issuer, now)?;
-    let tokens = exchange::redeem(&metadata, provider, code, &flow.verifier, &flow.redirect_uri)?;
+    let tokens = exchange::redeem(
+        &metadata,
+        provider,
+        code,
+        &flow.verifier,
+        &flow.redirect_uri,
+    )?;
     let expected = Expected {
         issuer: &metadata.issuer,
         client_id: provider.client_id.trim(),
         nonce: &flow.nonce,
         now,
     };
-    let token = verified(directory, &provider.issuer, &keys, &tokens.id_token, &expected)?;
+    let token = verified(
+        directory,
+        &provider.issuer,
+        &keys,
+        &tokens.id_token,
+        &expected,
+    )?;
     let mut claims = token.claims;
     if !says_enough(&claims, &provider.group_claim) {
         let user_info = tokens

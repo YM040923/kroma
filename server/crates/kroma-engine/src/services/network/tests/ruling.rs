@@ -36,7 +36,10 @@ fn a_vpn_rule_refuses_the_call_while_no_vpn_answers() {
 
     let ruling = network.rule_on(CORE, "metadata", &target("api.themoviedb.org"));
 
-    assert_eq!(ruling.decision, Decision::Block("the network vpn is not running".to_string()));
+    assert_eq!(
+        ruling.decision,
+        Decision::Block("the network vpn is not running".to_string())
+    );
 }
 
 fn listening(listens: serde_json::Value) -> DeclaredListeners {

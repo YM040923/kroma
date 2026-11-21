@@ -254,11 +254,9 @@ fn searching_named_units_puts_back_only_those_and_creates_nothing() {
             .collect::<Vec<_>>(),
         vec![(Some(1), Some(2))]
     );
-    assert!(
-        db::list_requests(&host.db().get().unwrap(), None)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(db::list_requests(&host.db().get().unwrap(), None)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -338,11 +336,9 @@ fn switching_a_season_off_unmonitors_its_episodes() {
     let title = set_episodes(&host, SHOW, &body).unwrap();
 
     assert_eq!(title.seasons, [1]);
-    assert!(
-        units(&host, RequestKind::Show, SHOW)
-            .iter()
-            .all(|(s, _, _)| *s == Some(1))
-    );
+    assert!(units(&host, RequestKind::Show, SHOW)
+        .iter()
+        .all(|(s, _, _)| *s == Some(1)));
 }
 
 #[test]

@@ -122,7 +122,9 @@ fn year(word: &str) -> Option<u32> {
     if word.len() != 4 {
         return None;
     }
-    word.parse::<u32>().ok().filter(|y| (1900..=2099).contains(y))
+    word.parse::<u32>()
+        .ok()
+        .filter(|y| (1900..=2099).contains(y))
 }
 
 fn take_locator(words: &[String], lexicon: &Lexicon) -> (Vec<String>, Option<Locator>) {

@@ -40,7 +40,11 @@ const PEOPLE: [Persona; 3] = [
 
 fn href(asked: &HashMap<String, String>, extra: (&str, &str)) -> String {
     let query = form_urlencoded::Serializer::new(String::new())
-        .extend_pairs(asked.iter().filter(|(key, _)| *key != "as" && *key != "deny"))
+        .extend_pairs(
+            asked
+                .iter()
+                .filter(|(key, _)| *key != "as" && *key != "deny"),
+        )
         .append_pair(extra.0, extra.1)
         .finish();
     format!("/authorize?{query}")

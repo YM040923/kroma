@@ -89,7 +89,10 @@ mod tests {
     #[test]
     fn an_unknown_mode_falls_back_rather_than_failing() {
         let (pool, settings) = settings();
-        settings.set_patch(&pool, [("emailDelivery".to_string(), json!("pigeon"))].into());
+        settings.set_patch(
+            &pool,
+            [("emailDelivery".to_string(), json!("pigeon"))].into(),
+        );
 
         assert_eq!(email_delivery(&settings), EmailDelivery::Manual);
     }
@@ -97,7 +100,10 @@ mod tests {
     #[test]
     fn every_option_the_schema_offers_parses_back() {
         for option in EmailDelivery::OPTIONS {
-            assert_eq!(EmailDelivery::parse(option).map(EmailDelivery::as_str), Some(option));
+            assert_eq!(
+                EmailDelivery::parse(option).map(EmailDelivery::as_str),
+                Some(option)
+            );
         }
     }
 }

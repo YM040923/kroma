@@ -79,10 +79,15 @@ impl Programs {
         };
         let archive = self.beside(program, "archive");
         sha256_of(&archive).is_ok_and(|pinned| pinned == asset.sha256)
-            && read_member(&archive, member, |entry| sha256_reader(entry)).is_ok_and(|unpacked| unpacked == actual)
+            && read_member(&archive, member, |entry| sha256_reader(entry))
+                .is_ok_and(|unpacked| unpacked == actual)
     }
 
-    pub(super) fn fetch_helper(&self, program: &str, asset: &HelperAsset) -> Result<PathBuf, String> {
+    pub(super) fn fetch_helper(
+        &self,
+        program: &str,
+        asset: &HelperAsset,
+    ) -> Result<PathBuf, String> {
         let destination = self.helpers_dir.join(program);
         let _one_at_a_time = self.fetching.lock().unwrap_or_else(PoisonError::into_inner);
         if self.matches_pin(program, asset) {
@@ -96,7 +101,9 @@ impl Programs {
             .max_time(DOWNLOAD_MAX_SECS)
             .carry_download(&self.gateway, &username, &asset.url, &download)
             .map_err(|error| format!("download {program}: {error:#}"))?;
-        response.ensure_ok().map_err(|error| format!("download {program}: {error:#}"))?;
+        response
+            .ensure_ok()
+            .map_err(|error| format!("download {program}: {error:#}"))?;
         self.install(program, asset)
     }
 
@@ -121,7 +128,8 @@ impl Programs {
                 read_member(&download, member, |entry| {
                     std::io::copy(entry, &mut std::fs::File::create(&unpacked)?)
                 })?;
-                std::fs::rename(&download, self.beside(program, "archive")).map_err(|error| error.to_string())?;
+                std::fs::rename(&download, self.beside(program, "archive"))
+                    .map_err(|error| error.to_string())?;
                 unpacked
             }
             None => {
@@ -134,7 +142,11 @@ impl Programs {
         Ok(destination)
     }
 
-    pub(super) fn asset_for<'a>(&'a self, program: &str, helper: &'a Helper) -> Result<&'a HelperAsset, String> {
+    pub(super) fn asset_for<'a>(
+        &'a self,
+        program: &str,
+        helper: &'a Helper,
+    ) -> Result<&'a HelperAsset, String> {
         helper
             .assets
             .get(&platform())
@@ -146,7 +158,8 @@ impl Programs {
     pub(super) fn resolve(&self, program: &str) -> Result<PathBuf, String> {
         self.check_allowed(program)?;
         let Some(helper) = self.helpers.get(program) else {
-            return on_path(program).ok_or_else(|| format!("{program} is not installed on this machine"));
+            return on_path(program)
+                .ok_or_else(|| format!("{program} is not installed on this machine"));
         };
         let asset = self.asset_for(program, helper)?;
         let destination = self.helpers_dir.join(program);

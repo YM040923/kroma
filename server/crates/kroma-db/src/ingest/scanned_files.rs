@@ -118,7 +118,10 @@ fn upsert_scanned_file(
         let color = v.and_then(|v| v.color.as_ref());
         let subs = serde_json::to_string(&f.subtitles).unwrap_or_else(|_| "[]".into());
         let tracks = if f.audio_tracks.is_empty() {
-            f.audio.as_ref().map(std::slice::from_ref).unwrap_or_default()
+            f.audio
+                .as_ref()
+                .map(std::slice::from_ref)
+                .unwrap_or_default()
         } else {
             &f.audio_tracks
         };

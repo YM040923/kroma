@@ -39,7 +39,10 @@ pub async fn mint_invitation(t: &TestApp, user_id: &str) -> String {
     let uri = format!("/api/admin/users/{user_id}/invitation");
     let (status, body) = send(&t.app, "POST", &uri, Some(&t.token), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    body["token"].as_str().expect("invitation token").to_string()
+    body["token"]
+        .as_str()
+        .expect("invitation token")
+        .to_string()
 }
 
 /// The join form, sent with `invite` and the harness password.

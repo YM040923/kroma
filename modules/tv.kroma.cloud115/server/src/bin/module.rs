@@ -1,11 +1,14 @@
 //! The Cloud115 module as a component (its `.kmod` entrypoint).
 //!
-//! It contributes no port routes: playback goes through the `.strm` entries it
-//! writes, and the admin page talks to [`kroma_cloud115::routes`].
+//! It mounts the `cloud115` provider point (`/_port/cloud115/...`, host-token
+//! protected by the runtime) so the core can search, price, acquire and stage
+//! uploads, and serves its admin page through
+//! [`kroma_cloud115::routes`]. Playback goes through the `.strm` entries the
+//! module writes.
 
 use kroma_module_runtime::RemoteHost;
 
 kroma_module_runtime::module_main!(
-    |_host: &RemoteHost| axum::Router::new(),
+    |_host: &RemoteHost| kroma_cloud115::provider::routes::<RemoteHost>(),
     vec![kroma_cloud115::server_module::<RemoteHost>()],
 );

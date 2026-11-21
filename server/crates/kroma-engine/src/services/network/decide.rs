@@ -84,7 +84,10 @@ fn is_link_local(ip: IpAddr) -> bool {
 
 fn matches(rule: &Rule, caller: &str, purpose: &str, target: &WebTarget) -> bool {
     rule.caller.as_deref().is_none_or(|c| c == caller)
-        && rule.purpose.as_deref().is_none_or(|p| purpose_covers(p, purpose))
+        && rule
+            .purpose
+            .as_deref()
+            .is_none_or(|p| purpose_covers(p, purpose))
         && rule
             .host
             .as_deref()

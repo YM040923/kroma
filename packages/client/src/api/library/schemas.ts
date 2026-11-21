@@ -7,6 +7,7 @@ export const ScrapeOptions = z.object({
   /** Ordered languages: the first is asked for, the rest fill gaps. Null follows the household default. */
   languagePriority: z.array(z.string()).nullable().optional(),
   nfo: z.boolean(),
+  nfoOverride: z.boolean().nullable().optional(),
   posterLanguage: z.string().nullable(),
   backdropLanguage: z.string().nullable(),
   posterLanguages: z.array(z.string()).nullable().optional(),
@@ -27,16 +28,17 @@ export const ScrapeOptions = z.object({
   backdropSources: z.array(z.string()).nullable().optional(),
   logoSources: z.array(z.string()).nullable().optional(),
   seasonSources: z.array(z.string()).nullable().optional(),
-  /** Gallery backdrops kept per title; null keeps the provider's full set. */
-  backdropCount: z.number().nullable().optional(),
-  /** TMDB image size stored for provider URLs: w500, w780, w1280 or original. */
-  artworkSize: z.string().nullable().optional(),
-  /** Re-check show artwork every N days; null/0 disables the sweep. */
-  artworkRefreshDays: z.number().nullable().optional(),
 });
 export type ScrapeOptions = z.infer<typeof ScrapeOptions>;
 
 /** A named, multi-folder library (`GET /api/admin/libraries`). */
+export const AcquisitionMode = z.enum([
+  'cloud_only_staged',
+  'hybrid_local_first',
+  'local_only',
+]);
+export type AcquisitionMode = z.infer<typeof AcquisitionMode>;
+
 export const AdminLibrary = z.object({
   id: LibraryId,
   name: z.string(),
@@ -47,6 +49,7 @@ export const AdminLibrary = z.object({
   lastScan: z.string().nullable(),
   autoScan: z.boolean(),
   scrape: ScrapeOptions,
+  acquisitionMode: AcquisitionMode.default('cloud_only_staged'),
   cover: z.string().nullish(),
   demo: z.boolean().default(false),
 });
@@ -55,6 +58,7 @@ export type AdminLibrary = z.infer<typeof AdminLibrary>;
 /** Household scraping defaults every library follows until it overrides them. */
 export const ScrapeDefaults = z.object({
   languagePriority: z.array(z.string()),
+  nfo: z.boolean().optional(),
   posterLanguages: z.array(z.string()).nullable().optional(),
   backdropLanguages: z.array(z.string()).nullable().optional(),
   posterMinWidth: z.number().nullable().optional(),
@@ -73,6 +77,7 @@ export const ScrapeDefaults = z.object({
   backdropSources: z.array(z.string()).nullable().optional(),
   logoSources: z.array(z.string()).nullable().optional(),
   seasonSources: z.array(z.string()).nullable().optional(),
+  artworkRefreshDays: z.number().nullable().optional(),
   writeImages: z.boolean().optional(),
 });
 export type ScrapeDefaults = z.infer<typeof ScrapeDefaults>;
@@ -90,5 +95,6 @@ export const LibraryPatch = AdminLibrary.pick({
   folders: true,
   autoScan: true,
   scrape: true,
+  acquisitionMode: true,
 }).exactPartial();
 export type LibraryPatch = z.infer<typeof LibraryPatch>;

@@ -236,8 +236,14 @@ mod tests {
 
     #[test]
     fn an_invitation_is_pending_until_the_second_it_lapses() {
-        assert_eq!(InvitationState::at(Some(101), 100), InvitationState::Pending);
-        assert_eq!(InvitationState::at(Some(100), 100), InvitationState::Expired);
+        assert_eq!(
+            InvitationState::at(Some(101), 100),
+            InvitationState::Pending
+        );
+        assert_eq!(
+            InvitationState::at(Some(100), 100),
+            InvitationState::Expired
+        );
         assert_eq!(InvitationState::at(None, 100), InvitationState::Absent);
     }
 

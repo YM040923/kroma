@@ -1,7 +1,7 @@
 use std::sync::PoisonError;
 use std::time::Instant;
 
-use super::{POLL, Programs, STOP_GRACE, State, signal};
+use super::{signal, Programs, State, POLL, STOP_GRACE};
 
 impl Programs {
     pub(in crate::component) fn stop_all(&self) {

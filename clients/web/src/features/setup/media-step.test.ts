@@ -12,6 +12,13 @@ const library = ({ id, demo }: { id: string; demo: boolean }) =>
     sizeBytes: 0,
     lastScan: null,
     autoScan: true,
+    acquisitionMode: 'cloud_only_staged',
+    scrape: {
+      language: null,
+      nfo: false,
+      posterLanguage: null,
+      backdropLanguage: null,
+    },
     demo,
   });
 

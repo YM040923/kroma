@@ -1,7 +1,7 @@
 import type { ScrapeDefaults } from '@kromatv/client/library';
 import { useT } from '@kromatv/ui';
-import { Badge, Box, Button, Field, Row, Surface, Switch, Text } from '@kromatv/ui/kit';
-import { useQuery } from '@tanstack/react-query';
+import { Badge, Box, Button, Field, NumberField, Row, Surface, Switch, Text, useConfirm } from '@kromatv/ui/kit';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ArtRuleEditor, type ArtRuleValue } from '#web/features/admin/scrape-art.component';
 import { LanguagePriorityEditor } from '#web/features/admin/scrape-language.component';
@@ -15,6 +15,10 @@ export function ScrapeSettingsScreen() {
   return <ScrapeSettingsInner />;
 }
 
+function messageOf(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
 function ScrapeSettingsInner() {
   const t = useT();
   const { client } = useAuth();
@@ -22,8 +26,14 @@ function ScrapeSettingsInner() {
     queryKey: ['admin', 'scrape'],
     queryFn: () => client.library.scrapeDefaults(),
   });
+  const queryClient = useQueryClient();
+  const confirm = useConfirm();
+  const canManageLibraries = useCap('library.manage');
   const [draft, setDraft] = useState<Partial<ScrapeDefaults>>({});
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [keyBusy, setKeyBusy] = useState(false);
   const [fanartKey, setFanartKey] = useState('');
   const [fanartSaved, setFanartSaved] = useState(false);
 
@@ -36,6 +46,7 @@ function ScrapeSettingsInner() {
   }
   const value: ScrapeDefaults = {
     languagePriority: draft.languagePriority ?? data.languagePriority,
+    nfo: draft.nfo ?? data.nfo ?? false,
     posterLanguages:
       draft.posterLanguages !== undefined ? draft.posterLanguages : (data.posterLanguages ?? null),
     backdropLanguages:
@@ -80,6 +91,10 @@ function ScrapeSettingsInner() {
       draft.logoSources !== undefined ? draft.logoSources : (data.logoSources ?? null),
     seasonSources:
       draft.seasonSources !== undefined ? draft.seasonSources : (data.seasonSources ?? null),
+    artworkRefreshDays:
+      draft.artworkRefreshDays !== undefined
+        ? draft.artworkRefreshDays
+        : (data.artworkRefreshDays ?? null),
     writeImages: draft.writeImages ?? data.writeImages ?? false,
   };
   const languages = data.languages ?? [];
@@ -87,11 +102,48 @@ function ScrapeSettingsInner() {
   const save = (patch: Partial<ScrapeDefaults>) => {
     const next = { ...value, ...patch };
     setDraft(next);
-    void client.library.setScrapeDefaults(next).then(() => {
+    setSaveError(null);
+    void client.library
+      .setScrapeDefaults(next)
+      .then(() => {
+        setSaved(true);
+        window.setTimeout(() => setSaved(false), 1600);
+        void query.refetch();
+        // The library page reads these defaults through its own query; without
+        // this it keeps showing the old rules until a full reload.
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'libraries'] });
+      })
+      .catch((reason) => setSaveError(messageOf(reason) || t('admin.scrapeSaveFailed')));
+  };
+
+  const applyAll = async () => {
+    const ok = await confirm({
+      title: t('admin.scrapeApplyAll'),
+      message: t('admin.scrapeApplyAllConfirm'),
+      confirmLabel: t('admin.scrapeApplyAll'),
+      cancelLabel: t('common.cancel'),
+    });
+    if (!ok) {
+      return;
+    }
+    setApplying(true);
+    setSaveError(null);
+    try {
+      const list = await client.library.list();
+      for (const library of list.libraries) {
+        if (!['film', 'tv', 'mixed'].includes(library.kind) || library.itemCount === 0) {
+          continue;
+        }
+        await client.library.refreshMetadata(library.id);
+      }
       setSaved(true);
       window.setTimeout(() => setSaved(false), 1600);
-      void query.refetch();
-    });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'libraries'] });
+    } catch (reason) {
+      setSaveError(messageOf(reason));
+    } finally {
+      setApplying(false);
+    }
   };
 
   const poster: ArtRuleValue = {
@@ -119,6 +171,11 @@ function ScrapeSettingsInner() {
     size: value.seasonSize ?? null,
   };
   const fanart = data.fanartConfigured === true;
+  const fanartPaused =
+    !fanart &&
+    [value.posterSources, value.backdropSources, value.logoSources, value.seasonSources].some(
+      (list) => list?.length === 1 && list[0] === 'fanart',
+    );
   const sourceProps = (
     configured: string[] | null | undefined,
     fallback: string[],
@@ -136,9 +193,21 @@ function ScrapeSettingsInner() {
       <PageHeader.Root>
         <PageHeader.Title>{t('admin.scrapeTitle')}</PageHeader.Title>
         <PageHeader.Subtitle>{t('admin.scrapeSub')}</PageHeader.Subtitle>
+        <PageHeader.Actions>
+          {saved ? (
+            <Text variant="meta" color="success">
+              {t('admin.scrapeSaved')}
+            </Text>
+          ) : null}
+        </PageHeader.Actions>
       </PageHeader.Root>
 
       <Box mt={24} gap={20}>
+        {saveError ? (
+          <Text variant="meta" color="danger">
+            {saveError}
+          </Text>
+        ) : null}
         <Surface pad="none" radius="xl" border="border">
           <Box px={20} py={18} gap={12}>
             <Box>
@@ -157,9 +226,6 @@ function ScrapeSettingsInner() {
                 }
               }}
             />
-            <Text variant="meta" color="success" minH={18}>
-              {saved ? t('admin.scrapeSaved') : ''}
-            </Text>
           </Box>
         </Surface>
 
@@ -290,8 +356,11 @@ function ScrapeSettingsInner() {
                 variant="glass"
                 size="sm"
                 label={t('admin.fanartSave')}
-                disabled={!fanartKey.trim()}
+                disabled={!fanartKey.trim() || keyBusy}
+                loading={keyBusy}
                 onPress={() => {
+                  setSaveError(null);
+                  setKeyBusy(true);
                   void client.library
                     .setScrapeDefaults({ fanartApiKey: fanartKey.trim() })
                     .then(() => {
@@ -299,7 +368,10 @@ function ScrapeSettingsInner() {
                       setFanartSaved(true);
                       window.setTimeout(() => setFanartSaved(false), 1600);
                       void query.refetch();
-                    });
+                      void queryClient.invalidateQueries({ queryKey: ['admin', 'libraries'] });
+                    })
+                    .catch((reason) => setSaveError(messageOf(reason)))
+                    .finally(() => setKeyBusy(false));
                 }}
               />
               {fanart ? (
@@ -307,10 +379,18 @@ function ScrapeSettingsInner() {
                   variant="ghost"
                   size="sm"
                   label={t('admin.fanartClear')}
+                  loading={keyBusy}
                   onPress={() => {
+                    setSaveError(null);
+                    setKeyBusy(true);
                     void client.library
                       .setScrapeDefaults({ clearFanartKey: true })
-                      .then(() => void query.refetch());
+                      .then(() => {
+                        void query.refetch();
+                        void queryClient.invalidateQueries({ queryKey: ['admin', 'libraries'] });
+                      })
+                      .catch((reason) => setSaveError(messageOf(reason)))
+                      .finally(() => setKeyBusy(false));
                   }}
                 />
               ) : null}
@@ -320,6 +400,11 @@ function ScrapeSettingsInner() {
                 </Text>
               ) : null}
             </Row>
+            {fanartPaused ? (
+              <Text variant="meta" color="textDim">
+                {t('admin.fanartPaused')}
+              </Text>
+            ) : null}
           </Box>
         </Surface>
 
@@ -344,8 +429,65 @@ function ScrapeSettingsInner() {
                 label={t('admin.writeImages')}
               />
             </Row>
+            <Row between gap={16}>
+              <Box>
+                <Text variant="label">{t('admin.nfoFiles')}</Text>
+                <Text variant="meta" color="textDim" mt={2}>
+                  {t('admin.nfoFilesHint')}
+                </Text>
+              </Box>
+              <Switch
+                checked={value.nfo ?? false}
+                onCheckedChange={(nfo) => save({ nfo })}
+                label={t('admin.nfoFiles')}
+              />
+            </Row>
+            <Row between gap={16}>
+              <Box>
+                <Text variant="label">{t('admin.artworkRefresh')}</Text>
+                <Text variant="meta" color="textDim" mt={2}>
+                  {value.artworkRefreshDays
+                    ? t('admin.artworkRefreshDays', { count: value.artworkRefreshDays })
+                    : t('admin.artworkRefreshOff')}
+                </Text>
+              </Box>
+              <NumberField
+                label={t('admin.artworkRefresh')}
+                value={value.artworkRefreshDays ?? 0}
+                min={0}
+                max={365}
+                step={1}
+                w={140}
+                onValueChange={(days) =>
+                  save({ artworkRefreshDays: days > 0 ? days : null })
+                }
+              />
+            </Row>
           </Box>
         </Surface>
+
+        {canManageLibraries ? (
+          <Surface pad="none" radius="xl" border="border">
+            <Box px={20} py={18} gap={14}>
+              <Row between gap={16} wrap>
+                <Box>
+                  <Text variant="title">{t('admin.scrapeApplyAll')}</Text>
+                  <Text variant="meta" color="textDim" mt={4}>
+                    {t('admin.scrapeApplyAllHint')}
+                  </Text>
+                </Box>
+                <Button
+                  variant="glass"
+                  size="sm"
+                  icon="refresh"
+                  label={t('admin.scrapeApplyAll')}
+                  loading={applying}
+                  onPress={() => void applyAll()}
+                />
+              </Row>
+            </Box>
+          </Surface>
+        ) : null}
       </Box>
     </>
   );

@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
 
-use axum::Json;
 use axum::extract::State;
 use axum::routing::post;
-use serde_json::{Value, json};
+use axum::Json;
+use serde_json::{json, Value};
 
 use kroma_module_sdk::host::testing::StubHost;
 
@@ -81,4 +81,28 @@ async fn a_download_whose_folder_is_gone_is_marked_removed_and_says_why() {
         ("54ed71fbe0318163", "completed")
     );
     assert!(empty.2.contains("no video file found"), "{}", empty.2);
+}
+
+#[test]
+fn a_photo_preference_does_not_capture_a_movie_import() {
+    let host = StubHost::new()
+        .with_libraries(vec![
+            LibraryFolders {
+                id: "photos".into(),
+                kind: "photos".into(),
+                name: "Photos".into(),
+                folders: vec!["/media/photos".into()],
+            },
+            LibraryFolders {
+                id: "films".into(),
+                kind: "movies".into(),
+                name: "Films".into(),
+                folders: vec!["/media/films".into()],
+            },
+        ])
+        .with_setting("acqMovieLibrary", json!("Photos"));
+
+    let target = target_library_def(&host, RequestKind::Movie).unwrap();
+
+    assert_eq!(target.id, "films");
 }

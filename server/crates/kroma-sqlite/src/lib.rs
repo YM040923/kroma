@@ -20,22 +20,22 @@ mod migrate;
 mod open;
 #[cfg(not(target_family = "wasm"))]
 mod own_file;
+mod pool;
 #[cfg(not(target_family = "wasm"))]
 mod private;
-mod pool;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
-pub use grant::{init_scoped, Grant};
 #[cfg(not(target_family = "wasm"))]
 pub use grant::open_guarded;
-pub use migrate::{
-    migrate, user_version, Change, Legacy, Migrated, Run, Schema, SqlStep, Step, KEPT_SNAPSHOTS,
-};
+pub use grant::{init_scoped, Grant};
 /// Keeps the newest [`KEPT_SNAPSHOTS`] of the copies [`migrate`] made beside a
 /// database, and removes the rest.
 #[cfg(not(target_family = "wasm"))]
 pub use migrate::prune_snapshots;
+pub use migrate::{
+    migrate, user_version, Change, Legacy, Migrated, Run, Schema, SqlStep, Step, KEPT_SNAPSHOTS,
+};
 pub use open::{apply_migrations, migrate_store, migrate_store_sql, open, open_with};
 #[cfg(not(target_family = "wasm"))]
 pub use own_file::{journal_of, module_databases_dir, open_owned, refuse_unowned, JOURNALS};

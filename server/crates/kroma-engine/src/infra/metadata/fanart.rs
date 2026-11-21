@@ -74,7 +74,9 @@ impl Raw {
             url,
             width: self.width,
             height: self.height,
-            language: self.lang.filter(|lang| !lang.trim().is_empty() && lang != "00"),
+            language: self
+                .lang
+                .filter(|lang| !lang.trim().is_empty() && lang != "00"),
             votes: self.likes,
             popularity: self.likes,
         })
@@ -100,7 +102,9 @@ fn fresh(path: &Path) -> bool {
 }
 
 fn pace() {
-    let mut held = LAST_CALL.lock().unwrap_or_else(|poison| poison.into_inner());
+    let mut held = LAST_CALL
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     if let Some(last) = *held {
         let elapsed = last.elapsed();
         if elapsed < MIN_GAP {
@@ -127,14 +131,35 @@ fn fetch_body(api_key: &str, target: Target, tmdb_id: u64) -> Option<String> {
     Some(response.text())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerifyError {
+    InvalidKey,
+    Unreachable,
+}
+
+/// One cheap request so a mistyped key is refused at the settings page rather
+/// than silently stored and only discovered during a later scrape.
+pub fn verify_key(api_key: &str) -> Result<(), VerifyError> {
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Err(VerifyError::InvalidKey);
+    }
+    let response = kroma_http::Fetch::new()
+        .purpose("metadata.fanart")
+        .max_time(15)
+        .query("api_key", key)
+        .get(&format!("{API}/movies/550"))
+        .map_err(|_| VerifyError::Unreachable)?;
+    match response.status {
+        200..=299 => Ok(()),
+        401 | 403 => Err(VerifyError::InvalidKey),
+        _ => Err(VerifyError::Unreachable),
+    }
+}
+
 /// Every Fanart list for one title, from the week-long cache when possible.
 /// `None` when no key is configured or the service could not answer.
-pub fn fetch(
-    data_dir: &Path,
-    api_key: &str,
-    target: Target,
-    tmdb_id: u64,
-) -> Option<FanartLists> {
+pub fn fetch(data_dir: &Path, api_key: &str, target: Target, tmdb_id: u64) -> Option<FanartLists> {
     if api_key.trim().is_empty() || tmdb_id == 0 {
         return None;
     }

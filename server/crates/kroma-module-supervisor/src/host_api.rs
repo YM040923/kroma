@@ -57,10 +57,7 @@ where
         // How a module reaches a peer: it asks for a CONTRACT and the core
         // answers with whoever serves it. No module id crosses this wire.
         .route("/_host/contributions", get(contributions))
-        .route(
-            "/_host/network/seal",
-            post(network::seal),
-        )
+        .route("/_host/network/seal", post(network::seal))
         .route(
             "/_host/network/decide",
             post(network::decide).layer(DefaultBodyLimit::max(network::MAX_ASK_BYTES)),

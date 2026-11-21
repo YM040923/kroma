@@ -20,7 +20,12 @@ pub fn similar(state: &SharedState, pool: &Pool, id: &str, n: usize) -> Result<V
 
 /// "For You": the unwatched titles nearest to what `user_id` watched recently.
 /// Empty until they have watched something embeddable.
-pub fn for_you(state: &SharedState, pool: &Pool, user_id: &str, n: usize) -> Result<Vec<MediaItem>> {
+pub fn for_you(
+    state: &SharedState,
+    pool: &Pool,
+    user_id: &str,
+    n: usize,
+) -> Result<Vec<MediaItem>> {
     let watched = db::recent_watched_ids(pool, user_id)?;
     if watched.is_empty() {
         return Ok(Vec::new());
@@ -38,7 +43,12 @@ pub fn themed(state: &SharedState, pool: &Pool, phrase: &str, n: usize) -> Resul
     let ranked = state
         .vectors
         .nearest(&query, db::ranking_depth(n), &HashSet::new());
-    db::themed_items_from(pool, ranked, n, embeddings::relevance_floor(&state.embedder))
+    db::themed_items_from(
+        pool,
+        ranked,
+        n,
+        embeddings::relevance_floor(&state.embedder),
+    )
 }
 
 #[cfg(test)]
@@ -94,7 +104,10 @@ mod tests {
 
         let rail = similar(&state, &state.db, "a", 3).unwrap();
 
-        assert_eq!(ids(rail), ids(db::similar_items(&state.db, "a", 3).unwrap()));
+        assert_eq!(
+            ids(rail),
+            ids(db::similar_items(&state.db, "a", 3).unwrap())
+        );
     }
 
     #[test]
@@ -105,7 +118,10 @@ mod tests {
 
         let shelf = for_you(&state, &state.db, "u1", 3).unwrap();
 
-        assert_eq!(ids(shelf), ids(db::recommended_for(&state.db, "u1", 3).unwrap()));
+        assert_eq!(
+            ids(shelf),
+            ids(db::recommended_for(&state.db, "u1", 3).unwrap())
+        );
     }
 
     #[test]

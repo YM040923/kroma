@@ -98,10 +98,21 @@ fn build_video(stream: &FfStream) -> VideoStream {
             stream_index: stream.index,
             profile: known_text(stream.profile.as_deref()),
             level: stream.level.and_then(|n| u32::try_from(n).ok()),
-            aspect_ratio: stream.display_aspect_ratio.as_deref()
-                .filter(|s| positive_ratio(s, ':').is_some()).map(str::to_owned),
-            frame_rate: stream.avg_frame_rate.as_deref().and_then(|s| positive_ratio(s, '/'))
-                .or_else(|| stream.r_frame_rate.as_deref().and_then(|s| positive_ratio(s, '/'))),
+            aspect_ratio: stream
+                .display_aspect_ratio
+                .as_deref()
+                .filter(|s| positive_ratio(s, ':').is_some())
+                .map(str::to_owned),
+            frame_rate: stream
+                .avg_frame_rate
+                .as_deref()
+                .and_then(|s| positive_ratio(s, '/'))
+                .or_else(|| {
+                    stream
+                        .r_frame_rate
+                        .as_deref()
+                        .and_then(|s| positive_ratio(s, '/'))
+                }),
             bit_rate: positive_integer(stream.bit_rate.as_deref()),
             pixel_format: known_text(stream.pix_fmt.as_deref()),
         }),
@@ -158,7 +169,9 @@ fn hdr_format(stream: &FfStream, dolby_vision: bool) -> Option<HdrFormat> {
 }
 
 fn known_text(value: Option<&str>) -> Option<String> {
-    value.map(str::trim).filter(|s| !s.is_empty() && !matches!(*s, "unknown" | "N/A" | "unspecified"))
+    value
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !matches!(*s, "unknown" | "N/A" | "unspecified"))
         .map(str::to_owned)
 }
 
@@ -177,17 +190,20 @@ fn positive_ratio(value: &str, separator: char) -> Option<f64> {
 fn pixel_format_bit_depth(pix_fmt: Option<&str>) -> Option<u32> {
     let name = pix_fmt?;
     for depth in [9, 10, 12, 14, 16] {
-        if name.ends_with(&format!("p{depth}le")) || name.ends_with(&format!("p{depth}be"))
-            || name == format!("gray{depth}le") || name == format!("gray{depth}be") {
+        if name.ends_with(&format!("p{depth}le"))
+            || name.ends_with(&format!("p{depth}be"))
+            || name == format!("gray{depth}le")
+            || name == format!("gray{depth}be")
+        {
             return Some(depth);
         }
     }
     match name {
         "p010le" | "p010be" | "x2rgb10le" | "x2bgr10le" => Some(10),
         "p016le" | "p016be" | "rgb48le" | "rgb48be" | "rgba64le" | "rgba64be" => Some(16),
-        "yuv420p" | "yuv422p" | "yuv444p" | "yuv440p" | "yuv411p" | "yuv410p"
-        | "yuvj420p" | "yuvj422p" | "yuvj444p" | "nv12" | "nv21" | "rgb24"
-        | "bgr24" | "rgba" | "bgra" | "gbrp" | "gray" | "yuyv422" | "uyvy422" => Some(8),
+        "yuv420p" | "yuv422p" | "yuv444p" | "yuv440p" | "yuv411p" | "yuv410p" | "yuvj420p"
+        | "yuvj422p" | "yuvj444p" | "nv12" | "nv21" | "rgb24" | "bgr24" | "rgba" | "bgra"
+        | "gbrp" | "gray" | "yuyv422" | "uyvy422" => Some(8),
         _ => None,
     }
 }

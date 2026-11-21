@@ -1,0 +1,21 @@
+{
+  "artwork.backdrop": "Arrière-plan",
+  "artwork.choosePosters": "Choisir les affiches",
+  "artwork.coverSaved": "Couverture enregistrée",
+  "artwork.current": "Actuelle",
+  "artwork.empty": "Aucune image disponible",
+  "artwork.generate": "Générer la couverture",
+  "artwork.generateHint": "Choisissez jusqu'à quatre affiches ; le nom de la bibliothèque est dessiné sur la couverture.",
+  "artwork.hasTitle": "L'image contient déjà le nom de la bibliothèque",
+  "artwork.loadFailed": "Impossible de charger la liste des images",
+  "artwork.locked": "Cette image est verrouillée sur le choix manuel actuel. Rétablissez l'image par défaut pour la déverrouiller.",
+  "artwork.logo": "Logo du titre",
+  "artwork.open": "Changer l'image",
+  "artwork.poster": "Affiche",
+  "artwork.reset": "Rétablir par défaut",
+  "artwork.save": "Enregistrer",
+  "artwork.textless": "Sans texte",
+  "artwork.title": "Choisir l'image",
+  "artwork.upload": "Importer une couverture",
+  "artwork.uploadHint": "Importez une image 16:9. Le nom de la bibliothèque est ajouté sauf si l'image le contient déjà."
+}

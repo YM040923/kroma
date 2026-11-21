@@ -3,7 +3,7 @@
 //! in-memory as raw tars (the installer accepts zstd / gzip / raw, dispatched
 //! by magic bytes) and use `library: true` manifests so nothing is spawned.
 
-use kroma_module_supervisor::{Accept, Source, verify_sha256};
+use kroma_module_supervisor::{verify_sha256, Accept, Source};
 
 mod install_support;
 
@@ -158,6 +158,9 @@ fn install_refuses_a_helper_named_like_a_file_the_host_keeps() {
         .unwrap_err()
         .to_string();
 
-    assert!(refused.contains(r#"helpers: "module.cwasm" is not a helper name"#), "{refused}");
+    assert!(
+        refused.contains(r#"helpers: "module.cwasm" is not a helper name"#),
+        "{refused}"
+    );
     assert!(sup.installed_ids().is_empty());
 }

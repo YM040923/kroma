@@ -16,7 +16,9 @@ use anyhow::Context;
 use kroma_module_host::testing::StubHost;
 use kroma_module_host::NetworkPolicyOf;
 use kroma_module_manifest::ModuleManifest;
-use kroma_module_supervisor::{FolderRoots, Supervisor, SupervisorConfig, INSTALLED_DIR, MODULE_COMPONENT};
+use kroma_module_supervisor::{
+    FolderRoots, Supervisor, SupervisorConfig, INSTALLED_DIR, MODULE_COMPONENT,
+};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
@@ -39,7 +41,12 @@ fn fixtures_in(module_dir: &Path) -> anyhow::Result<Fixtures> {
         .with_context(|| format!("{} is not a valid audit file", path.display()))
 }
 
-fn install(data_dir: &Path, manifest: &ModuleManifest, authored: &str, component: &[u8]) -> anyhow::Result<()> {
+fn install(
+    data_dir: &Path,
+    manifest: &ModuleManifest,
+    authored: &str,
+    component: &[u8],
+) -> anyhow::Result<()> {
     let installed = data_dir.join(INSTALLED_DIR).join(&manifest.id);
     std::fs::create_dir_all(&installed)?;
     std::fs::write(installed.join("module.json"), authored)?;
@@ -84,7 +91,8 @@ fn methods_of(module_dir: &Path, own: &ModuleManifest, point: &str) -> Vec<Strin
 pub fn audit(module_dir: &Path, component: &Path) -> anyhow::Result<Report> {
     let authored = std::fs::read_to_string(module_dir.join("module.json"))
         .with_context(|| format!("{} holds no module.json", module_dir.display()))?;
-    let manifest: ModuleManifest = serde_json::from_str(&authored).context("module.json is not a manifest")?;
+    let manifest: ModuleManifest =
+        serde_json::from_str(&authored).context("module.json is not a manifest")?;
     let fixtures = fixtures_in(module_dir)?;
     let wasm = std::fs::read(component).with_context(|| format!("read {}", component.display()))?;
 
@@ -92,7 +100,10 @@ pub fn audit(module_dir: &Path, component: &Path) -> anyhow::Result<Report> {
     let data_dir = scratch.path().to_path_buf();
     install(&data_dir, &manifest, &authored, &wasm)?;
 
-    let recorder = Arc::new(Recorder::new(manifest.permissions.clone(), fixtures.settings.clone()));
+    let recorder = Arc::new(Recorder::new(
+        manifest.permissions.clone(),
+        fixtures.settings.clone(),
+    ));
     let runtime = tokio::runtime::Runtime::new()?;
     let supervisor = Supervisor::new(SupervisorConfig {
         modules_dir: data_dir.join("modules"),
@@ -115,8 +126,15 @@ pub fn audit(module_dir: &Path, component: &Path) -> anyhow::Result<Report> {
     let stub = fixtures
         .settings
         .iter()
-        .fold(StubHost::new(), |host, (key, value)| host.with_setting(key, value.clone()));
-    host::serve(&supervisor, NetworkPolicyOf(recorder.clone()), stub, runtime.handle())?;
+        .fold(StubHost::new(), |host, (key, value)| {
+            host.with_setting(key, value.clone())
+        });
+    host::serve(
+        &supervisor,
+        NetworkPolicyOf(recorder.clone()),
+        stub,
+        runtime.handle(),
+    )?;
 
     let endpoint = supervisor
         .spawn(&manifest.id)
@@ -125,7 +143,9 @@ pub fn audit(module_dir: &Path, component: &Path) -> anyhow::Result<Report> {
         endpoint: &endpoint,
         token: supervisor.port_token(&manifest.id),
     }
-    .run(&manifest, &fixtures, &|point| methods_of(module_dir, &manifest, point));
+    .run(&manifest, &fixtures, &|point| {
+        methods_of(module_dir, &manifest, point)
+    });
     supervisor.stop_all();
 
     let (programs, files) = Report::of_asked(recorder.asked());

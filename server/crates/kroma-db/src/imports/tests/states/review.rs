@@ -28,8 +28,18 @@ fn a_state_dated_after_a_players_write_wins_and_one_dated_before_it_does_not() {
     let (pool, ana) = a_film_with_a_library_and_an_account();
     crate::upsert_progress(&pool, &ana, "heat", 600_000, Some(7_200_000)).unwrap();
 
-    let older = merge(&pool, &ana, Place::Title("heat"), stopped(1_000_000, now_secs() - 60));
-    let newer = merge(&pool, &ana, Place::Title("heat"), stopped(3_000_000, now_secs() + 60));
+    let older = merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(1_000_000, now_secs() - 60),
+    );
+    let newer = merge(
+        &pool,
+        &ana,
+        Place::Title("heat"),
+        stopped(3_000_000, now_secs() + 60),
+    );
 
     assert_eq!(older, Merged::Unchanged);
     assert_eq!(newer, Merged::Changed);
@@ -101,8 +111,7 @@ fn a_players_writes_during_many_merges_are_all_kept() {
     std::thread::scope(|scope| {
         scope.spawn(|| {
             for step in 0..200 {
-                crate::upsert_progress(&pool, &ana, "heat", 1_000 + step, Some(7_200_000))
-                    .unwrap();
+                crate::upsert_progress(&pool, &ana, "heat", 1_000 + step, Some(7_200_000)).unwrap();
             }
         });
         for step in 0..200 {

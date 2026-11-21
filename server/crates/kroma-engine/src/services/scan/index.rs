@@ -56,7 +56,11 @@ pub(super) fn index_parsed(
                 kind: kind.clone(),
                 year,
                 duration_ms: None,
-                container: if kind == Kind::Photo { file.container.clone() } else { String::new() },
+                container: if kind == Kind::Photo {
+                    file.container.clone()
+                } else {
+                    String::new()
+                },
                 video: None,
                 audio: None,
                 audio_tracks: Vec::new(),

@@ -144,7 +144,9 @@ fn decide_own_file(module_id: &str, ctx: &AuthContext<'_>) -> Authorization {
         AuthAction::Pragma { pragma_name, .. } => OWN_FILE_PRAGMAS
             .iter()
             .any(|allowed| allowed.eq_ignore_ascii_case(pragma_name)),
-        AuthAction::Function { function_name } => !function_name.eq_ignore_ascii_case("load_extension"),
+        AuthAction::Function { function_name } => {
+            !function_name.eq_ignore_ascii_case("load_extension")
+        }
         _ => true,
     };
     if allow {
@@ -199,7 +201,9 @@ impl Scope {
                 }))?;
             }
             Rule::OwnFile => {
-                conn.authorizer(Some(move |ctx: AuthContext<'_>| decide_own_file(&module_id, &ctx)))?;
+                conn.authorizer(Some(move |ctx: AuthContext<'_>| {
+                    decide_own_file(&module_id, &ctx)
+                }))?;
             }
         }
         Ok(())
@@ -215,7 +219,6 @@ fn compile(grant: &Grant) -> Compiled {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,9 +232,10 @@ mod tests {
 
     #[test]
     fn a_grant_round_trips_through_the_manifest_shape() {
-        let g: Grant =
-            serde_json::from_str(r#"{ "read": ["requests", "users.username"], "write": ["wanted"] }"#)
-                .unwrap();
+        let g: Grant = serde_json::from_str(
+            r#"{ "read": ["requests", "users.username"], "write": ["wanted"] }"#,
+        )
+        .unwrap();
         assert_eq!(g.read, ["requests", "users.username"]);
         assert_eq!(g.write, ["wanted"]);
         assert_eq!(

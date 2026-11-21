@@ -6,8 +6,8 @@ use kroma_module_host::HostStorage;
 use kroma_primitives::now_ms;
 
 use crate::db;
-use crate::model::{MonitoredTitle, RequestKind};
 use crate::lifecycle::today_ymd;
+use crate::model::{MonitoredTitle, RequestKind};
 
 use crate::tmdb::discover::DiscoverRawDetail;
 

@@ -75,9 +75,10 @@ COPY server/crates ./server/crates
 # lines do not put in place.
 COPY packages/core/src/locales ./packages/core/src/locales
 COPY packages/core/assets ./packages/core/assets
+ARG KROMA_GIT_HASH
 WORKDIR /src/server
 RUN mkdir -p src && echo 'fn main() {}' > src/main.rs \
-    && cargo build --locked --release \
+    && KROMA_GIT_HASH="$KROMA_GIT_HASH" cargo build --locked --release \
     && rm -rf src
 # Real sources: the server crate + the shared locale catalogs it include_str!s at
 # compile time (crates/kroma-engine/src/i18n.rs -> ../../../packages/core/src/locales/*.json).
@@ -85,8 +86,7 @@ WORKDIR /src
 COPY packages ./packages
 COPY server ./server
 WORKDIR /src/server
-ARG KROMA_GIT_HASH
-RUN touch src/main.rs && cargo build --locked --release
+RUN touch src/main.rs && KROMA_GIT_HASH="$KROMA_GIT_HASH" cargo build --locked --release
 # → /src/server/target/release/kroma-server
 
 # ---- 3) Runtime ------------------------------------------------------------

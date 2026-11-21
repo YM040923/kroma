@@ -32,7 +32,6 @@
   "admin.aiProviders": "服务商",
   "admin.aiProvidersHint": "注册一个或多个模型服务商，并选择用于生成的默认项。",
   "admin.aiReasoning": "推理",
-  "admin.aiReasoningHint": "自适应思考（Claude 4.6+）；其他模型忽略",
   "admin.aiRemoveProvider": "移除",
   "admin.aiRequired": "必填",
   "admin.aiSaved": "已保存",
@@ -51,5 +50,6 @@
   "admin.aiTest": "测试连接",
   "admin.aiTesting": "测试中…",
   "admin.aiTitle": "智能（AI）",
-  "admin.aiUntitledProvider": "未命名服务商"
+  "admin.aiUntitledProvider": "未命名服务商",
+  "admin.aiReasoningHint": "自适应思考（Claude 4.6+）；其他模型忽略"
 }

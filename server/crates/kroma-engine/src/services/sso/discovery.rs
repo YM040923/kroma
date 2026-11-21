@@ -95,7 +95,10 @@ pub fn discover(issuer: &str) -> Result<Metadata, DiscoveryError> {
         return Err(DiscoveryError::IssuerMismatch(metadata.issuer));
     }
     let endpoints = [
-        ("authorization_endpoint", Some(&metadata.authorization_endpoint)),
+        (
+            "authorization_endpoint",
+            Some(&metadata.authorization_endpoint),
+        ),
         ("token_endpoint", Some(&metadata.token_endpoint)),
         ("jwks_uri", Some(&metadata.jwks_uri)),
         ("userinfo_endpoint", metadata.userinfo_endpoint.as_ref()),
@@ -161,9 +164,18 @@ impl Directory {
         let Ok(mut attempts) = self.attempts.lock() else {
             return Ok(());
         };
-        match attempts.get(issuer).filter(|last| now - last.at < RETRY_SECS) {
-            Some(Attempt { reading: Reading::Failed(failed), .. }) => Err(Some(failed.clone())),
-            Some(Attempt { reading: Reading::Out, .. }) => Err(None),
+        match attempts
+            .get(issuer)
+            .filter(|last| now - last.at < RETRY_SECS)
+        {
+            Some(Attempt {
+                reading: Reading::Failed(failed),
+                ..
+            }) => Err(Some(failed.clone())),
+            Some(Attempt {
+                reading: Reading::Out,
+                ..
+            }) => Err(None),
             None => {
                 let reading = Reading::Out;
                 attempts.insert(issuer.to_string(), Attempt { at: now, reading });
@@ -178,7 +190,10 @@ impl Directory {
     /// is the answer for the next half minute.
     pub fn lookup(&self, issuer: &str, now: i64) -> Result<(Metadata, KeySet), DiscoveryError> {
         let known = self.remembered(issuer);
-        if let Some(known) = known.as_ref().filter(|known| now - known.read_at < REMEMBERED_SECS) {
+        if let Some(known) = known
+            .as_ref()
+            .filter(|known| now - known.read_at < REMEMBERED_SECS)
+        {
             return Ok((known.metadata.clone(), known.keys.clone()));
         }
         match self.begin_reading(issuer, now) {

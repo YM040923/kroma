@@ -110,7 +110,13 @@ mod tests {
     #[test]
     fn an_imported_movie_is_available_and_settles_its_request() {
         let host = test_host();
-        insert_req(&host, "r1", RequestKind::Movie, 100, RequestStatus::Approved);
+        insert_req(
+            &host,
+            "r1",
+            RequestKind::Movie,
+            100,
+            RequestStatus::Approved,
+        );
         db::claim_wanted(
             host.db(),
             "r1",
@@ -164,7 +170,10 @@ mod tests {
 
         assert_eq!(status(&host, "w1"), "available");
         assert_eq!(status(&host, "w2"), "grabbed");
-        assert_eq!(status_of_req(&host, "r1"), RequestStatus::PartiallyAvailable);
+        assert_eq!(
+            status_of_req(&host, "r1"),
+            RequestStatus::PartiallyAvailable
+        );
     }
 
     #[test]
@@ -210,7 +219,13 @@ mod tests {
     #[test]
     fn an_import_that_changes_nothing_notifies_nobody() {
         let host = test_host();
-        insert_req(&host, "r1", RequestKind::Movie, 100, RequestStatus::Available);
+        insert_req(
+            &host,
+            "r1",
+            RequestKind::Movie,
+            100,
+            RequestStatus::Available,
+        );
         db::claim_wanted(
             host.db(),
             "r1",

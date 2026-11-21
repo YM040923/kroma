@@ -38,7 +38,7 @@ pub(super) fn bounded(state: &WatchState, now_secs: i64) -> Watching {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
 
     use super::*;
 

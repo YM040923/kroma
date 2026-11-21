@@ -106,7 +106,12 @@ impl Middleware {
             ask.port,
             ask.decision.action.clone(),
         );
-        let kept = self.verdicts.lock().unwrap_or_else(PoisonError::into_inner).get(&key).cloned();
+        let kept = self
+            .verdicts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&key)
+            .cloned();
         if let Some((at, verdict)) = kept {
             if at.elapsed() < VERDICT_TTL {
                 return verdict;
@@ -201,11 +206,18 @@ impl Network {
                 });
             }
         }
-        let skips = self.middleware.skips.lock().unwrap_or_else(PoisonError::into_inner);
+        let skips = self
+            .middleware
+            .skips
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         placed
             .into_iter()
             .map(|one| {
-                let of_this: Vec<&Skip> = skips.iter().filter(|skip| skip.module == one.module).collect();
+                let of_this: Vec<&Skip> = skips
+                    .iter()
+                    .filter(|skip| skip.module == one.module)
+                    .collect();
                 Standing {
                     answering: answering.contains(&one.module),
                     skipped: of_this.len(),
@@ -253,7 +265,9 @@ impl Network {
                     now = Tightened {
                         action: Action::Block,
                         rule: Some(rule_of(&placed.module)),
-                        reason: Some(reason.unwrap_or_else(|| format!("blocked by {}", placed.module))),
+                        reason: Some(
+                            reason.unwrap_or_else(|| format!("blocked by {}", placed.module)),
+                        ),
                     };
                 }
                 Some(PolicyVerdict::Network { network, .. }) => {
@@ -293,7 +307,11 @@ impl Network {
             return;
         }
         let batch = {
-            let mut waiting = self.middleware.observed.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut waiting = self
+                .middleware
+                .observed
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             waiting.push(row);
             if waiting.len() < OBSERVED_BATCH {
                 return;
@@ -307,7 +325,11 @@ impl Network {
     /// batch. Called on the journal's own flush, so a quiet server still tells.
     pub fn flush_observed(&self) {
         let batch = std::mem::take(
-            &mut *self.middleware.observed.lock().unwrap_or_else(PoisonError::into_inner),
+            &mut *self
+                .middleware
+                .observed
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
         );
         if !batch.is_empty() {
             self.send_observed(batch);

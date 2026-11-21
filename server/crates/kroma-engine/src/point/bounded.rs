@@ -70,8 +70,8 @@ impl Point {
 mod tests {
     use std::sync::Arc;
 
-    use axum::Router;
     use axum::routing::post;
+    use axum::Router;
     use serde_json::json;
 
     use super::*;

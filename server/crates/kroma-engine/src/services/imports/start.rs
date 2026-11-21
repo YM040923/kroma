@@ -3,13 +3,13 @@
 
 use std::collections::HashSet;
 
-use super::JOB;
 use super::review::confirmable;
+use super::JOB;
 use crate::db;
 use crate::db::imports::NewImport;
 use crate::model::imports::{AccountChoice, Origin, Selection};
-use crate::services::importers::{Importers, bounded_id};
-use crate::services::jobs::{TriggerError, now_ms};
+use crate::services::importers::{bounded_id, Importers};
+use crate::services::jobs::{now_ms, TriggerError};
 use crate::state::SharedState;
 
 const MAX_NAME_CHARS: usize = 200;

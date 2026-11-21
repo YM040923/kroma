@@ -110,7 +110,10 @@ impl Programs {
             ));
         }
         if !self.allowed.iter().any(|allowed| allowed == program) {
-            return Err(format!("{} does not declare {program} under permissions.run", self.module));
+            return Err(format!(
+                "{} does not declare {program} under permissions.run",
+                self.module
+            ));
         }
         Ok(())
     }
@@ -171,7 +174,12 @@ impl Processes for Programs {
             .env_clear()
             .envs(crate::program_env::inherited(std::env::vars_os()))
             .args(asked.args.iter().map(|arg| self.with_gateway(arg)))
-            .current_dir(asked.cwd.as_deref().map_or(self.module_dir.as_path(), Path::new))
+            .current_dir(
+                asked
+                    .cwd
+                    .as_deref()
+                    .map_or(self.module_dir.as_path(), Path::new),
+            )
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -183,11 +191,16 @@ impl Processes for Programs {
         let mut busy = 0;
         let mut child = loop {
             match command.spawn() {
-                Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy && busy < MAX_BUSY => {
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::ExecutableFileBusy
+                        && busy < MAX_BUSY =>
+                {
                     busy += 1;
                     std::thread::sleep(POLL);
                 }
-                spawned => break spawned.map_err(|error| format!("start {}: {error}", asked.program))?,
+                spawned => {
+                    break spawned.map_err(|error| format!("start {}: {error}", asked.program))?
+                }
             }
         };
         let pid = child.id();
@@ -198,15 +211,18 @@ impl Processes for Programs {
         let stdout = child.stdout.take().map(capture).unwrap_or_default();
         let stderr = child.stderr.take().map(capture).unwrap_or_default();
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        self.children.lock().unwrap_or_else(PoisonError::into_inner).insert(
-            id,
-            Spawned {
-                state: State::Running(child),
-                stdout,
-                stderr,
-                pid,
-            },
-        );
+        self.children
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(
+                id,
+                Spawned {
+                    state: State::Running(child),
+                    stdout,
+                    stderr,
+                    pid,
+                },
+            );
         tracing::info!(module = %self.module, program = %asked.program, pid, "started a program");
         Ok(id)
     }
@@ -216,7 +232,9 @@ impl Processes for Programs {
         loop {
             let (finished, streams) = {
                 let mut children = self.children.lock().unwrap_or_else(PoisonError::into_inner);
-                let spawned = children.get_mut(&child).ok_or("this program has been forgotten")?;
+                let spawned = children
+                    .get_mut(&child)
+                    .ok_or("this program has been forgotten")?;
                 let streams = (Arc::clone(&spawned.stdout), Arc::clone(&spawned.stderr));
                 let finished = match &mut spawned.state {
                     State::Ended(code) => return Ok(Some(*code)),
@@ -246,7 +264,9 @@ impl Processes for Programs {
 
     fn read(&self, child: u64, which: Output, max_bytes: u32) -> Result<Vec<u8>, String> {
         let children = self.children.lock().unwrap_or_else(PoisonError::into_inner);
-        let spawned = children.get(&child).ok_or("this program has been forgotten")?;
+        let spawned = children
+            .get(&child)
+            .ok_or("this program has been forgotten")?;
         let stream = match which {
             Output::Stdout => &spawned.stdout,
             Output::Stderr => &spawned.stderr,
@@ -256,9 +276,14 @@ impl Processes for Programs {
 
     fn kill(&self, child: u64, force: bool) -> Result<(), String> {
         let children = self.children.lock().unwrap_or_else(PoisonError::into_inner);
-        let spawned = children.get(&child).ok_or("this program has been forgotten")?;
+        let spawned = children
+            .get(&child)
+            .ok_or("this program has been forgotten")?;
         if matches!(spawned.state, State::Running(_)) {
-            signal(spawned.pid, if force { libc::SIGKILL } else { libc::SIGTERM });
+            signal(
+                spawned.pid,
+                if force { libc::SIGKILL } else { libc::SIGTERM },
+            );
         }
         Ok(())
     }

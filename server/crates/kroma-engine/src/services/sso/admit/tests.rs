@@ -155,7 +155,10 @@ fn a_username_already_taken_gets_the_next_free_number() {
     let Outcome::SignedIn { user_id, .. } = outcome else {
         panic!("expected an account, got {outcome:?}");
     };
-    assert_eq!(db::user_by_id(&p, &user_id).unwrap().unwrap().username, "lea3");
+    assert_eq!(
+        db::user_by_id(&p, &user_id).unwrap().unwrap().username,
+        "lea3"
+    );
 }
 
 #[test]
@@ -204,7 +207,14 @@ fn an_invitation_creates_the_account_with_the_invitations_permissions() {
     let mut closed = provider();
     closed.new_people = NewPeople::Invite;
 
-    let outcome = admitted(&p, &closed, lea(), &Intent::SignIn { invite: Some(token) });
+    let outcome = admitted(
+        &p,
+        &closed,
+        lea(),
+        &Intent::SignIn {
+            invite: Some(token),
+        },
+    );
 
     let Outcome::SignedIn { user_id, created } = outcome else {
         panic!("expected an account, got {outcome:?}");
@@ -238,7 +248,14 @@ fn an_account_that_signs_in_with_an_invitation_in_hand_leaves_it_unspent() {
     let user = member(&p, "lea@test.dev", "lea");
     link(&p, &user, &lea()).unwrap();
 
-    admitted(&p, &provider(), lea(), &Intent::SignIn { invite: Some(token) });
+    admitted(
+        &p,
+        &provider(),
+        lea(),
+        &Intent::SignIn {
+            invite: Some(token),
+        },
+    );
 
     assert!(!db::get_invite(&p, "invite-token").unwrap().unwrap().used);
 }
@@ -279,7 +296,10 @@ fn linking_gives_the_identity_to_the_account_and_drops_its_join_request() {
     assert!(linked);
     assert!(again);
     assert!(db::list_join_requests(&p, false).unwrap().is_empty());
-    assert_eq!(db::list_identities(&p, &user).unwrap()[0].label, "lea@id.test");
+    assert_eq!(
+        db::list_identities(&p, &user).unwrap()[0].label,
+        "lea@id.test"
+    );
 }
 
 #[test]

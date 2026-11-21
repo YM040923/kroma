@@ -55,7 +55,11 @@ impl WorldTrending {
 
     fn world(&self, state: &SharedState) -> World {
         let now = now_ms();
-        let held = self.held.lock().unwrap_or_else(PoisonError::into_inner).clone();
+        let held = self
+            .held
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
         let (due, world) = match held {
             Some((until, world)) => (now >= until, world),
             None => (true, World::default()),
@@ -138,7 +142,11 @@ fn world_of(films: Vec<DiscoverHit>, shows: Vec<DiscoverHit>) -> Option<World> {
 }
 
 fn cover(hit: DiscoverHit) -> Option<SplashEntry> {
-    let kind = if hit.kind == RequestKind::Show { "show" } else { "movie" };
+    let kind = if hit.kind == RequestKind::Show {
+        "show"
+    } else {
+        "movie"
+    };
     Some(SplashEntry {
         kind: kind.to_string(),
         title: hit.title,

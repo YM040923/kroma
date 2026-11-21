@@ -74,7 +74,7 @@ macro_rules! module_main {
                 }
             }
 
-            $crate::guest::export_module!(Entry with_types_in $crate::guest);
+    $crate::guest::export_module!(Entry with_types_in $crate::guest);
         };
     };
 }

@@ -41,7 +41,10 @@ struct Page {
 
 async fn page(state: &SharedState, user: &crate::model::User, id: &str) -> Result<Page, Response> {
     if !user.permissions.contains(&Permission::SettingsManage) {
-        return Err(json_error(StatusCode::FORBIDDEN, "artwork needs settings.manage"));
+        return Err(json_error(
+            StatusCode::FORBIDDEN,
+            "artwork needs settings.manage",
+        ));
     }
     // An episode's art is its show's art.
     let wanted = id.to_string();
@@ -52,7 +55,10 @@ async fn page(state: &SharedState, user: &crate::model::User, id: &str) -> Resul
         }
         crate::api::visibility::gate_item(state, user, &item.id).await?;
         let Some(meta) = item.metadata.as_ref() else {
-            return Err(json_error(StatusCode::NOT_FOUND, "item has no metadata yet"));
+            return Err(json_error(
+                StatusCode::NOT_FOUND,
+                "item has no metadata yet",
+            ));
         };
         if meta.tmdb_id == 0 {
             return Err(json_error(StatusCode::NOT_FOUND, "item has no TMDB id"));
@@ -67,9 +73,18 @@ async fn page(state: &SharedState, user: &crate::model::User, id: &str) -> Resul
             id: item.id,
             tmdb_id: meta.tmdb_id,
             target: Target::Movie,
-            poster: overrides.get("poster").cloned().or_else(|| meta.poster_url.clone()),
-            backdrop: overrides.get("backdrop").cloned().or_else(|| meta.backdrop_url.clone()),
-            logo: overrides.get("logo").cloned().or_else(|| meta.logo_url.clone()),
+            poster: overrides
+                .get("poster")
+                .cloned()
+                .or_else(|| meta.poster_url.clone()),
+            backdrop: overrides
+                .get("backdrop")
+                .cloned()
+                .or_else(|| meta.backdrop_url.clone()),
+            logo: overrides
+                .get("logo")
+                .cloned()
+                .or_else(|| meta.logo_url.clone()),
             locked: overrides.keys().cloned().collect(),
         });
     }
@@ -83,8 +98,8 @@ async fn page(state: &SharedState, user: &crate::model::User, id: &str) -> Resul
 /// already carry, and its "current" is whatever a client shows today (the
 /// override, else the first title's poster).
 async fn library_page(state: &SharedState, id: &str) -> Result<Option<Page>, Response> {
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
-        .unwrap_or_default();
+    let defs =
+        crate::services::settings::library_defs(&state.settings, &state.config).unwrap_or_default();
     let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) else {
         return Ok(None);
     };
@@ -119,8 +134,8 @@ async fn library_cover(
     state: &SharedState,
     id: &str,
 ) -> Result<(Option<String>, Option<String>), Response> {
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
-        .unwrap_or_default();
+    let defs =
+        crate::services::settings::library_defs(&state.settings, &state.config).unwrap_or_default();
     let Some(def) = defs.iter().find(|def| def.id == id || def.name == id) else {
         return Ok((None, None));
     };
@@ -137,14 +152,21 @@ async fn library_cover(
     })
 }
 
-async fn show_page(state: &SharedState, user: &crate::model::User, id: &str) -> Result<Page, Response> {
+async fn show_page(
+    state: &SharedState,
+    user: &crate::model::User,
+    id: &str,
+) -> Result<Page, Response> {
     let wanted = id.to_string();
     let detail = query(&state.db, move |pool| db::get_show(&pool, &wanted))
         .await?
         .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "title not found"))?;
     crate::api::visibility::gate_show(state, user, &detail.show.id).await?;
     let Some(meta) = detail.show.metadata.as_ref() else {
-        return Err(json_error(StatusCode::NOT_FOUND, "show has no metadata yet"));
+        return Err(json_error(
+            StatusCode::NOT_FOUND,
+            "show has no metadata yet",
+        ));
     };
     if meta.tmdb_id == 0 {
         return Err(json_error(StatusCode::NOT_FOUND, "show has no TMDB id"));
@@ -159,9 +181,18 @@ async fn show_page(state: &SharedState, user: &crate::model::User, id: &str) -> 
         id: detail.show.id,
         tmdb_id: meta.tmdb_id,
         target: Target::Tv,
-        poster: overrides.get("poster").cloned().or_else(|| meta.poster_url.clone()),
-        backdrop: overrides.get("backdrop").cloned().or_else(|| meta.backdrop_url.clone()),
-        logo: overrides.get("logo").cloned().or_else(|| meta.logo_url.clone()),
+        poster: overrides
+            .get("poster")
+            .cloned()
+            .or_else(|| meta.poster_url.clone()),
+        backdrop: overrides
+            .get("backdrop")
+            .cloned()
+            .or_else(|| meta.backdrop_url.clone()),
+        logo: overrides
+            .get("logo")
+            .cloned()
+            .or_else(|| meta.logo_url.clone()),
         locked: overrides.keys().cloned().collect(),
     })
 }
@@ -228,7 +259,10 @@ async fn upload_library_cover(
         Err(response) => return response,
     };
     if page.kind != db::art_overrides::LIBRARY_KIND {
-        return json_error(StatusCode::BAD_REQUEST, "a library cover is uploaded on a library id");
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "a library cover is uploaded on a library id",
+        );
     }
     if body.is_empty() {
         return json_error(StatusCode::BAD_REQUEST, "empty image");
@@ -273,8 +307,8 @@ async fn library_artwork(state: &SharedState, page: &Page) -> Response {
         Ok(items) => items,
         Err(response) => return response,
     };
-    let defs = crate::services::settings::library_defs(&state.settings, &state.config)
-        .unwrap_or_default();
+    let defs =
+        crate::services::settings::library_defs(&state.settings, &state.config).unwrap_or_default();
     let name = defs
         .iter()
         .find(|def| def.id == page.id)
@@ -292,8 +326,18 @@ async fn library_artwork(state: &SharedState, page: &Page) -> Response {
             continue;
         };
         for (url, seen, into, cap) in [
-            (meta.poster_url.as_ref(), &mut seen_poster, &mut posters, 24usize),
-            (meta.backdrop_url.as_ref(), &mut seen_backdrop, &mut backdrops, 24usize),
+            (
+                meta.poster_url.as_ref(),
+                &mut seen_poster,
+                &mut posters,
+                24usize,
+            ),
+            (
+                meta.backdrop_url.as_ref(),
+                &mut seen_backdrop,
+                &mut backdrops,
+                24usize,
+            ),
         ] {
             let Some(url) = url else { continue };
             if into.len() >= cap || seen.contains(url) {
@@ -363,7 +407,10 @@ async fn put_artwork(
             })
             .await
         } else {
-            if !(value.starts_with("https://") || value.starts_with("http://") || value.starts_with("/api/images/")) {
+            if !(value.starts_with("https://")
+                || value.starts_with("http://")
+                || value.starts_with("/api/images/"))
+            {
                 return json_error(StatusCode::BAD_REQUEST, "artwork must be an http(s) URL");
             }
             // Keep a provider image on this box: clients then read one cached
@@ -374,10 +421,8 @@ async fn put_artwork(
             } else {
                 let data_dir = state.config.data_dir.clone();
                 let remote = value.clone();
-                match service(move || {
-                    Ok(crate::infra::image::cache_remote(&data_dir, &remote))
-                })
-                .await
+                match service(move || Ok(crate::infra::image::cache_remote(&data_dir, &remote)))
+                    .await
                 {
                     Ok(Some(local)) => local,
                     _ => value.clone(),

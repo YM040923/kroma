@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Params, Row, Statement, params};
+use rusqlite::{params, Connection, Params, Row, Statement};
 
 use kroma_domain::{CalendarEntry, RequestKind};
 
@@ -126,7 +126,7 @@ pub fn monitored_upcoming(
 mod tests {
     use super::*;
     use crate::requests::tests::*;
-    use crate::requests::{WantedRow, claim_wanted, insert_request, insert_wanted};
+    use crate::requests::{claim_wanted, insert_request, insert_wanted, WantedRow};
     use kroma_domain::RequestStatus;
 
     #[test]
@@ -166,11 +166,9 @@ mod tests {
         let mut eps: Vec<u32> = missing.iter().filter_map(|e| e.episode).collect();
         eps.sort_unstable();
         assert_eq!(eps, vec![1], "an undated episode has not aired");
-        assert!(
-            missing_items(&conn, "2026-07-05", Some("someone-else"), 50)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(missing_items(&conn, "2026-07-05", Some("someone-else"), 50)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -309,12 +307,10 @@ mod tests {
 
         assert_eq!(monitored.len(), 1);
         assert_eq!(monitored[0].request_id, None);
-        assert!(
-            upcoming_calendar(&conn, "2026-01-01", Some("ana"), 50)
-                .unwrap()
-                .iter()
-                .all(|e| e.request_id.is_some())
-        );
+        assert!(upcoming_calendar(&conn, "2026-01-01", Some("ana"), 50)
+            .unwrap()
+            .iter()
+            .all(|e| e.request_id.is_some()));
     }
 
     #[test]

@@ -12,7 +12,13 @@ fn taste_for(catalog: &Catalog, finished: &[&str]) -> Taste {
         .map(|id| {
             (
                 id.to_string(),
-                Engagement { started: 1, finished: 1, plays: 1, last_at: NOW, ..Engagement::default() },
+                Engagement {
+                    started: 1,
+                    finished: 1,
+                    plays: 1,
+                    last_at: NOW,
+                    ..Engagement::default()
+                },
             )
         })
         .collect();
@@ -24,7 +30,13 @@ fn ids(ranked: &[Scored]) -> Vec<String> {
 }
 
 fn signals<'a>(taste: &'a Taste, none: &'a HashMap<String, f32>) -> Signals<'a> {
-    Signals { taste, vectors: none, social: none, now: NOW, salt: 7 }
+    Signals {
+        taste,
+        vectors: none,
+        social: none,
+        now: NOW,
+        salt: 7,
+    }
 }
 
 #[test]
@@ -61,10 +73,17 @@ fn with_no_history_the_better_rated_and_the_newer_lead() {
 
 #[test]
 fn a_saved_title_is_lifted_among_equals() {
-    let catalog = Catalog::build(vec![film("a", &[COMEDY], &[], ""), film("b", &[COMEDY], &[], "")]);
+    let catalog = Catalog::build(vec![
+        film("a", &[COMEDY], &[], ""),
+        film("b", &[COMEDY], &[], ""),
+    ]);
     let history = HashMap::from([(
         "b".to_string(),
-        Engagement { listed: true, last_at: NOW, ..Engagement::default() },
+        Engagement {
+            listed: true,
+            last_at: NOW,
+            ..Engagement::default()
+        },
     )]);
     let taste = Taste::read(&catalog, &history, NOW);
     let none = HashMap::new();
@@ -76,13 +95,21 @@ fn a_saved_title_is_lifted_among_equals() {
 
 #[test]
 fn the_same_viewer_gets_the_same_order_all_day_and_another_tomorrow() {
-    let titles: Vec<_> = (0..40).map(|n| film(&format!("t{n}"), &[COMEDY], &[], "")).collect();
+    let titles: Vec<_> = (0..40)
+        .map(|n| film(&format!("t{n}"), &[COMEDY], &[], ""))
+        .collect();
     let catalog = Catalog::build(titles);
     let taste = taste_for(&catalog, &[]);
     let none = HashMap::new();
     let on = |salt| {
         ids(&rank(
-            &Signals { taste: &taste, vectors: &none, social: &none, now: NOW, salt },
+            &Signals {
+                taste: &taste,
+                vectors: &none,
+                social: &none,
+                now: NOW,
+                salt,
+            },
             &catalog.titles,
         ))
     };
@@ -101,7 +128,10 @@ fn a_row_alternates_genres_instead_of_running_one() {
         film("c1", &[COMEDY], &[], ""),
         film("s1", &[SCIENCE_FICTION], &[], ""),
     ]);
-    let score = |id: &str, score| Scored { title: catalog.get(id).unwrap(), score };
+    let score = |id: &str, score| Scored {
+        title: catalog.get(id).unwrap(),
+        score,
+    };
     let ranked = [
         score("h1", 0.90),
         score("h2", 0.89),
@@ -110,7 +140,10 @@ fn a_row_alternates_genres_instead_of_running_one() {
         score("s1", 0.83),
     ];
 
-    let row: Vec<&str> = spread(&ranked, 4).iter().map(|t| t.facts.id.as_str()).collect();
+    let row: Vec<&str> = spread(&ranked, 4)
+        .iter()
+        .map(|t| t.facts.id.as_str())
+        .collect();
 
     assert_eq!(row, ["h1", "c1", "s1", "h2"]);
 }
@@ -122,10 +155,16 @@ fn a_far_better_title_is_not_held_back_for_variety() {
         film("h2", &[HORROR], &[], ""),
         film("c1", &[COMEDY], &[], ""),
     ]);
-    let score = |id: &str, score| Scored { title: catalog.get(id).unwrap(), score };
+    let score = |id: &str, score| Scored {
+        title: catalog.get(id).unwrap(),
+        score,
+    };
     let ranked = [score("h1", 0.9), score("h2", 0.85), score("c1", 0.4)];
 
-    let row: Vec<&str> = spread(&ranked, 3).iter().map(|t| t.facts.id.as_str()).collect();
+    let row: Vec<&str> = spread(&ranked, 3)
+        .iter()
+        .map(|t| t.facts.id.as_str())
+        .collect();
 
     assert_eq!(row, ["h1", "h2", "c1"]);
 }
@@ -146,6 +185,9 @@ fn what_a_like_minded_viewer_watched_is_scored_and_a_stranger_s_is_not() {
 
     assert_eq!(scores.get("c").copied(), Some(1.0));
     assert!(!scores.contains_key("z"));
-    assert!(!scores.contains_key("a"), "what I watched is not news to me");
+    assert!(
+        !scores.contains_key("a"),
+        "what I watched is not news to me"
+    );
     assert!(cowatched(&plays, "nobody").is_empty());
 }

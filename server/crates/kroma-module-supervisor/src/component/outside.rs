@@ -44,7 +44,14 @@ fn response_of(response: kroma_http::Response) -> Response {
 }
 
 impl Outside {
-    fn journal_refusal(&self, request: &FetchRequest, host: &str, port: u16, rule: Option<String>, reason: &str) {
+    fn journal_refusal(
+        &self,
+        request: &FetchRequest,
+        host: &str,
+        port: u16,
+        rule: Option<String>,
+        reason: &str,
+    ) {
         self.network.record_flows(
             &self.module,
             vec![NetworkFlow {
@@ -64,7 +71,13 @@ impl Outside {
         );
     }
 
-    fn annotate(&self, request: &FetchRequest, host: &str, port: u16, outcome: &anyhow::Result<kroma_http::Response>) {
+    fn annotate(
+        &self,
+        request: &FetchRequest,
+        host: &str,
+        port: u16,
+        outcome: &anyhow::Result<kroma_http::Response>,
+    ) {
         self.network.record_flows(
             &self.module,
             vec![NetworkFlow {
@@ -111,7 +124,11 @@ impl Outside {
     }
 
     // Decided the way a fetch is, and journaled when it is refused.
-    fn refusal(&self, request: &FetchRequest, target: &kroma_http::address::WebTarget) -> Option<String> {
+    fn refusal(
+        &self,
+        request: &FetchRequest,
+        target: &kroma_http::address::WebTarget,
+    ) -> Option<String> {
         let answer = self.network.decide(
             &self.module,
             &NetworkAsk {
@@ -124,7 +141,9 @@ impl Outside {
             },
         );
         if answer.action == NetworkAction::Block {
-            let reason = answer.reason.unwrap_or_else(|| "refused by the core".to_string());
+            let reason = answer
+                .reason
+                .unwrap_or_else(|| "refused by the core".to_string());
             self.journal_refusal(request, &target.host, target.port, answer.rule, &reason);
             return Some(format!("{BLOCKED}: {reason}"));
         }
@@ -169,13 +188,16 @@ impl NetPolicy for Outside {
         };
         let path = Path::new(destination);
         if !self.holds_for_writing(path) {
-            return Verdict::Block(format!("{destination} is not in a folder this module may write"));
+            return Verdict::Block(format!(
+                "{destination} is not in a folder this module may write"
+            ));
         }
         if let Some(reason) = self.refusal(request, &target) {
             return Verdict::Block(reason);
         }
         let username = Gateway::username(&request.purpose, request.public_only, request.sealed);
-        let outcome = Self::carried(request).carry_download(&self.gateway, &username, &request.url, path);
+        let outcome =
+            Self::carried(request).carry_download(&self.gateway, &username, &request.url, path);
         self.annotate(request, &target.host, target.port, &outcome);
         match outcome {
             Ok(response) => Verdict::Allow(response_of(response)),
@@ -206,7 +228,8 @@ impl NetPolicy for Outside {
         } else {
             call.post_bytes(&url, &content_type, &request.body)
         };
-        answered.map(response_of).map_err(|error| format!("{error:#}"))
+        answered
+            .map(response_of)
+            .map_err(|error| format!("{error:#}"))
     }
 }
-

@@ -42,12 +42,7 @@ pub struct ResetStrings {
     pub footer: String,
 }
 
-pub fn render_strings(
-    kind: EmailKind,
-    locale: &str,
-    server_name: &str,
-    url: &str,
-) -> ResetStrings {
+pub fn render_strings(kind: EmailKind, locale: &str, server_name: &str, url: &str) -> ResetStrings {
     let prefix = match kind {
         EmailKind::Reset => "email.reset",
         EmailKind::Verify => "email.verify",
@@ -60,7 +55,11 @@ pub fn render_strings(
         EmailKind::Verify | EmailKind::Activate => (String::new(), String::new()),
     };
     ResetStrings {
-        subject: i18n::t(locale, &format!("{prefix}.subject"), &[("name", server_name)]),
+        subject: i18n::t(
+            locale,
+            &format!("{prefix}.subject"),
+            &[("name", server_name)],
+        ),
         text: i18n::t(
             locale,
             &format!("{prefix}.text"),
@@ -109,8 +108,7 @@ pub fn render_html(locale: &str, strings: &ResetStrings, server_name: &str, url:
     let intro = escape_html(&strings.intro).replace("{name}", &name_span);
     let code_note = escape_html(&strings.code_note).replace("{code}", &code_span);
     let url = escape_html(url);
-    out
-        .replace("{{lang}}", &escape_html(locale))
+    out.replace("{{lang}}", &escape_html(locale))
         .replace("{{subject}}", &escape_html(&strings.subject))
         .replace("{{preheader}}", &escape_html(&strings.preheader))
         .replace("{{heading}}", &escape_html(&strings.heading))
@@ -138,8 +136,11 @@ mod tests {
         assert!(!html.contains("<script>"));
         assert!(html.contains("&lt;script&gt;"));
         assert!(html.contains("token=a&quot;b"));
-        assert!(html.contains("<span style=\"color:#F4F3F0;font-weight:600;\">Home &lt;b&gt;x&lt;/b&gt;</span>"));
-        assert!(html.contains("<span style=\"color:#F4B642;font-weight:600;\">code à 8 caractères</span>"));
+        assert!(html.contains(
+            "<span style=\"color:#F4F3F0;font-weight:600;\">Home &lt;b&gt;x&lt;/b&gt;</span>"
+        ));
+        assert!(html
+            .contains("<span style=\"color:#F4B642;font-weight:600;\">code à 8 caractères</span>"));
     }
 
     #[test]
@@ -154,7 +155,12 @@ mod tests {
 
     #[test]
     fn a_verification_email_drops_the_code_note_block() {
-        let s = render_strings(EmailKind::Verify, "fr", "Home", "https://x/verify-email?token=abc");
+        let s = render_strings(
+            EmailKind::Verify,
+            "fr",
+            "Home",
+            "https://x/verify-email?token=abc",
+        );
         assert!(s.code_note.is_empty());
         let html = render_html("fr", &s, "Home", "https://x/verify-email?token=abc");
         assert!(!html.contains("{{"));

@@ -122,8 +122,16 @@ async fn post(url: String, body: Value) -> Result<Value, RelayError> {
 /// Register this origin under `identity`. The relay will call the origin's
 /// challenge route before answering, so the server must be reachable at it.
 /// Returns the sealed instance to keep.
-pub async fn register(base: &str, origin: &str, identity: &RelayIdentity) -> Result<String, RelayError> {
-    let answer = post(format!("{base}/v1/register"), register_body(origin, identity)).await?;
+pub async fn register(
+    base: &str,
+    origin: &str,
+    identity: &RelayIdentity,
+) -> Result<String, RelayError> {
+    let answer = post(
+        format!("{base}/v1/register"),
+        register_body(origin, identity),
+    )
+    .await?;
     answer["instance"]
         .as_str()
         .map(str::to_string)
@@ -132,8 +140,17 @@ pub async fn register(base: &str, origin: &str, identity: &RelayIdentity) -> Res
 
 /// The link the owner's mailbox may click to activate this origin, for the
 /// server to write its own message around.
-pub async fn activate(base: &str, session: &Session, to: &str, token: &str) -> Result<String, RelayError> {
-    let answer = post(format!("{base}/v1/activate"), activate_body(session, to, token)).await?;
+pub async fn activate(
+    base: &str,
+    session: &Session,
+    to: &str,
+    token: &str,
+) -> Result<String, RelayError> {
+    let answer = post(
+        format!("{base}/v1/activate"),
+        activate_body(session, to, token),
+    )
+    .await?;
     answer["url"]
         .as_str()
         .map(str::to_string)
@@ -141,7 +158,12 @@ pub async fn activate(base: &str, session: &Session, to: &str, token: &str) -> R
 }
 
 /// Send one rendered message to `to`, as SMTP would.
-pub async fn send(base: &str, session: &Session, to: &str, rendered: &Rendered) -> Result<(), RelayError> {
+pub async fn send(
+    base: &str,
+    session: &Session,
+    to: &str,
+    rendered: &Rendered,
+) -> Result<(), RelayError> {
     post(format!("{base}/v1/send"), send_body(session, to, rendered))
         .await
         .map(|_| ())
@@ -204,19 +226,30 @@ mod tests {
         );
         assert_eq!(outcome(410, "").unwrap_err(), RelayError::Gone);
         assert_eq!(
-            outcome(422, r#"{"error":"html: a link leads where this message may not"}"#).unwrap_err(),
+            outcome(
+                422,
+                r#"{"error":"html: a link leads where this message may not"}"#
+            )
+            .unwrap_err(),
             RelayError::Refused("html: a link leads where this message may not".into())
         );
         for transient in [429, 500, 502, 503, 504] {
-            assert!(matches!(outcome(transient, "").unwrap_err(), RelayError::Transient(_)));
+            assert!(matches!(
+                outcome(transient, "").unwrap_err(),
+                RelayError::Transient(_)
+            ));
         }
     }
 
     #[tokio::test]
     async fn a_relay_that_is_not_there_is_transient() {
-        let err = register("http://127.0.0.1:1", "https://kroma.example", &RelayIdentity::generate())
-            .await
-            .unwrap_err();
+        let err = register(
+            "http://127.0.0.1:1",
+            "https://kroma.example",
+            &RelayIdentity::generate(),
+        )
+        .await
+        .unwrap_err();
 
         assert!(matches!(err, RelayError::Transient(_)), "{err}");
     }

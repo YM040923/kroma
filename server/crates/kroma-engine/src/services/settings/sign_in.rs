@@ -146,7 +146,10 @@ pub fn sign_in(settings: &Settings, env: Option<&ProviderEnv>) -> SignIn {
     let mut config = serde_json::from_value::<SignIn>(settings.get(SIGN_IN_KEY))
         .unwrap_or_default()
         .normalised();
-    let policy = config.methods.iter().position(|m| m.id() == ENV_PROVIDER_ID);
+    let policy = config
+        .methods
+        .iter()
+        .position(|m| m.id() == ENV_PROVIDER_ID);
     let Some(env) = env else {
         if let Some(at) = policy {
             config.methods.remove(at);

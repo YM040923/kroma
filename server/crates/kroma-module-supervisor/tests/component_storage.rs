@@ -5,7 +5,7 @@ use kroma_module_host::NetworkAction;
 mod component_support;
 
 use component_support::wasm::guest_component;
-use component_support::{DECLARES, GUEST, STORES, Server, seed_core};
+use component_support::{seed_core, Server, DECLARES, GUEST, STORES};
 
 const NO_STORAGE: &str =
     r#", "permissions": { "net": { "connect": [{ "purpose": "probe", "to": ["lan"] }] } }"#;

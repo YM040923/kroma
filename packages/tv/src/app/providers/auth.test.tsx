@@ -23,6 +23,7 @@ const USER = {
   username: 'Alex',
   permissions: [],
   createdAt: '2026-01-01T00:00:00Z',
+  allowUnrated: true,
   hasPin: false,
 };
 

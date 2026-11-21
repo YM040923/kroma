@@ -84,7 +84,10 @@ fn every_provider_image_in_a_document_is_replaced_and_nothing_else_moves() {
 
 #[test]
 fn a_document_that_names_no_provider_image_is_left_alone() {
-    assert_eq!(rewrite(KEY, r#"{"posterUrl":"/api/images/feed.webp"}"#), None);
+    assert_eq!(
+        rewrite(KEY, r#"{"posterUrl":"/api/images/feed.webp"}"#),
+        None
+    );
 }
 
 #[test]

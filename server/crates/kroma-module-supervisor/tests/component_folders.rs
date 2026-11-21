@@ -9,7 +9,7 @@ use kroma_module_supervisor::{Endpoint, FolderRoots};
 mod component_support;
 
 use component_support::wasm::guest_component;
-use component_support::{GUEST, Server, THIRD_PARTY};
+use component_support::{Server, GUEST, THIRD_PARTY};
 
 const HOLDS_DOWNLOADS: &str = r#", "storage": {}, "permissions": { "fs": { "read": ["downloads", "media"], "write": ["downloads", "media"] } }"#;
 const ENGINE: &str = "tv.example.engine";

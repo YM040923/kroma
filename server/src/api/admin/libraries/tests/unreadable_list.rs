@@ -16,6 +16,7 @@ fn renamed() -> UpdateLibraryBody {
         folders: None,
         auto_scan: None,
         scrape: None,
+        acquisition_mode: None,
     }
 }
 

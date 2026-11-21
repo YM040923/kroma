@@ -5,12 +5,12 @@
 use axum::http::StatusCode;
 use kroma_module_host::testing::StubHost;
 use kroma_module_host::{SettingReach, SettingReachOf};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 mod test_support;
 
 use test_support::settings::{read_setting, refusal, write_settings};
-use test_support::{FABRIC, Modules};
+use test_support::{Modules, FABRIC};
 
 const TUNNEL: &str = "tv.kroma.tunnel";
 const NOTES: &str = "tv.kroma.notes";
@@ -168,9 +168,7 @@ async fn a_setting_the_core_keeps_to_itself_is_refused_even_to_a_module_that_dec
         "the stored credential leaked"
     );
     assert_eq!(write_status, StatusCode::FORBIDDEN);
-    assert!(
-        refusal(&write_body).starts_with(r#"settings.write: "smtpPassword" is the core's own"#)
-    );
+    assert!(refusal(&write_body).starts_with(r#"settings.write: "smtpPassword" is the core's own"#));
     assert!(host.settings_written().is_empty());
 }
 

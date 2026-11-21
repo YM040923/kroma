@@ -34,9 +34,14 @@ const WIDE: &str = r#"{ "net": { "connect": [{ "purpose": "a", "to": ["public"] 
 fn an_unattended_update_may_not_ask_for_more_than_is_installed() {
     let scratch = temp_modules_dir("accept-wider");
     let sup = supervisor(scratch.path(), "9.9.9");
-    sup.install(&declaring("1.0.0", NARROW), None, uploaded()).unwrap();
+    sup.install(&declaring("1.0.0", NARROW), None, uploaded())
+        .unwrap();
 
-    let updated = sup.install(&declaring("2.0.0", WIDE), None, offered(Accept::NoWider(None)));
+    let updated = sup.install(
+        &declaring("2.0.0", WIDE),
+        None,
+        offered(Accept::NoWider(None)),
+    );
 
     assert!(updated.unwrap_err().to_string().contains("asks for more"));
     assert_eq!(sup.installed_manifests()[0].version, "1.0.0");
@@ -46,10 +51,15 @@ fn an_unattended_update_may_not_ask_for_more_than_is_installed() {
 fn an_unattended_update_that_asks_for_the_same_goes_through() {
     let scratch = temp_modules_dir("accept-same");
     let sup = supervisor(scratch.path(), "9.9.9");
-    sup.install(&declaring("1.0.0", NARROW), None, uploaded()).unwrap();
-
-    sup.install(&declaring("2.0.0", NARROW), None, offered(Accept::NoWider(None)))
+    sup.install(&declaring("1.0.0", NARROW), None, uploaded())
         .unwrap();
+
+    sup.install(
+        &declaring("2.0.0", NARROW),
+        None,
+        offered(Accept::NoWider(None)),
+    )
+    .unwrap();
 
     assert_eq!(sup.installed_manifests()[0].version, "2.0.0");
 }
@@ -58,7 +68,8 @@ fn an_unattended_update_that_asks_for_the_same_goes_through() {
 fn an_unattended_update_that_writes_a_new_setting_waits_for_the_install_plan() {
     let scratch = temp_modules_dir("accept-settings-wider");
     let sup = supervisor(scratch.path(), "9.9.9");
-    sup.install(&writing("1.0.0", r#"["acqEnabled"]"#), None, uploaded()).unwrap();
+    sup.install(&writing("1.0.0", r#"["acqEnabled"]"#), None, uploaded())
+        .unwrap();
 
     let updated = sup.install(
         &writing("2.0.0", r#"["acqEnabled", "namingMovieFolder"]"#),
@@ -67,7 +78,10 @@ fn an_unattended_update_that_writes_a_new_setting_waits_for_the_install_plan() {
     );
 
     let refused = updated.unwrap_err();
-    assert!(refused.downcast_ref::<AsksForMore>().is_some(), "{refused:#}");
+    assert!(
+        refused.downcast_ref::<AsksForMore>().is_some(),
+        "{refused:#}"
+    );
     assert_eq!(sup.installed_manifests()[0].version, "1.0.0");
 }
 
@@ -75,11 +89,19 @@ fn an_unattended_update_that_writes_a_new_setting_waits_for_the_install_plan() {
 fn an_unattended_update_that_writes_fewer_settings_goes_through() {
     let scratch = temp_modules_dir("accept-settings-narrower");
     let sup = supervisor(scratch.path(), "9.9.9");
-    sup.install(&writing("1.0.0", r#"["acqEnabled", "namingMovieFolder"]"#), None, uploaded())
-        .unwrap();
+    sup.install(
+        &writing("1.0.0", r#"["acqEnabled", "namingMovieFolder"]"#),
+        None,
+        uploaded(),
+    )
+    .unwrap();
 
-    sup.install(&writing("2.0.0", r#"["acqEnabled"]"#), None, offered(Accept::NoWider(None)))
-        .unwrap();
+    sup.install(
+        &writing("2.0.0", r#"["acqEnabled"]"#),
+        None,
+        offered(Accept::NoWider(None)),
+    )
+    .unwrap();
 
     assert_eq!(sup.installed_manifests()[0].version, "2.0.0");
 }
@@ -88,10 +110,15 @@ fn an_unattended_update_that_writes_fewer_settings_goes_through() {
 fn an_unattended_update_still_says_what_its_catalog_row_showed() {
     let scratch = temp_modules_dir("accept-unattended-row");
     let sup = supervisor(scratch.path(), "9.9.9");
-    sup.install(&declaring("1.0.0", WIDE), None, uploaded()).unwrap();
+    sup.install(&declaring("1.0.0", WIDE), None, uploaded())
+        .unwrap();
     let shown: kroma_module_manifest::Permissions = serde_json::from_str(WIDE).unwrap();
 
-    let updated = sup.install(&declaring("2.0.0", NARROW), None, offered(Accept::NoWider(Some(&shown))));
+    let updated = sup.install(
+        &declaring("2.0.0", NARROW),
+        None,
+        offered(Accept::NoWider(Some(&shown))),
+    );
 
     assert!(updated.unwrap_err().to_string().contains("catalog row"));
     assert_eq!(sup.installed_manifests()[0].version, "1.0.0");
@@ -103,7 +130,11 @@ fn a_bundle_must_declare_what_its_catalog_row_showed() {
     let sup = supervisor(scratch.path(), "9.9.9");
     let shown: kroma_module_manifest::Permissions = serde_json::from_str(NARROW).unwrap();
 
-    let installed = sup.install(&declaring("1.0.0", WIDE), None, offered(Accept::Exactly(&shown)));
+    let installed = sup.install(
+        &declaring("1.0.0", WIDE),
+        None,
+        offered(Accept::Exactly(&shown)),
+    );
 
     assert!(installed.unwrap_err().to_string().contains("catalog row"));
     assert!(sup.installed_manifests().is_empty());
@@ -115,8 +146,12 @@ fn a_bundle_that_declares_what_its_catalog_row_showed_installs() {
     let sup = supervisor(scratch.path(), "9.9.9");
     let shown: kroma_module_manifest::Permissions = serde_json::from_str(NARROW).unwrap();
 
-    sup.install(&declaring("1.0.0", NARROW), None, offered(Accept::Exactly(&shown)))
-        .unwrap();
+    sup.install(
+        &declaring("1.0.0", NARROW),
+        None,
+        offered(Accept::Exactly(&shown)),
+    )
+    .unwrap();
 
     assert_eq!(sup.installed_manifests().len(), 1);
 }

@@ -1,11 +1,11 @@
 use serde_json::json;
 
 use super::*;
-use crate::model::{Audience, NotificationEvent, RequestKind};
 use crate::lifecycle::test_fixtures::{episodes, movie_detail, param, show_detail};
 use crate::lifecycle::test_support::{
     insert_req, insert_req_by, seed_movie_item, status_of_req, test_host,
 };
+use crate::model::{Audience, NotificationEvent, RequestKind};
 use crate::testing::FakeTmdb;
 
 #[test]

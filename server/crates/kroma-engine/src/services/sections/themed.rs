@@ -32,7 +32,10 @@ impl Board<'_> {
             .filter_map(|theme| self.theme(theme, embeds.then_some(floor)))
             .collect();
         rows.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
-        rows.into_iter().take(MAX_THEMED).map(|(_, draft)| draft).collect()
+        rows.into_iter()
+            .take(MAX_THEMED)
+            .map(|(_, draft)| draft)
+            .collect()
     }
 
     fn theme(&self, theme: &Theme, floor: Option<f32>) -> Option<(f32, Draft)> {
@@ -55,10 +58,17 @@ impl Board<'_> {
         };
         let mut scored: Vec<Scored> = rank(&signals, members.iter().map(|(title, _)| *title));
         for entry in &mut scored {
-            let said = strength.get(entry.title.facts.id.as_str()).copied().unwrap_or(1.0);
+            let said = strength
+                .get(entry.title.facts.id.as_str())
+                .copied()
+                .unwrap_or(1.0);
             entry.score *= 1.0 - SAID_IN_TITLE + SAID_IN_TITLE * said;
         }
-        scored.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.title.facts.id.cmp(&b.title.facts.id)));
+        scored.sort_by(|a, b| {
+            b.score
+                .total_cmp(&a.score)
+                .then_with(|| a.title.facts.id.cmp(&b.title.facts.id))
+        });
         if scored.len() < MIN_THEME_ITEMS {
             return None;
         }
@@ -94,18 +104,26 @@ impl Board<'_> {
     /// the embedder puts them.
     pub(super) fn authored(&self) -> Vec<Draft> {
         let floor = embeddings::relevance_floor(&self.state.embedder);
-        let open: HashSet<&str> = self.ranked.iter().map(|s| s.title.facts.id.as_str()).collect();
+        let open: HashSet<&str> = self
+            .ranked
+            .iter()
+            .map(|s| s.title.facts.id.as_str())
+            .collect();
         generate::load(self.pool, &self.viewer.user_id)
             .into_iter()
             .filter(|row| !row.genres.is_empty())
             .map(|row| {
                 let query = embeddings::embed(&self.state.embedder, &row.query);
-                let near = self.state.vectors.nearest(&query, FETCH * 2, &HashSet::new());
-                let ids: Vec<String> = db::keep_shelf(self.pool, near, &row.genres, row.form.kinds())
-                    .into_iter()
-                    .filter(|(id, score)| *score >= floor && open.contains(id.as_str()))
-                    .map(|(id, _)| id)
-                    .collect();
+                let near = self
+                    .state
+                    .vectors
+                    .nearest(&query, FETCH * 2, &HashSet::new());
+                let ids: Vec<String> =
+                    db::keep_shelf(self.pool, near, &row.genres, row.form.kinds())
+                        .into_iter()
+                        .filter(|(id, score)| *score >= floor && open.contains(id.as_str()))
+                        .map(|(id, _)| id)
+                        .collect();
                 let mut draft = Draft::rail(
                     format!("ai:{}", row.key),
                     row.title.get(self.locale).to_string(),

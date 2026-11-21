@@ -739,13 +739,7 @@ mod tests {
 
     /// Every view the admin console can ask for. A view missing here is a view
     /// this file's guarantees are never checked against.
-    const VIEWS: &[&str] = &[
-        "general",
-        "network",
-        "transcoder",
-        "acquisition",
-        "vpn",
-    ];
+    const VIEWS: &[&str] = &["general", "network", "transcoder", "acquisition", "vpn"];
 
     #[test]
     fn every_row_the_console_offers_is_a_key_the_store_will_keep() {
@@ -809,7 +803,8 @@ mod tests {
         let s = Settings::load(&pool);
         assert!(find_row(&groups("general", &s, &test_config(), "en"), "statsId").is_none());
 
-        s.set_internal(&pool, "statsId", json!("a-minted-id")).unwrap();
+        s.set_internal(&pool, "statsId", json!("a-minted-id"))
+            .unwrap();
 
         let after = groups("general", &s, &test_config(), "en");
         let shown = find_row(&after, "statsId")

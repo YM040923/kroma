@@ -1,0 +1,21 @@
+{
+  "artwork.backdrop": "Backdrop",
+  "artwork.choosePosters": "Choose posters",
+  "artwork.coverSaved": "Cover saved",
+  "artwork.current": "Current",
+  "artwork.empty": "No images available",
+  "artwork.generate": "Generate cover",
+  "artwork.generateHint": "Pick up to four posters; the library name is drawn on the cover.",
+  "artwork.hasTitle": "The image already includes the library name",
+  "artwork.loadFailed": "Could not load the image list",
+  "artwork.locked": "This image is locked to the current manual choice. Restore default to unlock it.",
+  "artwork.logo": "Title logo",
+  "artwork.open": "Change artwork",
+  "artwork.poster": "Poster",
+  "artwork.reset": "Restore default",
+  "artwork.save": "Save",
+  "artwork.textless": "Textless",
+  "artwork.title": "Choose artwork",
+  "artwork.upload": "Upload cover",
+  "artwork.uploadHint": "Upload a 16:9 image. The library name is drawn unless the image already has one."
+}

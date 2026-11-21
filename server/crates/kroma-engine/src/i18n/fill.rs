@@ -111,7 +111,10 @@ mod tests {
     #[test]
     fn a_plural_with_no_base_key_is_one_message_too() {
         let german = catalog(&[("videos_other", "{count} Videos")]);
-        let english = catalog(&[("videos_one", "{count} video"), ("videos_other", "{count} videos")]);
+        let english = catalog(&[
+            ("videos_one", "{count} video"),
+            ("videos_other", "{count} videos"),
+        ]);
 
         let filled = gaps(&german, &[&english]);
 

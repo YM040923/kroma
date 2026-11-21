@@ -1,8 +1,8 @@
 #![cfg(unix)]
 
 use std::path::Path;
-use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
+use std::sync::OnceLock;
 
 use kroma_http::Loopback;
 use kroma_module_host::NetworkAction;
@@ -10,7 +10,7 @@ use kroma_module_host::NetworkAction;
 mod component_support;
 
 use component_support::wasm::build;
-use component_support::{Server, http_server};
+use component_support::{http_server, Server};
 
 const TRANSMISSION: &str = "tv.kroma.engine.transmission";
 

@@ -48,7 +48,8 @@ fn keep(copy: &Path, stamp: &Path, expected: &str, machine_code: &[u8]) -> std::
         WRITES.fetch_add(1, Ordering::Relaxed)
     ));
     let partial = PathBuf::from(partial);
-    let written = std::fs::write(&partial, machine_code).and_then(|()| std::fs::rename(&partial, copy));
+    let written =
+        std::fs::write(&partial, machine_code).and_then(|()| std::fs::rename(&partial, copy));
     if written.is_err() {
         let _ = std::fs::remove_file(&partial);
     }
@@ -101,7 +102,10 @@ impl WasmHost {
             Kept::Changed => Readied::CopyRefused,
             Kept::Absent => Readied::Compiled,
         };
-        let machine_code = self.engine.precompile_component(wasm).map_err(HostError::Compile)?;
+        let machine_code = self
+            .engine
+            .precompile_component(wasm)
+            .map_err(HostError::Compile)?;
         let component = match keep(copy, &stamp, &expected, &machine_code) {
             Ok(()) => {
                 drop(machine_code);
@@ -120,9 +124,11 @@ impl WasmHost {
     }
 
     fn kept(&self, copy: &Path, stamp: &Path, expected: &str) -> Kept {
-        let recorded = std::fs::read_to_string(stamp)
-            .ok()
-            .and_then(|found| found.strip_prefix(&format!("{expected}-")).map(str::to_string));
+        let recorded = std::fs::read_to_string(stamp).ok().and_then(|found| {
+            found
+                .strip_prefix(&format!("{expected}-"))
+                .map(str::to_string)
+        });
         let (Some(recorded), Ok(actual)) = (recorded, file_sha256_hex(copy)) else {
             return Kept::Absent;
         };
@@ -141,7 +147,9 @@ impl WasmHost {
 
     fn stamp_for(&self, key: &str) -> String {
         let mut hasher = DefaultHasher::new();
-        self.engine.precompile_compatibility_hash().hash(&mut hasher);
+        self.engine
+            .precompile_compatibility_hash()
+            .hash(&mut hasher);
         format!("{key}-{:x}", hasher.finish())
     }
 

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use rusqlite::OptionalExtension;
 
-use crate::{Connection, Pool, Result, Row, params};
+use crate::{params, Connection, Pool, Result, Row};
 
 const NO_TITLE_FOUND: i64 = 0;
 

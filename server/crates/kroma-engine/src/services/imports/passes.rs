@@ -8,7 +8,7 @@ use anyhow::Result;
 use super::halt::Halt;
 use super::passage::{Passage, Person};
 use super::pull::each_page;
-use super::settle::{Key, Offer, Shelf, split};
+use super::settle::{split, Key, Offer, Shelf};
 use super::stages::{PlayRow, StatePage, StateRow, TitlePage};
 use crate::db;
 use crate::model::import::{Library, Play, Title, TitleKind, WatchState};

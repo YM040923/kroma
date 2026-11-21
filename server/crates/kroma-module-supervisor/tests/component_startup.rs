@@ -7,7 +7,7 @@ use kroma_module_host::NetworkAction;
 mod component_support;
 
 use component_support::wasm::lifecycle_component;
-use component_support::{Server, wait_until};
+use component_support::{wait_until, Server};
 
 const LIFECYCLE: &str = "tv.example.lifecycle";
 const FOUR: &str = r#", "storage": {}, "component": { "instances": 4 }"#;
@@ -36,7 +36,11 @@ fn a_module_with_four_instances_migrates_registers_and_enables_once() {
     let core = server.core_hearing();
     database_at_schema_one(&server);
     let endpoint = server.started(LIFECYCLE, lifecycle_component(), FOUR);
-    let file = server.data_dir.join("databases").join(LIFECYCLE).join("module.sqlite");
+    let file = server
+        .data_dir
+        .join("databases")
+        .join(LIFECYCLE)
+        .join("module.sqlite");
 
     let names: BTreeSet<String> = std::thread::scope(|threads| {
         let held: Vec<_> = (0..4)

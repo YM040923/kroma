@@ -28,7 +28,7 @@ use kroma_domain::imports::{Failure, FailureReason, Import, Origin, Report, Sele
 use rusqlite::OptionalExtension;
 use serde::de::DeserializeOwned;
 
-use super::{Connection, Pool, Result, Row, params};
+use super::{params, Connection, Pool, Result, Row};
 
 const COLS: &str = "i.id, s.importer, s.server, s.name, i.sign_in, i.selection, i.started_by, \
     i.status, i.run_id, i.created_at, i.started_at, i.finished_at, i.report, i.failure, \

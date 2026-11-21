@@ -140,7 +140,10 @@ impl net::Host for State {
                 .collect();
             running
                 .into_iter()
-                .map(|call| call.join().unwrap_or_else(|_| Err("the call panicked".to_string())))
+                .map(|call| {
+                    call.join()
+                        .unwrap_or_else(|_| Err("the call panicked".to_string()))
+                })
                 .collect::<Vec<_>>()
         });
         for (request, answer) in requests.iter().zip(&answers) {
@@ -149,7 +152,11 @@ impl net::Host for State {
         answers
     }
 
-    fn download(&mut self, request: net::FetchRequest, destination: String) -> Result<Response, String> {
+    fn download(
+        &mut self,
+        request: net::FetchRequest,
+        destination: String,
+    ) -> Result<Response, String> {
         let policy = Arc::clone(&self.policy);
         let answer = verdict_answer(policy.download(&request, &destination));
         self.record(&request, &answer);
@@ -172,7 +179,10 @@ impl host_api::Host for State {
                 .collect();
             running
                 .into_iter()
-                .map(|call| call.join().unwrap_or_else(|_| Err("the call panicked".to_string())))
+                .map(|call| {
+                    call.join()
+                        .unwrap_or_else(|_| Err("the call panicked".to_string()))
+                })
                 .collect()
         })
     }
@@ -233,7 +243,9 @@ impl sql::Host for State {
 
 impl State {
     fn processes(&self) -> Result<Arc<dyn Processes>, String> {
-        self.processes.clone().ok_or_else(|| NO_PROCESSES.to_string())
+        self.processes
+            .clone()
+            .ok_or_else(|| NO_PROCESSES.to_string())
     }
 
     fn lan(&self) -> Result<Arc<dyn Lan>, String> {
@@ -257,7 +269,12 @@ impl process::Host for State {
         processes.wait(child, Duration::from_millis(u64::from(timeout_ms)))
     }
 
-    fn read(&mut self, child: u64, which: process::Output, max_bytes: u32) -> Result<Vec<u8>, String> {
+    fn read(
+        &mut self,
+        child: u64,
+        which: process::Output,
+        max_bytes: u32,
+    ) -> Result<Vec<u8>, String> {
         let processes = self.processes()?;
         processes.read(child, which, max_bytes)
     }

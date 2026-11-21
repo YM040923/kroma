@@ -28,7 +28,8 @@ pub(super) fn film<'a>(id: &'a str, genres: &'a [u32]) -> Film<'a> {
 
 pub(super) fn stamp(days_old: i64) -> String {
     let at = time::OffsetDateTime::from_unix_timestamp(now_secs() - days_old * 86_400).unwrap();
-    at.format(&time::format_description::well_known::Rfc3339).unwrap()
+    at.format(&time::format_description::well_known::Rfc3339)
+        .unwrap()
 }
 
 pub(super) fn seed(state: &SharedState, film: Film) {
@@ -66,7 +67,12 @@ pub(super) fn seed(state: &SharedState, film: Film) {
         .unwrap();
 }
 
-pub(super) fn seed_many(state: &SharedState, prefix: &str, n: usize, genres: &[u32]) -> Vec<String> {
+pub(super) fn seed_many(
+    state: &SharedState,
+    prefix: &str,
+    n: usize,
+    genres: &[u32],
+) -> Vec<String> {
     (0..n)
         .map(|i| {
             let id = format!("{prefix}{i}");

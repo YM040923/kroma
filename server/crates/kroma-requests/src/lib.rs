@@ -9,6 +9,7 @@
 pub(crate) use kroma_db as db;
 pub(crate) use kroma_domain as model;
 
+pub mod acquisition;
 pub mod lifecycle;
 pub mod monitoring;
 pub mod request_ledger;

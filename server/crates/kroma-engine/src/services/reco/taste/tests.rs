@@ -27,7 +27,14 @@ fn sampled(ratio: f32, days_ago: i64) -> Engagement {
 #[test]
 fn finishing_counts_for_a_film_and_replaying_it_counts_for_more() {
     let once = weight(&finished(0), false, NOW);
-    let twice = weight(&Engagement { plays: 3, ..finished(0) }, false, NOW);
+    let twice = weight(
+        &Engagement {
+            plays: 3,
+            ..finished(0)
+        },
+        false,
+        NOW,
+    );
 
     assert_eq!(once, 1.0);
     assert!(twice > once);
@@ -35,18 +42,39 @@ fn finishing_counts_for_a_film_and_replaying_it_counts_for_more() {
 
 #[test]
 fn a_film_dropped_in_its_first_minutes_counts_against_once_it_is_left_alone() {
-    assert_eq!(weight(&sampled(0.05, 0), false, NOW), 0.0, "still tonight's film");
+    assert_eq!(
+        weight(&sampled(0.05, 0), false, NOW),
+        0.0,
+        "still tonight's film"
+    );
     assert!(weight(&sampled(0.05, 5), false, NOW) < 0.0);
-    assert!(weight(&sampled(0.6, 5), false, NOW) > 0.0, "most of it was watched");
+    assert!(
+        weight(&sampled(0.6, 5), false, NOW) > 0.0,
+        "most of it was watched"
+    );
 }
 
 #[test]
 fn a_season_says_more_than_an_episode_and_never_more_than_the_ceiling() {
-    let episodes = |n| weight(&Engagement { started: n, finished: n, last_at: NOW, ..Engagement::default() }, true, NOW);
+    let episodes = |n| {
+        weight(
+            &Engagement {
+                started: n,
+                finished: n,
+                last_at: NOW,
+                ..Engagement::default()
+            },
+            true,
+            NOW,
+        )
+    };
 
     assert!(episodes(1) < episodes(3) && episodes(3) < episodes(10));
     assert!(episodes(100) <= SHOW_CEILING);
-    assert!(weight(&sampled(0.3, 30), true, NOW) < 0.0, "one episode started, then nothing");
+    assert!(
+        weight(&sampled(0.3, 30), true, NOW) < 0.0,
+        "one episode started, then nothing"
+    );
 }
 
 #[test]
@@ -63,7 +91,11 @@ fn a_saved_title_counts_for_the_taste_and_stays_recommendable() {
     let catalog = Catalog::build(vec![film("a", &[HORROR], &[], "")]);
     let history = HashMap::from([(
         "a".to_string(),
-        Engagement { listed: true, last_at: NOW, ..Engagement::default() },
+        Engagement {
+            listed: true,
+            last_at: NOW,
+            ..Engagement::default()
+        },
     )]);
 
     let taste = Taste::read(&catalog, &history, NOW);
@@ -76,7 +108,12 @@ fn a_saved_title_counts_for_the_taste_and_stays_recommendable() {
 #[test]
 fn the_taste_fits_what_resembles_what_was_finished() {
     let catalog = Catalog::build(vec![
-        film("watched", &[SCIENCE_FICTION], &["Amy Adams"], "Denis Villeneuve"),
+        film(
+            "watched",
+            &[SCIENCE_FICTION],
+            &["Amy Adams"],
+            "Denis Villeneuve",
+        ),
         film("kin", &[SCIENCE_FICTION], &[], "Denis Villeneuve"),
         film("stranger", &[COMEDY], &[], "Somebody"),
         film("filler", &[COMEDY], &[], ""),

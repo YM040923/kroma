@@ -71,7 +71,13 @@ const WORLD_SHARE: f32 = 0.5;
 const DAY: i64 = 86_400;
 
 impl Viewer {
-    pub fn read(state: &SharedState, pool: &Pool, catalog: &Catalog, user_id: &str, now: i64) -> Self {
+    pub fn read(
+        state: &SharedState,
+        pool: &Pool,
+        catalog: &Catalog,
+        user_id: &str,
+        now: i64,
+    ) -> Self {
         let played = crate::services::settings::played_percent(&state.settings);
         let history = db::engagements(pool, user_id, played).unwrap_or_else(|e| {
             tracing::warn!(target: "reco", "reading a viewer's history failed: {e:#}");

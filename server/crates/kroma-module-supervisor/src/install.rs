@@ -8,7 +8,8 @@ use kroma_module_manifest::{ModuleManifest, Permissions};
 use super::lifecycle::native_build;
 use super::manifests::check_interface;
 use super::{
-    check_manifest_schema, Accept, AsksForMore, Supervisor, MODULE_COMPONENT, NATIVE_BINARY, STAGING_PREFIX,
+    check_manifest_schema, Accept, AsksForMore, Supervisor, MODULE_COMPONENT, NATIVE_BINARY,
+    STAGING_PREFIX,
 };
 
 mod bundle;

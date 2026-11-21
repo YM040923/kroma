@@ -110,7 +110,13 @@ fn a_name_that_is_a_journal_or_a_folder_is_refused() {
     let layout = Layout::new("component-names");
     let databases = layout.databases(Grant::none());
 
-    for asked in ["module.sqlite-wal", "module.sqlite-shm", "module.sqlite-journal", "sub/x.sqlite", ".x"] {
+    for asked in [
+        "module.sqlite-wal",
+        "module.sqlite-shm",
+        "module.sqlite-journal",
+        "sub/x.sqlite",
+        ".x",
+    ] {
         assert!(databases.open(&layout.asked(asked)).is_err(), "{asked}");
     }
 }
@@ -121,7 +127,9 @@ fn the_own_database_is_kept_where_the_module_does_not_reach() {
     let databases = layout.databases(Grant::none());
 
     let mut named = databases.open(&layout.asked("module.sqlite")).unwrap();
-    named.batch("CREATE TABLE mine (id INTEGER); INSERT INTO mine VALUES (1)").unwrap();
+    named
+        .batch("CREATE TABLE mine (id INTEGER); INSERT INTO mine VALUES (1)")
+        .unwrap();
     let mut bare = databases.open("module.sqlite").unwrap();
     let seen = bare.run("SELECT COUNT(*) FROM mine", &[]).unwrap();
 
@@ -141,7 +149,8 @@ fn links_planted_in_the_module_folder_reach_nothing() {
     let databases = layout.databases(Grant::none());
 
     let mut conn = databases.open(&layout.asked("module.sqlite")).unwrap();
-    conn.batch("CREATE TABLE mine (id INTEGER); INSERT INTO mine VALUES (1)").unwrap();
+    conn.batch("CREATE TABLE mine (id INTEGER); INSERT INTO mine VALUES (1)")
+        .unwrap();
     let secret = conn.run("SELECT COUNT(*) FROM secret", &[]);
 
     assert!(secret.is_err());
@@ -170,8 +179,13 @@ fn the_own_file_cannot_attach_another() {
     let mut conn = databases.open(&layout.asked("module.sqlite")).unwrap();
 
     conn.batch("CREATE TABLE mine (id INTEGER)").unwrap();
-    let wrote = conn.run("INSERT INTO mine VALUES (?1)", &[SqlValue::Integer(9)]).unwrap();
-    let attach = conn.batch(&format!("ATTACH DATABASE '{}' AS core", layout.root.join("core.sqlite").display()));
+    let wrote = conn
+        .run("INSERT INTO mine VALUES (?1)", &[SqlValue::Integer(9)])
+        .unwrap();
+    let attach = conn.batch(&format!(
+        "ATTACH DATABASE '{}' AS core",
+        layout.root.join("core.sqlite").display()
+    ));
 
     assert_eq!(wrote.changes, 1);
     assert!(attach.is_err());
@@ -237,13 +251,22 @@ fn only_the_newest_snapshots_are_kept() {
     conn.batch("CREATE TABLE mine (id INTEGER)").unwrap();
 
     for version in 1..=4 {
-        conn.snapshot(&layout.asked(&format!("module.sqlite.pre-v{version}"))).unwrap();
+        conn.snapshot(&layout.asked(&format!("module.sqlite.pre-v{version}")))
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     let left: Vec<bool> = (1..=4)
-        .map(|version| layout.kept.join(format!("module.sqlite.pre-v{version}")).exists())
+        .map(|version| {
+            layout
+                .kept
+                .join(format!("module.sqlite.pre-v{version}"))
+                .exists()
+        })
         .collect();
 
-    assert_eq!(left.iter().filter(|kept| **kept).count(), kroma_sqlite::KEPT_SNAPSHOTS);
+    assert_eq!(
+        left.iter().filter(|kept| **kept).count(),
+        kroma_sqlite::KEPT_SNAPSHOTS
+    );
     assert!(left[3]);
 }

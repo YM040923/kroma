@@ -2,8 +2,8 @@ use std::sync::atomic::AtomicU32;
 
 use rusqlite::params;
 
-use crate::Pool;
 use crate::testing::TempPool;
+use crate::Pool;
 use kroma_domain::Permission;
 
 pub(super) static SEQ: AtomicU32 = AtomicU32::new(0);

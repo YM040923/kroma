@@ -122,11 +122,15 @@ fn starts_with(chars: &[char], at: usize, needle: &str) -> bool {
 
 fn loose_codes(chars: &[char]) -> Vec<String> {
     let mut out = Vec::new();
-    let text: String = chars.iter().collect();
     for marker in ["提取码", "密码", "访问码"] {
-        let mut from = 0;
-        while let Some(found) = text[from..].find(marker) {
-            let mut i = from + found + marker.len();
+        let needle: Vec<char> = marker.chars().collect();
+        let mut at = 0;
+        while at + needle.len() <= chars.len() {
+            if chars[at..at + needle.len()] != needle[..] {
+                at += 1;
+                continue;
+            }
+            let mut i = at + needle.len();
             while i < chars.len() && !chars[i].is_ascii_alphanumeric() {
                 i += 1;
             }
@@ -135,15 +139,10 @@ fn loose_codes(chars: &[char]) -> Vec<String> {
                 code.push(chars[i]);
                 i += 1;
             }
-            if (4..=8).contains(&code.len()) {
-                if !out.contains(&code) {
-                    out.push(code);
-                }
+            if (4..=8).contains(&code.len()) && !out.contains(&code) {
+                out.push(code);
             }
-            from = from + found + marker.len();
-            if from >= text.len() {
-                break;
-            }
+            at = i.max(at + 1);
         }
     }
     out

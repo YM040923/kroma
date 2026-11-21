@@ -57,7 +57,9 @@ pub(super) fn new(id: &str, created_at: i64) -> StoredNotification {
 
 pub(super) fn insert(p: &Pool, id: &str, user: &str, at: i64) -> u32 {
     let conn = p.get().unwrap();
-    insert_notification(&conn, user, &new(id, at)).unwrap().unread
+    insert_notification(&conn, user, &new(id, at))
+        .unwrap()
+        .unread
 }
 
 pub(super) fn insert_read(p: &Pool, id: &str, user: &str, at: i64) {

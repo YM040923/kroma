@@ -172,14 +172,14 @@ impl<'a> Username<'a> {
 }
 
 fn upstream_of(url: &str) -> Option<Upstream> {
-    let bare = url.trim().split_once("://").map_or(url.trim(), |(_, rest)| rest);
+    let bare = url
+        .trim()
+        .split_once("://")
+        .map_or(url.trim(), |(_, rest)| rest);
     let (credentials, address) = match bare.rsplit_once('@') {
         Some((userinfo, address)) => {
             let (username, password) = userinfo.split_once(':')?;
-            (
-                Some((username.to_string(), password.to_string())),
-                address,
-            )
+            (Some((username.to_string(), password.to_string())), address)
         }
         None => (None, bare),
     };

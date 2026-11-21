@@ -58,7 +58,8 @@ fn row_to_video_at(r: &Row, base: usize) -> rusqlite::Result<VideoStream> {
         matrix: r.get(base + 9)?,
     };
     Ok(VideoStream {
-        technical: r.get::<_, Option<String>>(base + 10)?
+        technical: r
+            .get::<_, Option<String>>(base + 10)?
             .and_then(|json| serde_json::from_str(&json).ok()),
         codec: r.get::<_, String>(base)?,
         width: r.get(base + 1)?,

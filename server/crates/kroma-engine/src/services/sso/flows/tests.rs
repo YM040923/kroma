@@ -57,7 +57,10 @@ fn a_flow_carries_what_the_callback_needs_and_a_challenge_of_its_verifier() {
     assert_eq!(flow.id, started.id);
     assert_eq!(flow.nonce, started.nonce);
     assert_eq!(challenge_of(&flow.verifier), started.challenge);
-    assert_eq!(flow.redirect_uri, "https://kroma.test/api/auth/sso/callback");
+    assert_eq!(
+        flow.redirect_uri,
+        "https://kroma.test/api/auth/sso/callback"
+    );
 }
 
 #[test]

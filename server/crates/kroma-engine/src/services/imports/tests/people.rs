@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::super::stages::Core;
-use super::super::{Request, StartError, start};
+use super::super::{start, Request, StartError};
 use super::*;
 use crate::model::imports::Status;
 use crate::model::{AdminUser, InvitationState, LibraryScope};

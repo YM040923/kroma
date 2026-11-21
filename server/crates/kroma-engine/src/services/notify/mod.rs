@@ -425,9 +425,11 @@ mod tests {
         assert_eq!(emit(&host, &Audience::user(ana.clone()), &spec()), 1);
 
         let conn = host.db().get().unwrap();
-        assert!(db::notification_deliveries::deliveries_for_user(&conn, &ana, 10)
-            .unwrap()
-            .is_empty());
+        assert!(
+            db::notification_deliveries::deliveries_for_user(&conn, &ana, 10)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -726,7 +728,10 @@ mod tests {
             &types::NotificationTypes::default(),
         );
 
-        assert_eq!(rendered.resolved_by.map(|a| a.name), Some("Ana".to_string()));
+        assert_eq!(
+            rendered.resolved_by.map(|a| a.name),
+            Some("Ana".to_string())
+        );
     }
 
     #[test]

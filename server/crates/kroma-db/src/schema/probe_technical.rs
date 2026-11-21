@@ -11,7 +11,12 @@ pub(super) fn apply(conn: &Connection) -> rusqlite::Result<()> {
     add_column(conn, "files", "v_technical", "TEXT")?;
     add_column(conn, "files", "probe_version", "INTEGER")?;
     add_column(conn, "season_meta", "metadata", "TEXT")?;
-    add_column(conn, "metadata_core", "studios", "TEXT NOT NULL DEFAULT '[]'")?;
+    add_column(
+        conn,
+        "metadata_core",
+        "studios",
+        "TEXT NOT NULL DEFAULT '[]'",
+    )?;
     Ok(())
 }
 

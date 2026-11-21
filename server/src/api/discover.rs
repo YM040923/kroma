@@ -323,7 +323,12 @@ pub async fn local(
         Some("watched") => Some(true),
         Some("unwatched") => Some(false),
         None | Some("any") => None,
-        Some(_) => return Err(json_error(StatusCode::BAD_REQUEST, "unknown watched filter")),
+        Some(_) => {
+            return Err(json_error(
+                StatusCode::BAD_REQUEST,
+                "unknown watched filter",
+            ))
+        }
     };
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params
@@ -343,8 +348,7 @@ pub async fn local(
     let out = query(&state.db, move |pool| {
         let played = settings::played_percent(&engine.settings);
         let uid = &user.id;
-        let mut watched_ids: HashSet<String> =
-            db::list_watched(&pool, uid)?.into_iter().collect();
+        let mut watched_ids: HashSet<String> = db::list_watched(&pool, uid)?.into_iter().collect();
         for progress in db::list_progress(&pool, uid)? {
             let finished = progress
                 .duration_ms
@@ -385,7 +389,10 @@ pub async fn local(
             None => true,
         };
         let wanted_kind = kind;
-        let movie_ok = |id: &str, library_id: &str, year: Option<u32>, meta: Option<&crate::model::Metadata>| {
+        let movie_ok = |id: &str,
+                        library_id: &str,
+                        year: Option<u32>,
+                        meta: Option<&crate::model::Metadata>| {
             if wanted_kind == Some(RequestKind::Show) || !user.sees_library(library_id) {
                 return false;
             }
@@ -435,12 +442,14 @@ pub async fn local(
 
         if q.is_empty() {
             hits.sort_by(|a, b| match (a, b) {
-                (SearchHit::Movie { item: a }, SearchHit::Movie { item: b }) => {
-                    b.added_at.cmp(&a.added_at).then_with(|| a.title.cmp(&b.title))
-                }
-                (SearchHit::Show { show: a }, SearchHit::Show { show: b }) => {
-                    b.added_at.cmp(&a.added_at).then_with(|| a.title.cmp(&b.title))
-                }
+                (SearchHit::Movie { item: a }, SearchHit::Movie { item: b }) => b
+                    .added_at
+                    .cmp(&a.added_at)
+                    .then_with(|| a.title.cmp(&b.title)),
+                (SearchHit::Show { show: a }, SearchHit::Show { show: b }) => b
+                    .added_at
+                    .cmp(&a.added_at)
+                    .then_with(|| a.title.cmp(&b.title)),
                 _ => std::cmp::Ordering::Equal,
             });
         }

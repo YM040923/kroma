@@ -3,13 +3,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use super::*;
+use crate::lifecycle::test_fixtures::{body, breaking_bad, ep, movie_detail, show_body, user};
+use crate::lifecycle::test_support::{host_without_tmdb, seed_user, test_host, wanted_pairs};
 use crate::model::Audience;
-use crate::lifecycle::test_fixtures::{
-    body, breaking_bad, ep, movie_detail, show_body, user,
-};
-use crate::lifecycle::test_support::{
-    host_without_tmdb, seed_user, test_host, wanted_pairs,
-};
 use crate::testing::FakeTmdb;
 
 #[test]

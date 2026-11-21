@@ -4,9 +4,7 @@ use super::*;
 use crate::lifecycle::test_fixtures::{
     breaking_bad, detail, movie_detail, raw_detail, req, show_detail, wanted,
 };
-use crate::lifecycle::test_support::{
-    host_without_tmdb, insert_req, test_host, wanted_pairs,
-};
+use crate::lifecycle::test_support::{host_without_tmdb, insert_req, test_host, wanted_pairs};
 use crate::testing::FakeTmdb;
 
 #[test]

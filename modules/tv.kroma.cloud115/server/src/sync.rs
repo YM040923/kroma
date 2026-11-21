@@ -10,7 +10,7 @@
 //! Runs are started, not awaited: a library takes longer than any request should,
 //! and the admin page reads progress from [`status`].
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -228,6 +228,13 @@ async fn run<S: HostCtx>(
     let mut assets_left = MAX_ASSETS_PER_RUN;
 
     for library in config.libraries.iter().filter(|l| !l.remote.trim().is_empty() && !l.local.trim().is_empty()) {
+        if crate::budget::background_blocked(config.options.daily_call_budget) {
+            report.truncated = true;
+            report.errors.push(
+                "今日调用已用 70%，后台同步暂停，剩余额度留给播放".to_string(),
+            );
+            break;
+        }
         let Some(local) = resolve_local_path(folders, &library.local) else {
             report.errors.push(format!(
                 "{}: 本地目录无效（填一个存储里的绝对路径，如 /media/115/动画电影）",
@@ -265,6 +272,7 @@ async fn run<S: HostCtx>(
     }
 
     report.calls = pacer().spent().await;
+    crate::budget::flush();
     report.elapsed_ms = started.elapsed().as_millis() as u64;
     report.finished_at = Some(unix_now());
     report.current.clear();
@@ -366,6 +374,9 @@ async fn sync_library(
     let mut stack = vec![(root_cid, local_root.to_path_buf(), 0usize)];
 
     while let Some((cid, dir, depth)) = stack.pop() {
+        if crate::budget::background_blocked(config.options.daily_call_budget) {
+            return Err(Failure::Budget);
+        }
         if depth > MAX_DEPTH {
             report
                 .errors
@@ -428,6 +439,49 @@ async fn sync_library(
         }
         budget_left -= entries.len() as usize;
 
+        // Sign-ahead hints: the next few mirrored videos of this folder, by
+        // name. The play route warms those links after answering the current
+        // one, so "next episode" does not start with a cold signature.
+        let mut next_codes: HashMap<String, Vec<String>> = HashMap::new();
+        if config.options.prefetch_next > 0 {
+            let mut videos: Vec<&client::Entry> = entries
+                .iter()
+                .filter(|entry| {
+                    if entry.is_dir() || entry.pick_code.is_empty() {
+                        return false;
+                    }
+                    let ext = Path::new(entry.name.trim())
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
+                    is_video_ext(&ext)
+                        && !(ext == "iso" && config.options.skip_iso)
+                        && (config.options.min_video_size_mb == 0
+                            || (entry.size.max(0) as u64)
+                                >= config.options.min_video_size_mb * 1024 * 1024)
+                })
+                .collect();
+            videos.sort_by(|a, b| {
+                a.name
+                    .to_lowercase()
+                    .cmp(&b.name.to_lowercase())
+                    .then(a.name.cmp(&b.name))
+            });
+            let count = usize::from(config.options.prefetch_next);
+            for (index, entry) in videos.iter().enumerate() {
+                let next: Vec<String> = videos[index + 1..]
+                    .iter()
+                    .take(count)
+                    .map(|following| following.pick_code.trim().to_ascii_lowercase())
+                    .filter(|code| !code.is_empty())
+                    .collect();
+                if !next.is_empty() {
+                    next_codes.insert(entry.name.clone(), next);
+                }
+            }
+        }
+
         let mut subfolders = Vec::new();
         for entry in &entries {
             if entry.is_dir() {
@@ -474,12 +528,14 @@ async fn sync_library(
             } else {
                 safe_name(strip_extension(name))
             };
+            let next = next_codes.get(name).map(Vec::as_slice).unwrap_or(&[]);
             if let Err(error) = write_entry(
                 config,
                 &dir,
                 &stem,
                 &entry.pick_code,
                 entry.size,
+                next,
                 config.options.overwrite_strm,
                 &mut seen,
                 report,
@@ -538,17 +594,23 @@ pub(crate) fn write_entry(
     stem: &str,
     pick_code: &str,
     size: i64,
+    next: &[String],
     overwrite: bool,
     seen: &mut HashSet<PathBuf>,
     report: &mut Report,
 ) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("建目录失败：{e}"))?;
     let strm = dir.join(format!("{stem}.strm"));
-    let content = format!(
-        "{}/api/module/{MODULE_ID}/play?pc={}\n",
+    let mut content = format!(
+        "{}/api/module/{MODULE_ID}/play?pc={}",
         config.base_url,
         pick_code.trim().to_ascii_lowercase()
     );
+    if !next.is_empty() {
+        content.push_str("&next=");
+        content.push_str(&next.join(","));
+    }
+    content.push('\n');
     if std::fs::read(&strm).ok().as_deref() == Some(content.as_bytes()) {
         report.kept += 1;
     } else if strm.exists() && !overwrite {

@@ -67,10 +67,16 @@ impl<'a> Board<'a> {
             return None;
         }
         let hero_count = picks.len().min(HERO_CAP);
-        let mut draft = Draft::rail("hero", self.t("content.featured", &[]), Self::ids(picks.iter().copied(), HERO_FETCH))
-            .drawn(Layout::Hero)
-            .at_least(1);
-        draft.cap = hero_count.max(HERO_PICKS.min(self.ranked.len())).min(HERO_CAP);
+        let mut draft = Draft::rail(
+            "hero",
+            self.t("content.featured", &[]),
+            Self::ids(picks.iter().copied(), HERO_FETCH),
+        )
+        .drawn(Layout::Hero)
+        .at_least(1);
+        draft.cap = hero_count
+            .max(HERO_PICKS.min(self.ranked.len()))
+            .min(HERO_CAP);
         for title in picks {
             if let Some(why) = self.why(title) {
                 draft.notes.insert(title.facts.id.clone(), why);
@@ -93,9 +99,13 @@ impl<'a> Board<'a> {
         if picks.is_empty() {
             return None;
         }
-        let mut draft = Draft::rail("spotlight", self.t("content.spotlight", &[]), Self::ids(picks.iter().copied(), usize::MAX))
-            .drawn(Layout::Spotlight)
-            .at_least(1);
+        let mut draft = Draft::rail(
+            "spotlight",
+            self.t("content.spotlight", &[]),
+            Self::ids(picks.iter().copied(), usize::MAX),
+        )
+        .drawn(Layout::Spotlight)
+        .at_least(1);
         draft.cap = 1;
         for title in picks {
             if let Some(why) = self.why(title) {
@@ -107,7 +117,11 @@ impl<'a> Board<'a> {
 
     pub(super) fn top_picks(&self) -> Option<Draft> {
         let picks = spread(&self.ranked, FETCH);
-        Some(Draft::rail("for-you", self.t("content.forYou", &[]), Self::ids(picks, FETCH)))
+        Some(Draft::rail(
+            "for-you",
+            self.t("content.forYou", &[]),
+            Self::ids(picks, FETCH),
+        ))
     }
 
     /// "Because you watched X", for the latest titles the viewer clearly
@@ -132,15 +146,23 @@ impl<'a> Board<'a> {
                 let mut kin: Vec<(&Title, f32)> = self
                     .ranked
                     .iter()
-                    .filter(|s| seed.genres.is_empty() || seed.genres.iter().any(|g| s.title.has_genre(*g)))
+                    .filter(|s| {
+                        seed.genres.is_empty() || seed.genres.iter().any(|g| s.title.has_genre(*g))
+                    })
                     .map(|s| (s.title, seed.resemblance(s.title), s.score))
                     .filter(|(_, resemblance, _)| *resemblance >= RESEMBLES)
                     .map(|(title, resemblance, score)| (title, 0.7 * resemblance + 0.3 * score))
                     .collect();
-                kin.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.facts.id.cmp(&b.0.facts.id)));
+                kin.sort_by(|a, b| {
+                    b.1.total_cmp(&a.1)
+                        .then_with(|| a.0.facts.id.cmp(&b.0.facts.id))
+                });
                 let ids = Self::ids(kin.into_iter().map(|(title, _)| title), FETCH);
                 let heading = self.t("content.becauseYouWatched", &[("title", &name)]);
-                Some(Draft::rail(format!("because:{}", seed.facts.id), heading, ids).claiming(CLAIM_SEED))
+                Some(
+                    Draft::rail(format!("because:{}", seed.facts.id), heading, ids)
+                        .claiming(CLAIM_SEED),
+                )
             })
             .collect()
     }
@@ -149,12 +171,20 @@ impl<'a> Board<'a> {
     pub(super) fn genres(&self) -> Vec<Draft> {
         self.viewer
             .taste
-            .leanings(self.catalog, LEANING_SUPPORT, |f| matches!(f, Feature::Genre(_)))
+            .leanings(self.catalog, LEANING_SUPPORT, |f| {
+                matches!(f, Feature::Genre(_))
+            })
             .into_iter()
             .filter_map(|(feature, _)| {
-                let Feature::Genre(id) = feature else { return None };
+                let Feature::Genre(id) = feature else {
+                    return None;
+                };
                 let name = genre::label(self.locale, id)?;
-                let members = self.ranked.iter().map(|s| s.title).filter(|t| t.has_genre(id));
+                let members = self
+                    .ranked
+                    .iter()
+                    .map(|s| s.title)
+                    .filter(|t| t.has_genre(id));
                 let draft = Draft::rail(
                     format!("genre:{id}"),
                     self.t("content.genreForYou", &[("genre", &name)]),
@@ -207,8 +237,12 @@ impl<'a> Board<'a> {
             .map(|s| s.title)
             .filter(|title| title.facts.rating.is_some() && quality(title) >= ACCLAIMED);
         Some(
-            Draft::rail("acclaimed", self.t("content.acclaimed", &[]), Self::ids(members, FETCH))
-                .at_least(MIN_ITEMS + 1),
+            Draft::rail(
+                "acclaimed",
+                self.t("content.acclaimed", &[]),
+                Self::ids(members, FETCH),
+            )
+            .at_least(MIN_ITEMS + 1),
         )
     }
 
@@ -225,8 +259,12 @@ impl<'a> Board<'a> {
                     .is_some_and(|ms| (NOT_A_SHORT_MS..=SHORT_FILM_MS).contains(&ms))
         });
         Some(
-            Draft::rail("quick", self.t("content.quickWatch", &[]), Self::ids(members, FETCH))
-                .at_least(MIN_ITEMS + 1),
+            Draft::rail(
+                "quick",
+                self.t("content.quickWatch", &[]),
+                Self::ids(members, FETCH),
+            )
+            .at_least(MIN_ITEMS + 1),
         )
     }
 }

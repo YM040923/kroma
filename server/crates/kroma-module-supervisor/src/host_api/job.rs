@@ -4,9 +4,9 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::Json;
 use kroma_module_host::HostCtx;
 
 #[derive(serde::Deserialize)]
@@ -66,7 +66,7 @@ pub(super) async fn trigger_job<S: HostCtx>(
 
 #[cfg(test)]
 mod tests {
-    use super::{InternPool, MAX_INTERNED, intern_in};
+    use super::{intern_in, InternPool, MAX_INTERNED};
 
     #[test]
     fn a_job_key_off_the_wire_is_leaked_once_and_only_so_many_times() {

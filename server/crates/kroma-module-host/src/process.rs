@@ -65,7 +65,9 @@ impl Command {
 
     /// Start it and keep going.
     pub fn spawn(&self) -> Result<Child, String> {
-        outside()?.spawn_program(self.0.clone()).map(|id| Child { id })
+        outside()?
+            .spawn_program(self.0.clone())
+            .map(|id| Child { id })
     }
 
     /// Start it and wait up to `timeout` for it to end, killing it past that.

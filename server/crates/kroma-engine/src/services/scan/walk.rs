@@ -30,11 +30,17 @@ const PHOTO_EXTENSIONS: &[&str] = &[
 fn has_photo_extension(path: &Path) -> bool {
     path.extension()
         .and_then(std::ffi::OsStr::to_str)
-        .is_some_and(|ext| PHOTO_EXTENSIONS.iter().any(|known| ext.eq_ignore_ascii_case(known)))
+        .is_some_and(|ext| {
+            PHOTO_EXTENSIONS
+                .iter()
+                .any(|known| ext.eq_ignore_ascii_case(known))
+        })
 }
 
 fn photo_mtime_date(mtime: i64) -> Option<String> {
-    let date = time::OffsetDateTime::from_unix_timestamp(mtime).ok()?.date();
+    let date = time::OffsetDateTime::from_unix_timestamp(mtime)
+        .ok()?
+        .date();
     Some(format!(
         "{:04}-{:02}-{:02}T00:00:00Z",
         date.year(),
@@ -62,7 +68,10 @@ fn photo_taken_at(path: &Path) -> Option<String> {
         let Some(value) = values.first() else {
             continue;
         };
-        let value = std::str::from_utf8(value).ok()?.trim_matches(char::from(0)).trim();
+        let value = std::str::from_utf8(value)
+            .ok()?
+            .trim_matches(char::from(0))
+            .trim();
         if value.len() >= 19
             && value.as_bytes()[4] == b':'
             && value.as_bytes()[7] == b':'
@@ -135,7 +144,8 @@ pub(super) fn scan_root<S>(
         if entry.file_type().is_dir() {
             let path = entry.path();
             if let Some((stream, container)) = disc_main_stream(&path) {
-                let indexed = index_disc(lib, &root, &abs_root, &path, &stream, container, &added_at);
+                let indexed =
+                    index_disc(lib, &root, &abs_root, &path, &stream, container, &added_at);
                 batches.note(indexed);
             }
             continue;
@@ -157,7 +167,8 @@ pub(super) fn scan_root<S>(
         if other_library
             && !has_video_extension(&path)
             && !path.extension().is_some_and(|ext| {
-                ext.to_str().is_some_and(|ext| ext.eq_ignore_ascii_case("strm"))
+                ext.to_str()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("strm"))
             })
         {
             continue;
@@ -204,11 +215,7 @@ pub(super) fn scan_root<S>(
         // the `file` protocol and the entry's path is a URL. Reading it here
         // means those entries arrive fully described and the probe pass, which
         // could only ever fail on them, leaves them alone.
-        let sidecar = if is_strm {
-            read_sidecar(&path)
-        } else {
-            None
-        };
+        let sidecar = if is_strm { read_sidecar(&path) } else { None };
 
         let photo_time = photo_library
             .then(|| photo_taken_at(&path).or_else(|| mtime.and_then(photo_mtime_date)))
@@ -353,7 +360,11 @@ fn largest_with_extension(dir: &Path, extensions: &[&str]) -> Option<PathBuf> {
         let matches = path
             .extension()
             .and_then(std::ffi::OsStr::to_str)
-            .is_some_and(|ext| extensions.iter().any(|known| ext.eq_ignore_ascii_case(known)));
+            .is_some_and(|ext| {
+                extensions
+                    .iter()
+                    .any(|known| ext.eq_ignore_ascii_case(known))
+            });
         if !matches {
             continue;
         }
@@ -390,7 +401,10 @@ fn index_disc(
     container: &'static str,
     added_at: &str,
 ) -> super::index::Indexed {
-    let rel = stream.trim_prefix(root).to_string_lossy().replace('\\', "/");
+    let rel = stream
+        .trim_prefix(root)
+        .to_string_lossy()
+        .replace('\\', "/");
     let abs = abs_root.join(&rel);
     let meta = std::fs::metadata(stream).ok();
     let size = meta.as_ref().map(std::fs::Metadata::len);

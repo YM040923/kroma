@@ -153,19 +153,24 @@ impl AppState {
         let _ = crate::db::imports::fail_interrupted(&db, kroma_primitives::now_ms());
         crate::services::pipeline::recover_on_boot(&db);
         let metrics = Metrics::new(db.clone());
-        let network = Arc::new(crate::services::network::Network::new(
-            db.clone(),
-            settings.clone(),
-            crate::point::Point::new(crate::services::network::NETWORK_POINT, contributions.clone()),
-        )
-        .with_middleware(crate::point::Point::new(
-            crate::services::network::POLICY_POINT,
-            contributions.clone(),
-        ))
-        .with_providers(network_providers)
-        .with_listeners(network_listeners)
-        .with_core_ports(config.port, config.https_port_override)
-        .with_declared(permissions));
+        let network = Arc::new(
+            crate::services::network::Network::new(
+                db.clone(),
+                settings.clone(),
+                crate::point::Point::new(
+                    crate::services::network::NETWORK_POINT,
+                    contributions.clone(),
+                ),
+            )
+            .with_middleware(crate::point::Point::new(
+                crate::services::network::POLICY_POINT,
+                contributions.clone(),
+            ))
+            .with_providers(network_providers)
+            .with_listeners(network_listeners)
+            .with_core_ports(config.port, config.https_port_override)
+            .with_declared(permissions),
+        );
         let direct = crate::services::direct::Direct::new(config.public_ip_url.clone());
         Arc::new_cyclic(|weak| AppState {
             config,

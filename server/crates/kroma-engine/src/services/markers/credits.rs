@@ -209,7 +209,11 @@ mod tests {
     #[test]
     fn a_picture_scan_that_fails_leaves_the_pass_standing() {
         let ctx = detecting("fingerprint");
-        let item = film(&ctx.state, std::path::Path::new("/nowhere/absent.mkv"), 70_000);
+        let item = film(
+            &ctx.state,
+            std::path::Path::new("/nowhere/absent.mkv"),
+            70_000,
+        );
 
         assert!(!detect_movie(&ctx, &item).unwrap());
 

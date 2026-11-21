@@ -113,12 +113,18 @@ fn a_blank_secret_keeps_the_stored_one_and_a_new_one_replaces_it() {
     let mut blank = provider("p0");
     blank.client_secret = String::new();
     set_sign_in(&settings, &pool, None, with(vec![blank])).unwrap();
-    assert_eq!(first_provider(&sign_in(&settings, None)).client_secret, "s3cret");
+    assert_eq!(
+        first_provider(&sign_in(&settings, None)).client_secret,
+        "s3cret"
+    );
 
     let mut rotated = provider("p0");
     rotated.client_secret = "next".to_string();
     set_sign_in(&settings, &pool, None, with(vec![rotated])).unwrap();
-    assert_eq!(first_provider(&sign_in(&settings, None)).client_secret, "next");
+    assert_eq!(
+        first_provider(&sign_in(&settings, None)).client_secret,
+        "next"
+    );
 }
 
 #[test]

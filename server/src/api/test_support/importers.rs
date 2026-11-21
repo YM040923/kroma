@@ -8,7 +8,7 @@ use kroma_engine::services::imports::JOB;
 use serde_json::Value;
 use tokio::sync::broadcast::Receiver;
 
-use super::{TestApp, test_app_with_importers};
+use super::{test_app_with_importers, TestApp};
 
 pub const IMPORTER: &str = "tv.x.import";
 

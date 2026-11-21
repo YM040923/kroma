@@ -42,7 +42,12 @@ impl Backend for ThroughTheHost {
         sql::close(connection);
     }
 
-    fn run(&self, connection: u32, statement: &str, params: Vec<Value>) -> Result<Outcome, Failure> {
+    fn run(
+        &self,
+        connection: u32,
+        statement: &str,
+        params: Vec<Value>,
+    ) -> Result<Outcome, Failure> {
         let params: Vec<sql::Value> = params.into_iter().map(wire_of).collect();
         let outcome = sql::run(connection, statement, &params).map_err(failure_of)?;
         Ok(Outcome {

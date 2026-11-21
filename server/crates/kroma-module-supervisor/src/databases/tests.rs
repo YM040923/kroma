@@ -48,7 +48,8 @@ impl Moved {
     fn seed(&self, name: &str, rows: u32) -> PathBuf {
         let path = self.own().join(name);
         let conn = Connection::open(&path).unwrap();
-        conn.execute_batch("CREATE TABLE kept (id INTEGER)").unwrap();
+        conn.execute_batch("CREATE TABLE kept (id INTEGER)")
+            .unwrap();
         for id in 0..rows {
             conn.execute("INSERT INTO kept VALUES (?1)", [id]).unwrap();
         }
@@ -182,9 +183,17 @@ fn a_move_that_fails_keeps_the_old_files_and_is_tried_again() {
     let failed = moved.supervisor.module_databases(ID);
 
     assert!(failed.is_err());
-    assert_eq!(std::fs::read(moved.own().join("module.sqlite")).unwrap(), broken);
+    assert_eq!(
+        std::fs::read(moved.own().join("module.sqlite")).unwrap(),
+        broken
+    );
     assert!(!moved.kept().exists());
-    assert_eq!(std::fs::read_dir(moved.data.join("databases")).unwrap().count(), 0);
+    assert_eq!(
+        std::fs::read_dir(moved.data.join("databases"))
+            .unwrap()
+            .count(),
+        0
+    );
 
     std::fs::remove_file(moved.own().join("module.sqlite")).unwrap();
     moved.seed("module.sqlite", 4);

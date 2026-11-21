@@ -123,4 +123,3 @@ pub(super) fn catalog(
         db::list_shows(&state.db, None).unwrap(),
     )
 }
-
