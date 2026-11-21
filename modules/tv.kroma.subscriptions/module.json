@@ -3,7 +3,7 @@
   "schemaVersion": 3,
   "id": "tv.kroma.subscriptions",
   "name": "Subscriptions",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Manage monitored 115 subscription tasks and dry-run discovery without duplicating cloud-drive logic.",
   "engines": { "server": ">=0.1.39" },
   "component": { "instances": 2, "cpuSeconds": 300 },
