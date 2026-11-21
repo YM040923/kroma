@@ -68,6 +68,9 @@ pub(crate) fn readiness_of(config: &Config) -> Readiness {
             "订阅源服务地址还没配置（填 madreel-svc 的地址，如 http://172.17.0.1:8790）".to_string(),
         );
     }
+    if config.transit_folder.trim().is_empty() {
+        blockers.push("转存文件夹还没配置：获取到的文件要先进一个文件夹，再由整理程序分类".to_string());
+    }
     Readiness {
         ready: blockers.is_empty(),
         blockers,

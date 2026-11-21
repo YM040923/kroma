@@ -464,6 +464,7 @@ async fn config_export<S: HostCtx + Clone + Send + Sync + 'static>(
         "exportedAt": crate::store::now_ms(),
         "baseUrl": config.base_url,
         "sourceUrl": config.source_url,
+        "transitFolder": config.transit_folder,
         "libraries": config.libraries,
         "options": config.options,
         "alias": alias,
@@ -475,6 +476,7 @@ async fn config_export<S: HostCtx + Clone + Send + Sync + 'static>(
 struct ConfigBody {
     base_url: Option<String>,
     source_url: Option<String>,
+    transit_folder: Option<String>,
     libraries: Option<Vec<Library>>,
     options: Option<Options>,
     alias: Option<String>,
@@ -523,12 +525,19 @@ async fn config_import<S: HostCtx + Clone + Send + Sync + 'static>(
     let alias = body
         .alias
         .map(|alias| alias.trim().chars().take(40).collect::<String>());
+    let transit = body
+        .transit_folder
+        .as_deref()
+        .map(|folder| folder.trim().trim_end_matches('/').to_string());
     crate::store::patch(|stored| {
         if let Some(base) = base {
             stored.base_url = base;
         }
         if let Some(source) = source {
             stored.source_url = source;
+        }
+        if let Some(transit) = transit {
+            stored.transit_folder = transit;
         }
         if let Some(libraries) = body.libraries {
             stored.libraries = libraries;
@@ -563,6 +572,8 @@ struct SettingsView {
     /// The subscription source the provider point proxies to. Read back so an
     /// operator can see what is configured; the cookie never is.
     source_url: String,
+    /// Where acquisitions land before the organiser classifies them.
+    transit_folder: String,
     libraries: Vec<Library>,
     options: Options,
     library_folders: Vec<FolderView>,
@@ -592,6 +603,7 @@ async fn get_settings<S: HostCtx + Clone + Send + Sync + 'static>(
         has_cookie: !config.cookie.is_empty(),
         base_url: config.base_url,
         source_url: config.source_url,
+        transit_folder: config.transit_folder,
         libraries: config.libraries,
         options: config.options,
         library_folders: folders
@@ -621,6 +633,10 @@ struct SettingsBody {
     /// Empty clears it; absent leaves it alone.
     #[serde(default)]
     source_url: Option<String>,
+    /// Where acquisitions land before the organiser classifies them, for example
+    /// `/待整理`. Empty clears it; absent leaves it alone.
+    #[serde(default)]
+    transit_folder: Option<String>,
     #[serde(default)]
     libraries: Option<Vec<Library>>,
     #[serde(default)]
@@ -674,6 +690,21 @@ async fn put_settings<S: HostCtx + Clone + Send + Sync + 'static>(
             ));
         }
     }
+    let transit = body
+        .transit_folder
+        .as_deref()
+        .map(|folder| folder.trim().trim_end_matches('/').to_string());
+    if let Some(folder) = transit.as_ref() {
+        if folder.contains(['\r', '\n']) {
+            return Err(json_error(StatusCode::BAD_REQUEST, "转存文件夹不能包含换行"));
+        }
+        if folder.contains("..") {
+            return Err(json_error(
+                StatusCode::BAD_REQUEST,
+                "转存文件夹不能包含 ..",
+            ));
+        }
+    }
     let cookie = body
         .cookie
         .as_deref()
@@ -690,6 +721,7 @@ async fn put_settings<S: HostCtx + Clone + Send + Sync + 'static>(
         || cookie.is_some()
         || base.is_some()
         || source.is_some()
+        || transit.is_some()
         || body.libraries.is_some()
         || body.options.is_some();
     if !touched {
@@ -712,6 +744,9 @@ async fn put_settings<S: HostCtx + Clone + Send + Sync + 'static>(
         }
         if let Some(source) = source {
             stored.source_url = source;
+        }
+        if let Some(transit) = transit {
+            stored.transit_folder = transit;
         }
         if let Some(libraries) = body.libraries {
             stored.libraries = libraries;

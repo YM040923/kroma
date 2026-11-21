@@ -114,6 +114,7 @@ export function Cloud115Settings() {
   const [status, setStatus] = useState<CloudStatusView | null>(null);
   const [account, setAccount] = useState<CloudAccount | null>(null);
   const [baseUrl, setBaseUrl] = useState('');
+  const [transitFolder, setTransitFolder] = useState('');
   const [cookie, setCookie] = useState('');
   const [hasCookie, setHasCookie] = useState(false);
   const [libraries, setLibraries] = useState<CloudLibrary[]>([]);
@@ -179,6 +180,7 @@ export function Cloud115Settings() {
           (library) => library.remote.trim() || library.local.trim(),
         ).length;
         setBaseUrl(view.baseUrl);
+        setTransitFolder(view.transitFolder);
         setHasCookie(view.hasCookie);
         setLibraries(view.libraries.length ? view.libraries : [{ ...EMPTY_LIBRARY }]);
         setOptions(view.options);
@@ -440,6 +442,7 @@ export function Cloud115Settings() {
       }
       const result = await api.save({
         baseUrl,
+        transitFolder,
         libraries: kept,
         options,
         ...(cookie.trim() ? { cookie: cookie.trim() } : {}),
@@ -516,7 +519,7 @@ export function Cloud115Settings() {
     setBusy(true);
     setError(null);
     try {
-      await api.save({ clearCookie: true, baseUrl, libraries, options });
+      await api.save({ clearCookie: true, baseUrl, transitFolder, libraries, options });
       setHasCookie(false);
       setDirty(false);
       setSaved(true);
@@ -915,6 +918,19 @@ export function Cloud115Settings() {
                       >
                         <Field.Input placeholder="http://192.168.1.10:4040" />
                         <Field.Hint>{t('cloud115.baseUrlHint')}</Field.Hint>
+                      </Field.Root>
+                    </Box>
+                    <Box flex minW={240}>
+                      <Field.Root
+                        label={t('cloud115.transitFolder')}
+                        value={transitFolder}
+                        onValueChange={(value) => {
+                          setDirty(true);
+                          setTransitFolder(value);
+                        }}
+                      >
+                        <Field.Input placeholder="/待整理" />
+                        <Field.Hint>{t('cloud115.transitFolderHint')}</Field.Hint>
                       </Field.Root>
                     </Box>
                   </Box>

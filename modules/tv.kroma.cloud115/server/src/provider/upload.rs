@@ -285,12 +285,25 @@ fn prepare<S: HostCtx>(host: &S, body: &UploadBody) -> Result<Prepared, String> 
     if !cid.is_empty() && !cid.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err("目录号无效".into());
     }
-    let remote = if cid.is_empty() && body.remote.trim().is_empty() {
+    // An explicit `cid`/`remote` wins. Otherwise the acquisition lands in the
+    // configured transit folder: the organiser (Symedia) classifies from there,
+    // so uploading straight into a mirrored library folder would put the file
+    // where the mirror never looks and the organiser never sees.
+    let transit = config.transit_folder.trim();
+    let remote = if !cid.is_empty() {
+        body.remote.trim().to_string()
+    } else if !body.remote.trim().is_empty() {
+        body.remote.trim().to_string()
+    } else if !transit.is_empty() {
+        let mut remote = transit.trim_end_matches('/').to_string();
+        if !remote.starts_with('/') {
+            remote.insert(0, '/');
+        }
+        remote
+    } else {
         remote_for_file(&config.libraries, &folders, &path).ok_or_else(|| {
             "这个本地路径不在任何已配置的目录映射里，请给出 remote 或 cid".to_string()
         })?
-    } else {
-        body.remote.trim().to_string()
     };
     let file_name = path
         .file_name()

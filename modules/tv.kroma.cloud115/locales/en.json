@@ -14,6 +14,8 @@
   "cloud115.cookieImport": "Verify and import",
   "cloud115.baseUrl": "Server address",
   "cloud115.baseUrlHint": "The address players reach this KROMA at, used to build each .strm. Filled in automatically when you start a sync from this page.",
+  "cloud115.transitFolder": "Transfer folder",
+  "cloud115.transitFolderHint": "Acquired films and episodes land in this drive folder first, and the organiser (Symedia) files them into the library. For example /待整理.",
   "cloud115.clearCookie": "Clear cookie",
   "cloud115.qrLogin": "Sign in with QR",
   "cloud115.qrApp": "Sign-in client",

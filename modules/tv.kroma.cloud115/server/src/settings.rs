@@ -138,6 +138,9 @@ pub struct Config {
     /// (madreel-svc). The provider point proxies to it; empty until an operator
     /// sets it, and readiness names it as the blocker until then.
     pub source_url: String,
+    /// The drive folder every acquisition lands in before the organiser picks it
+    /// up, for example `/待整理`. Empty means the drive root.
+    pub transit_folder: String,
     pub libraries: Vec<Library>,
     pub options: Options,
 }
@@ -149,6 +152,7 @@ impl Config {
             cookie: stored.cookie.trim().to_string(),
             base_url: stored.base_url.trim().trim_end_matches('/').to_string(),
             source_url: stored.source_url.trim().trim_end_matches('/').to_string(),
+            transit_folder: stored.transit_folder.trim().to_string(),
             libraries: stored.libraries,
             options: stored.options.sane(),
         }

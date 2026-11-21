@@ -38,9 +38,16 @@ export type AcquisitionResult =
   | { state: 'cancelled' }
   | { state: 'failed'; error: string };
 
+/** An optional release the caller already picked in the panel. Present, the
+ *  server grabs exactly that one; absent, it chooses. */
+export interface AcquirePick {
+  candidate?: Record<string, unknown> | null;
+}
+
 export type Acquire = (
   target: AcquisitionTarget,
   scope?: AcquisitionScope,
+  pick?: AcquirePick,
 ) => Promise<AcquisitionResult>;
 
 type NeedsConfirm = Extract<AcquisitionOutcome, { state: 'needs_confirm' }>;
@@ -81,6 +88,25 @@ function askBody(target: AcquisitionTarget, scope: AcquisitionScope): Acquisitio
   };
 }
 
+/** The outcome of `/start` as this hook reports it: a started acquisition names
+ *  its provider, the rest pass through unchanged. */
+function toResult(outcome: AcquisitionOutcome): AcquisitionResult {
+  switch (outcome.state) {
+    case 'owned':
+      return { state: 'owned', owned: outcome.owned };
+    case 'pending_review':
+      return { state: 'pending_review' };
+    case 'started':
+      return { state: 'started', provider: outcome.provider };
+    case 'failed':
+      return { state: 'failed', error: outcome.error };
+    case 'needs_confirm':
+      // A caller that reached here without confirming asked for a report, not a
+      // charge: treat it as "nothing was taken".
+      return { state: 'cancelled' };
+  }
+}
+
 /** What confirming needs: the transport, how to speak, and how to ask. */
 interface ConfirmDeps {
   ask: Ask;
@@ -113,8 +139,11 @@ async function confirmCandidate(
 }
 
 /** Ask for a title, confirm a priced candidate when one must be picked, and say
- *  what happened. A transport failure comes back as `failed` rather than
- *  throwing, so every caller patches its view the same way. */
+ *  what happened. With `pick.candidate` the caller already chose in the panel:
+ *  the server grabs exactly that release, and the only thing left is the
+ *  confirmation when it costs points. A transport failure comes back as
+ *  `failed` rather than throwing, so every caller patches its view the same
+ *  way. */
 export function useAcquisition(): Acquire {
   const t = useT();
   const fmt = useFormat();
@@ -122,9 +151,20 @@ export function useAcquisition(): Acquire {
   const { client } = useAuth();
 
   return useCallback<Acquire>(
-    async (target, scope = {}) => {
+    async (target, scope = {}, pick = {}) => {
       const body = askBody(target, scope);
+      // The panel's pick travels on the same `start` call: the server then does
+      // exactly what `/confirm` would, so the price is the one quoted for this
+      // release.
+      const picked = pick.candidate ?? null;
       try {
+        if (picked) {
+          const done = await client.acquisition.start({ ...body, candidate: picked });
+          if (done.state === 'needs_confirm') {
+            return await confirmCandidate({ ask: confirm, client, t, bytes: fmt.bytes }, body, done);
+          }
+          return toResult(done);
+        }
         const outcome = await client.acquisition.start(body);
         if (outcome.state !== 'needs_confirm') {
           return outcome;

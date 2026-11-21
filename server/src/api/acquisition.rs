@@ -67,6 +67,7 @@ use crate::state::SharedState;
 pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/acquisition/start", post(start))
+        .route("/acquisition/candidates", post(candidates))
         .route("/acquisition/confirm", post(confirm))
         .route("/acquisition/status", get(status))
 }
@@ -98,6 +99,11 @@ pub struct StartBody {
     /// per-library placement policy lands with the library settings work.
     #[serde(default)]
     library: Option<String>,
+    /// The release the caller picked in the acquisition panel, echoed back
+    /// exactly as the search returned it. Absent means the server chooses, which
+    /// is the plain `/start` behaviour.
+    #[serde(default)]
+    candidate: Option<Value>,
 }
 
 /// `POST /api/acquisition/confirm`: the identification fields plus the exact
@@ -141,6 +147,14 @@ pub async fn start(
     // is safe inline. A missing point is not an error here: the plan falls
     // through to the BT provider.
     let cloud = point::require(&state, &user, PROVIDER_CLOUD115).ok();
+    // A candidate in the body is the panel's explicit pick: it takes the same
+    // path `/confirm` does, so the price charged is the one quoted for exactly
+    // this release. A missing provider cannot fall through to BT in that case.
+    let picked = body
+        .candidate
+        .as_ref()
+        .filter(|value| !value.is_null())
+        .cloned();
     let reply = service(move || match body.kind {
         Kind::Show => show_step(&state, &user, &body),
         Kind::Movie => {
@@ -151,11 +165,153 @@ pub async fn start(
                 body.year,
                 body.library.as_deref(),
             )?;
-            start_movie(&state, &user, cloud, &ask)
+            match picked {
+                Some(candidate) => {
+                    let Some(resolve) = cloud.as_ref() else {
+                        return Ok(AcquisitionResponse::new(AcquisitionState::Failed)
+                            .provider(PROVIDER_CLOUD115)
+                            .error("the cloud provider is not available"));
+                    };
+                    confirm_movie(&state, resolve, &ask, &candidate)
+                }
+                None => start_movie(&state, &user, cloud, &ask),
+            }
         }
     })
     .await?;
     Ok(Json(reply).into_response())
+}
+
+/// `POST /api/acquisition/candidates` body: what the acquisition panel asks for
+/// before the caller picks a release.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CandidatesBody {
+    kind: Kind,
+    tmdb_id: u64,
+    title: String,
+    #[serde(default)]
+    year: Option<u32>,
+    #[serde(default)]
+    library: Option<String>,
+}
+
+/// One row the panel draws. The candidate is passed through untouched so
+/// `/confirm` can be handed back exactly what the caller saw.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CandidateView {
+    candidate: Candidate,
+    /// Whether accepting this one needs the caller's click (a price, or an
+    /// unknown price). A known-free or already-unlocked release does not.
+    needs_confirm: bool,
+    /// The server's own pick under the same ranking `/start` uses, so the
+    /// panel's "automatic" mode and a manual pick converge.
+    recommended: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CandidatesReply {
+    /// Which release the automatic path would take, if any.
+    recommended_id: Option<String>,
+    candidates: Vec<CandidateView>,
+    /// Why there is nothing to show (provider missing, not signed in, the
+    /// search failed). Empty when the list itself is the answer, even empty.
+    blockers: Vec<String>,
+    /// The title is already held; the panel shows that instead of a search.
+    owned: Option<OwnedState>,
+}
+
+/// `POST /api/acquisition/candidates` — the list `/start` would otherwise
+/// choose from on its own. Nothing is written, charged or queued here: this is
+/// the read half of the acquisition panel, and `/confirm` still performs the
+/// grab.
+pub async fn candidates(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    Json(body): Json<CandidatesBody>,
+) -> Result<Response, Response> {
+    require(&user, Permission::RequestsCreate)?;
+    if body.tmdb_id == 0 || body.title.trim().is_empty() {
+        return Err(json_error(
+            StatusCode::BAD_REQUEST,
+            "a title needs a TMDB id and a name",
+        ));
+    }
+    let locale = i18n::user_locale(&user);
+    let Some(cloud) = point::require(&state, &user, PROVIDER_CLOUD115).ok() else {
+        return Err(lerr(locale, StatusCode::NOT_FOUND, "error.moduleDisabled"));
+    };
+    let reply = service(move || match body.kind {
+        Kind::Show => Ok(CandidatesReply {
+            recommended_id: None,
+            candidates: Vec::new(),
+            blockers: vec![
+                "a show is requested as a whole; the request queue lists its releases".into(),
+            ],
+            owned: None,
+        }),
+        Kind::Movie => {
+            let ask = movie_ask(
+                &state,
+                body.tmdb_id,
+                body.title.trim(),
+                body.year,
+                body.library.as_deref(),
+            )?;
+            list_candidates(&state, &cloud, &ask)
+        }
+    })
+    .await?;
+    Ok(Json(reply).into_response())
+}
+
+/// Read the provider's list for one film. A provider failure is reported in
+/// `blockers` rather than as an HTTP error: the panel must still open, if only
+/// to say why there is nothing to pick.
+fn list_candidates(
+    state: &SharedState,
+    cloud: &Resolver,
+    ask: &MovieAsk,
+) -> anyhow::Result<CandidatesReply> {
+    let unit = planner::movie_unit(ask.tmdb_id);
+    planner::ensure_unit(state, &unit, &ask.title, ask.year)?;
+    let plan = planner::plan(state, &unit, ask.policy)?;
+    if plan.next == NextAction::Complete {
+        return Ok(CandidatesReply {
+            recommended_id: None,
+            candidates: Vec::new(),
+            blockers: Vec::new(),
+            owned: Some(plan.owned),
+        });
+    }
+    let hits = match cloud_search(cloud, &unit, ask) {
+        Ok(hits) => hits,
+        Err(why) => {
+            return Ok(CandidatesReply {
+                recommended_id: None,
+                candidates: Vec::new(),
+                blockers: vec![why],
+                owned: None,
+            });
+        }
+    };
+    let recommended_id = best_candidate(&hits).map(|hit| hit.candidate.id.clone());
+    let candidates = hits
+        .into_iter()
+        .map(|hit| CandidateView {
+            recommended: recommended_id.as_deref() == Some(hit.candidate.id.as_str()),
+            needs_confirm: needs_confirm(&hit.candidate),
+            candidate: hit.candidate,
+        })
+        .collect();
+    Ok(CandidatesReply {
+        recommended_id,
+        candidates,
+        blockers: Vec::new(),
+        owned: None,
+    })
 }
 
 /// `POST /api/acquisition/confirm` — the caller accepted the quote of the

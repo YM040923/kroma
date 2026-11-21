@@ -43,6 +43,8 @@ export type FolderView = z.infer<typeof FolderView>;
 export const CloudSettingsView = z.object({
   hasCookie: z.boolean(),
   baseUrl: z.string(),
+  /** Where acquisitions land before the organiser classifies them. */
+  transitFolder: z.string().default(''),
   libraries: z.array(CloudLibrary),
   options: CloudOptions,
   libraryFolders: z.array(FolderView),

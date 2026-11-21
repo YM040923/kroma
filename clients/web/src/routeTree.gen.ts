@@ -58,6 +58,7 @@ import { Route as AppPeoplePersonRouteImport } from './routes/_app.people.$perso
 import { Route as AppShowsIndexRouteImport } from './routes/_app.shows.index';
 import { Route as AppShowsIdRouteImport } from './routes/_app.shows.$id';
 import { Route as AppTrendingTypeRouteImport } from './routes/_app.trending.$type';
+import { Route as AdminAcquisitionIndexRouteImport } from './routes/admin.acquisition.index';
 import { Route as AdminLibrariesIndexRouteImport } from './routes/admin.libraries.index';
 import { Route as AdminLibrariesIdRouteImport } from './routes/admin.libraries.$id';
 import { Route as AdminModulesIndexRouteImport } from './routes/admin.modules.index';
@@ -312,6 +313,11 @@ const AppTrendingTypeRoute = AppTrendingTypeRouteImport.update({
   path: '/trending/$type',
   getParentRoute: () => AppRoute,
 } as any);
+const AdminAcquisitionIndexRoute = AdminAcquisitionIndexRouteImport.update({
+  id: '/acquisition/',
+  path: '/acquisition/',
+  getParentRoute: () => AdminRoute,
+} as any);
 const AdminLibrariesIndexRoute = AdminLibrariesIndexRouteImport.update({
   id: '/libraries/',
   path: '/libraries/',
@@ -416,6 +422,7 @@ export interface FileRoutesByFullPath {
   '/genres/': typeof AppGenresIndexRoute;
   '/movies/': typeof AppMoviesIndexRoute;
   '/shows/': typeof AppShowsIndexRoute;
+  '/admin/acquisition/': typeof AdminAcquisitionIndexRoute;
   '/admin/libraries/': typeof AdminLibrariesIndexRoute;
   '/admin/modules/': typeof AdminModulesIndexRoute;
   '/admin/monitoring/': typeof AdminMonitoringIndexRoute;
@@ -474,6 +481,7 @@ export interface FileRoutesByTo {
   '/genres': typeof AppGenresIndexRoute;
   '/movies': typeof AppMoviesIndexRoute;
   '/shows': typeof AppShowsIndexRoute;
+  '/admin/acquisition': typeof AdminAcquisitionIndexRoute;
   '/admin/libraries': typeof AdminLibrariesIndexRoute;
   '/admin/modules': typeof AdminModulesIndexRoute;
   '/admin/monitoring': typeof AdminMonitoringIndexRoute;
@@ -536,6 +544,7 @@ export interface FileRoutesById {
   '/_app/genres/': typeof AppGenresIndexRoute;
   '/_app/movies/': typeof AppMoviesIndexRoute;
   '/_app/shows/': typeof AppShowsIndexRoute;
+  '/admin/acquisition/': typeof AdminAcquisitionIndexRoute;
   '/admin/libraries/': typeof AdminLibrariesIndexRoute;
   '/admin/modules/': typeof AdminModulesIndexRoute;
   '/admin/monitoring/': typeof AdminMonitoringIndexRoute;
@@ -597,6 +606,7 @@ export interface FileRouteTypes {
     | '/genres/'
     | '/movies/'
     | '/shows/'
+    | '/admin/acquisition/'
     | '/admin/libraries/'
     | '/admin/modules/'
     | '/admin/monitoring/'
@@ -655,6 +665,7 @@ export interface FileRouteTypes {
     | '/genres'
     | '/movies'
     | '/shows'
+    | '/admin/acquisition'
     | '/admin/libraries'
     | '/admin/modules'
     | '/admin/monitoring'
@@ -716,6 +727,7 @@ export interface FileRouteTypes {
     | '/_app/genres/'
     | '/_app/movies/'
     | '/_app/shows/'
+    | '/admin/acquisition/'
     | '/admin/libraries/'
     | '/admin/modules/'
     | '/admin/monitoring/'
@@ -1082,6 +1094,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTrendingTypeRouteImport;
       parentRoute: typeof AppRoute;
     };
+    '/admin/acquisition/': {
+      id: '/admin/acquisition/';
+      path: '/acquisition';
+      fullPath: '/admin/acquisition/';
+      preLoaderRoute: typeof AdminAcquisitionIndexRouteImport;
+      parentRoute: typeof AdminRoute;
+    };
     '/admin/libraries/': {
       id: '/admin/libraries/';
       path: '/libraries';
@@ -1244,6 +1263,7 @@ interface AdminRouteChildren {
   AdminLibrariesIdRoute: typeof AdminLibrariesIdRoute;
   AdminModulesIdRoute: typeof AdminModulesIdRoute;
   AdminRequestsIdRoute: typeof AdminRequestsIdRoute;
+  AdminAcquisitionIndexRoute: typeof AdminAcquisitionIndexRoute;
   AdminLibrariesIndexRoute: typeof AdminLibrariesIndexRoute;
   AdminModulesIndexRoute: typeof AdminModulesIndexRoute;
   AdminMonitoringIndexRoute: typeof AdminMonitoringIndexRoute;
@@ -1273,6 +1293,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminLibrariesIdRoute: AdminLibrariesIdRoute,
   AdminModulesIdRoute: AdminModulesIdRoute,
   AdminRequestsIdRoute: AdminRequestsIdRoute,
+  AdminAcquisitionIndexRoute: AdminAcquisitionIndexRoute,
   AdminLibrariesIndexRoute: AdminLibrariesIndexRoute,
   AdminModulesIndexRoute: AdminModulesIndexRoute,
   AdminMonitoringIndexRoute: AdminMonitoringIndexRoute,

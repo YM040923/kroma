@@ -33,6 +33,8 @@ export interface Cloud115Save {
   cookie?: string;
   clearCookie?: boolean;
   baseUrl: string;
+  /** Where acquisitions land before the organiser classifies them. */
+  transitFolder: string;
   libraries: CloudLibrary[];
   options: CloudOptions;
 }

@@ -124,6 +124,11 @@ pub struct Stored {
     /// The subscription source the provider proxies to, for example
     /// `http://172.17.0.1:8790`.
     pub source_url: String,
+    /// The drive folder every acquisition lands in, before the organiser
+    /// (Symedia) classifies it, for example `/待整理`. Empty means the drive
+    /// root, which is almost never what an operator wants: a readiness check
+    /// names it as a blocker instead.
+    pub transit_folder: String,
     pub libraries: Vec<Library>,
     pub options: Options,
     /// Every folder the mirror has listed: 115 folder id → its local directory.

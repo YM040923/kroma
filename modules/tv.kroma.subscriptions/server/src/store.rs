@@ -35,6 +35,18 @@ pub struct Task {
     pub episode_start: i64,
     pub episode_total: i64,
     pub link: String,
+    /// The unlock budgets were approved for this title. Set when the operator
+    /// accepts the first priced release; later episodes of the same title reuse
+    /// it instead of asking again. Zero while nothing was approved.
+    pub approved_at: i64,
+    /// Every `season:episode` this task already sent, so a release that appears
+    /// again (a re-post, or a second candidate for the same episode) never
+    /// spends points twice. Newest last; bounded.
+    pub sent_episodes: Vec<String>,
+    /// Shares this task unlocked and now follows for free. Each `(shareCode,
+    /// password)` is polled for new files and its additions are transferred
+    /// without paying again.
+    pub following_shares: Vec<FollowedShare>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -51,6 +63,22 @@ pub struct Item {
     pub size: String,
     pub link: String,
     pub price: i64,
+}
+
+/// One share this task unlocked and now follows. A share keeps receiving
+/// episodes after the unlock, so its additions are transferred for free.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FollowedShare {
+    pub share_code: String,
+    pub password: String,
+    /// What the share was called when it was unlocked, for the task card.
+    pub name: String,
+    pub unlocked_at: i64,
+    pub last_checked_at: i64,
+    pub last_error: String,
+    /// File ids already transferred from this share.
+    pub seen: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -73,6 +101,12 @@ pub struct Stored {
     pub source_url: String,
     /// Last discovery pass, so opening the page does not hammer the source.
     pub last_discovery_at: i64,
+    /// Last pass that asked the source for *new releases* (the expensive half:
+    /// it probes prices). Followed shares are checked on their own, cheaper
+    /// cadence, so a five-minute follow never turns into five-minute probing.
+    pub last_search_at: i64,
+    /// Last pass over followed shares for new files.
+    pub last_follow_at: i64,
     /// Upcoming episodes, cached so opening the calendar does not read TMDB
     /// once per task on every visit.
     pub last_calendar_at: i64,

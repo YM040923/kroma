@@ -21,6 +21,9 @@ export const AcquisitionStartBody = z.object({
   seasons: z.array(z.number()).nullish(),
   episodes: z.array(EpisodeRef).nullish(),
   library: z.string().nullish(),
+  /** The release the panel picked, echoed back as the search returned it.
+   *  Absent means the server chooses. */
+  candidate: z.record(z.string(), z.unknown()).nullish(),
 });
 export type AcquisitionStartBody = z.infer<typeof AcquisitionStartBody>;
 
@@ -32,17 +35,21 @@ export type AcquisitionOwned = z.infer<typeof AcquisitionOwned>;
 /** One 115 candidate a search turned up. `index` addresses it in that search,
  *  `size` may be unknown (a share listing omits it until it is probed), and
  *  `price` is what unlocking the share costs in points, when the provider says.
- *  It is handed back verbatim to `confirm`, which is why every field travels. */
-export const Cloud115Candidate = z.object({
-  index: z.number(),
-  fileName: z.string(),
-  size: z.string().nullish(),
-  sizeBytes: z.number().nullish(),
-  price: z.number().nullish(),
-  resource: z.string().nullish(),
-  link: z.string().nullish(),
-  shareCode: z.string().nullish(),
-});
+ *  It is handed back verbatim to `confirm`, which is why every field travels:
+ *  the catch-all keeps the provider's own `id` and `extra` intact, and a schema
+ *  that dropped them would hand the server a candidate it cannot identify. */
+export const Cloud115Candidate = z
+  .object({
+    index: z.number(),
+    fileName: z.string(),
+    size: z.string().nullish(),
+    sizeBytes: z.number().nullish(),
+    price: z.number().nullish(),
+    resource: z.string().nullish(),
+    link: z.string().nullish(),
+    shareCode: z.string().nullish(),
+  })
+  .catchall(z.unknown());
 export type Cloud115Candidate = z.infer<typeof Cloud115Candidate>;
 
 /** What confirming would cost. `priceKnown` is the flag that matters: false
@@ -96,6 +103,30 @@ export const AcquisitionConfirmResult = z.discriminatedUnion('state', [
   z.object({ state: z.literal('failed'), error: z.string() }),
 ]);
 export type AcquisitionConfirmResult = z.infer<typeof AcquisitionConfirmResult>;
+
+/** `POST /api/acquisition/status` and the panel's list: one candidate the search
+ *  turned up, plus what the caller must do about it. `recommended` marks the
+ *  release the automatic path would take, so a manual pick and the server's own
+ *  choice converge. `needsConfirm` is true when accepting costs points or the
+ *  price is unknown. */
+export const AcquisitionCandidate = z.object({
+  candidate: Cloud115Candidate,
+  needsConfirm: z.boolean(),
+  recommended: z.boolean(),
+});
+export type AcquisitionCandidate = z.infer<typeof AcquisitionCandidate>;
+
+/** `POST /api/acquisition/candidates`: the list the acquisition panel draws.
+ *  Nothing is charged or queued by asking; `blockers` says why the list is
+ *  empty (provider missing, not signed in, the search failed), and `owned` is
+ *  set when the title is already held so the panel can say so instead. */
+export const AcquisitionCandidates = z.object({
+  recommendedId: z.string().nullish(),
+  candidates: z.array(AcquisitionCandidate),
+  blockers: z.array(z.string()).default([]),
+  owned: AcquisitionOwned.nullish(),
+});
+export type AcquisitionCandidates = z.infer<typeof AcquisitionCandidates>;
 
 /** `GET /api/acquisition/status?attemptId=`. The attempt as its provider
  *  reports it: `state` is the provider's own word (`queued`, `running`,

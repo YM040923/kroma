@@ -1,5 +1,6 @@
 import type { RequestContext } from '../../core/client';
 import {
+  AcquisitionCandidates,
   type AcquisitionConfirmBody,
   AcquisitionConfirmResult,
   AcquisitionOutcome,
@@ -13,9 +14,14 @@ import {
  *  before its points are spent. */
 export default function acquisitionApi(ctx: RequestContext) {
   return {
+    /** The releases a search turned up, for the panel to list before anything is
+     *  grabbed. Read-only: `start` or `confirm` still performs the grab. */
+    candidates: (body: AcquisitionStartBody) =>
+      ctx.post('/acquisition/candidates', AcquisitionCandidates, { body }),
+
     /** Ask for a title, or for some seasons/episodes of a show. The answer says
      *  what happened: owned, queued for review, started, needs a confirmation,
-     *  or failed. */
+     *  or failed. With `candidate` set the named release is grabbed directly. */
     start: (body: AcquisitionStartBody) =>
       ctx.post('/acquisition/start', AcquisitionOutcome, { body }),
 

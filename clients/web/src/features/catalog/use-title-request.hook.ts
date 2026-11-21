@@ -1,6 +1,6 @@
 import type { EpisodeRef } from '@kromatv/client/requests';
 import { useT } from '@kromatv/ui';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { EPISODES_ANCHOR } from '#web/shared/lib/show-search';
 import { epKey, toEpisodeRefs, toggle } from '#web/features/catalog/episode-selection';
 import type { TitleView } from '#web/shared/lib/title-view';
@@ -67,6 +67,15 @@ export interface TitleRequestState {
   error: string | null;
   selected: Set<string>;
   pendingEps: Set<string>;
+  /** Whether the acquisition panel is open, and what it is asking for. A film's
+   *  ask opens it (that is where releases are listed); a show's season buttons
+   *  keep the direct path, because a show becomes a request, not a grab. */
+  panelOpen: boolean;
+  panelScope: { seasons: number[] | null; episodes?: EpisodeRef[] };
+  openPanel: (scope?: { seasons: number[] | null; episodes?: EpisodeRef[] }) => void;
+  closePanel: () => void;
+  /** Take a release from the panel, or `null` for the server's own pick. */
+  takeFromPanel: (candidate: Record<string, unknown> | null) => Promise<void>;
   toggleEpisode: (season: number, episode: number) => void;
   requestSelected: () => void;
   requestSeason: (season: number) => void;
@@ -87,15 +96,26 @@ export function useTitleRequest(initial: TitleView): TitleRequestState {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [pendingEps, setPendingEps] = useState<Set<string>>(() => new Set());
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelScope, setPanelScope] = useState<{
+    seasons: number[] | null;
+    episodes?: EpisodeRef[];
+  }>({ seasons: null });
 
-  const doRequest = (seasons: number[] | null, episodes?: EpisodeRef[]) => {
+  const openPanel = useCallback((scope?: { seasons: number[] | null; episodes?: EpisodeRef[] }) => {
+    setPanelScope(scope ?? { seasons: null });
+    setPanelOpen(true);
+  }, []);
+  const closePanel = useCallback(() => setPanelOpen(false), []);
+
+  const doRequest = (seasons: number[] | null, episodes?: EpisodeRef[], candidate?: Record<string, unknown> | null) => {
     const { tmdbId, kind, title, year } = view;
     if (tmdbId == null) {
       return;
     }
     setBusy(true);
     setError(null);
-    void acquire({ kind, tmdbId, title, year }, { seasons, episodes })
+    void acquire({ kind, tmdbId, title, year }, { seasons, episodes }, { candidate })
       .then((outcome) => {
         if (outcome.state === 'failed') {
           setError(outcome.error || t('discover.requestFailed'));
@@ -113,6 +133,19 @@ export function useTitleRequest(initial: TitleView): TitleRequestState {
       .finally(() => setBusy(false));
   };
 
+  /** The panel's `onTake`: a release the caller picked, or `null` for the
+   *  server's own choice. The ask runs against the scope the panel opened with. */
+  const takeFromPanel = useCallback(
+    (candidate: Record<string, unknown> | null) => {
+      doRequest(panelScope.seasons, panelScope.episodes, candidate);
+      return Promise.resolve();
+    },
+    // `doRequest` closes over `view`; rebuilding on every view change is fine,
+    // the panel re-renders with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [panelScope, view],
+  );
+
   const toggleEpisode = (season: number, episode: number) =>
     setSelected((prev) => toggle(prev, epKey(season, episode)));
   const requestSelected = () => {
@@ -127,7 +160,7 @@ export function useTitleRequest(initial: TitleView): TitleRequestState {
     // With no season list there is no section to scroll to and nothing to pick,
     // so the button asks for the whole show rather than doing nothing at all.
     if (view.kind !== 'show' || view.seasons.length === 0) {
-      doRequest(null);
+      openPanel({ seasons: null });
       return;
     }
     document.getElementById(EPISODES_ANCHOR)?.scrollIntoView({ behavior: 'smooth' });
@@ -139,6 +172,11 @@ export function useTitleRequest(initial: TitleView): TitleRequestState {
     error,
     selected,
     pendingEps,
+    panelOpen,
+    panelScope,
+    openPanel,
+    closePanel,
+    takeFromPanel,
     toggleEpisode,
     requestSelected,
     requestSeason,

@@ -192,88 +192,15 @@ fn validate(body: &TaskBody) -> Result<(), String> {
 async fn list<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser) -> Result<Json<store::Stored>, axum::response::Response> {
     require(&host, &user)?;
     poll_transfers();
-    discover();
-    Ok(Json(store::load()))
-}
-
-/// Finds releases the enabled show subscriptions have not been sent yet. This
-/// is discovery only: it never unlocks or spends points; a person still has to
-/// confirm a candidate from the page.
-pub(crate) fn discover() {
+    let now = kroma_module_sdk::primitives::now_ms();
     let mut stored = store::load();
     let source = stored.source_url.clone();
-    if source.trim().is_empty() {
-        return;
+    if !source.trim().is_empty() {
+        crate::follow::discover(&source, &mut stored, now);
+        let _ = store::save(&stored);
     }
-    let now = kroma_module_sdk::primitives::now_ms();
-    if now - stored.last_discovery_at < 15 * 60 * 1000 {
-        return;
-    }
-    let tasks: Vec<(String, String, i64)> = stored
-        .tasks
-        .iter()
-        .filter(|task| task.enabled && task.kind == "show")
-        .map(|task| (task.id.clone(), task.name.clone(), task.tmdb_id))
-        .collect();
-    for (id, name, tmdb_id) in tasks {
-        let path = format!("/search?tmdb={tmdb_id}&type=tv&probe=0");
-        let Ok(value) = source_json(&source, &path, None) else {
-            continue;
-        };
-        let candidates = value
-            .get("candidates")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        for candidate in candidates {
-            let resource = candidate
-                .get("fileName")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            if resource.is_empty() {
-                continue;
-            }
-            let key = format!("{id}:{resource}");
-            if stored.items.iter().any(|item| item.key == key) {
-                continue;
-            }
-            if stored
-                .tasks
-                .iter()
-                .any(|task| task.id == id && task.resource == resource)
-            {
-                continue;
-            }
-            stored.items.push(store::Item {
-                key,
-                task_id: id.clone(),
-                title: name.clone(),
-                state: "new".into(),
-                last_error: String::new(),
-                resource,
-                index: candidate.get("index").and_then(Value::as_i64).unwrap_or(0),
-                size: candidate
-                    .get("size")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string(),
-                link: candidate
-                    .get("link")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string(),
-                price: candidate.get("price").and_then(Value::as_i64).unwrap_or(0),
-            });
-        }
-    }
-    let excess = stored.items.len().saturating_sub(500);
-    if excess > 0 {
-        stored.items.drain(0..excess);
-    }
-    stored.last_discovery_at = now;
-    let _ = store::save(&stored);
+    crate::follow::follow_shares(now);
+    Ok(Json(store::load()))
 }
 
 #[derive(Deserialize)]
@@ -311,7 +238,13 @@ async fn execute_item<S: HostCtx + Clone + Send + Sync + 'static>(State(host): S
     task.resource_index = body.index;
     task.price = body.price;
     task.link = body.link.trim().into();
-    start_transfer(task, &source, &kind);
+    if start_transfer(task, &source, &kind) {
+        // The operator picked this one; that is also the approval for the
+        // title's later episodes. The share code is not known until the source
+        // reports the job, so following starts from `poll_transfers`.
+        task.approved_at = kroma_module_sdk::primitives::now_ms();
+        crate::follow::record_sent(task, &body.resource);
+    }
     let result = task.clone();
     for item in stored.items.iter_mut() {
         if item.task_id == id && item.resource == result.resource {
@@ -360,6 +293,22 @@ pub(crate) fn poll_transfers() {
                     .and_then(Value::as_str)
                 {
                     task.link = link.to_string();
+                }
+                // The share code only appears once the source has unlocked it,
+                // so this is where following starts: the same share keeps
+                // receiving episodes, and those cost nothing more.
+                let share_code = job
+                    .pointer("/result/unlocked/shareCode")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let password = job
+                    .pointer("/result/unlocked/password")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                if !share_code.is_empty() {
+                    note_unlocked(task, &task.resource.clone(), &share_code, &password);
                 }
                 task.last_run_at = kroma_module_sdk::primitives::now_ms();
                 changed = true;
@@ -527,18 +476,23 @@ async fn subscribe<S: HostCtx + Clone + Send + Sync + 'static>(State(host): Stat
         episode_start: 0,
         episode_total: 0,
         link: body.link.trim().into(),
+        approved_at: 0,
+        sent_episodes: Vec::new(),
+        following_shares: Vec::new(),
     };
-    start_transfer(&mut task, &stored.source_url, &body.kind);
+    if start_transfer(&mut task, &stored.source_url, &body.kind) {
+        task.approved_at = kroma_module_sdk::primitives::now_ms();
+    }
     stored.tasks.push(task.clone());
     store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
     Ok(Json(task))
 }
 
-fn start_transfer(task: &mut Task, source_url: &str, kind: &str) {
+fn start_transfer(task: &mut Task, source_url: &str, kind: &str) -> bool {
     if source_url.trim().is_empty() {
         task.status = "pending".into();
         task.last_error = "来源服务地址未配置".into();
-        return;
+        return false;
     }
     let payload = serde_json::json!({
         "tmdb": task.tmdb_id,
@@ -556,15 +510,42 @@ fn start_transfer(task: &mut Task, source_url: &str, kind: &str) {
                 .to_string();
             task.status = "unlocking".into();
             task.last_error.clear();
+            true
         }
         Err(reason) => {
             task.status = "failed".into();
             task.last_error = reason;
+            false
         }
     }
 }
 
-fn source_json(source_url: &str, path: &str, body: Option<&Value>) -> Result<Value, String> {
+/// After an unlock was asked for: remember the episode (so a re-post never
+/// charges twice) and start following the share for the episodes that arrive
+/// later. A share this task already follows is left alone, not duplicated.
+fn note_unlocked(task: &mut Task, resource: &str, share_code: &str, password: &str) {
+    crate::follow::record_sent(task, resource);
+    let share_code = share_code.trim();
+    if share_code.is_empty() {
+        return;
+    }
+    if task
+        .following_shares
+        .iter()
+        .any(|one| one.share_code == share_code)
+    {
+        return;
+    }
+    task.following_shares.push(store::FollowedShare {
+        share_code: share_code.to_string(),
+        password: password.to_string(),
+        name: resource.to_string(),
+        unlocked_at: kroma_module_sdk::primitives::now_ms(),
+        ..store::FollowedShare::default()
+    });
+}
+
+pub(crate) fn source_json(source_url: &str, path: &str, body: Option<&Value>) -> Result<Value, String> {
     let url = format!("{}{path}", source_url.trim_end_matches('/'));
     let fetch = Fetch::default().purpose("subscription-source").max_time(180);
     let response = match body {
@@ -592,7 +573,9 @@ async fn execute<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<
         .unwrap_or("movie");
     let source = stored.source_url.clone();
     let task = stored.tasks.iter_mut().find(|task| task.id == id).ok_or_else(|| json_error(StatusCode::NOT_FOUND, "订阅任务不存在"))?;
-    start_transfer(task, &source, kind);
+    if start_transfer(task, &source, kind) {
+        task.approved_at = kroma_module_sdk::primitives::now_ms();
+    }
     let result = task.clone();
     store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
     Ok(Json(result))

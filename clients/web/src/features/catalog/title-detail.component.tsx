@@ -8,6 +8,7 @@ import { classes, type HostElement, styles, Text, useStyles } from '@kromatv/ui/
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { AiSuggestRail } from '#web/features/catalog/ai-suggest-rail.component';
+import { AcquirePanel } from '#web/features/catalog/acquire-panel.component';
 import { CastRail, type SimilarItem, SimilarRail } from '#web/features/catalog/detail.component';
 import { SeasonSection } from '#web/features/catalog/episode-list.component';
 import { TitleHero } from '#web/features/catalog/title-hero.component';
@@ -202,7 +203,7 @@ export function TitleDetail({
   const s = useStyles(sDefinition);
 
   const t = useT();
-  const { user } = useAuth();
+  const { user, client } = useAuth();
   const navigate = useNavigate();
   const {
     view,
@@ -210,6 +211,9 @@ export function TitleDetail({
     error,
     selected,
     pendingEps,
+    panelOpen,
+    closePanel,
+    takeFromPanel,
     toggleEpisode,
     requestSelected,
     requestSeason,
@@ -289,6 +293,25 @@ export function TitleDetail({
         season={season}
         onRequestAll={requestAllSeasons}
         onClearSelection={clearSelection}
+      />
+
+      <AcquirePanel
+        open={panelOpen}
+        onClose={closePanel}
+        client={client}
+        ask={
+          view.tmdbId == null
+            ? null
+            : {
+                target: {
+                  kind: view.kind,
+                  tmdbId: view.tmdbId,
+                  title: view.title,
+                  year: view.year ?? null,
+                },
+              }
+        }
+        onTake={takeFromPanel}
       />
     </main>
   );

@@ -14,6 +14,8 @@
   "cloud115.cookieImport": "Vérifier et importer",
   "cloud115.baseUrl": "Adresse du serveur",
   "cloud115.baseUrlHint": "L'adresse par laquelle les lecteurs joignent ce KROMA, utilisée pour composer chaque .strm. Remplie automatiquement au lancement d'une synchronisation depuis cette page.",
+  "cloud115.transitFolder": "Dossier de transfert",
+  "cloud115.transitFolderHint": "Les films et épisodes acquis arrivent d'abord dans ce dossier du drive, puis l'organiseur (Symedia) les classe dans la médiathèque. Par exemple /待整理.",
   "cloud115.clearCookie": "Effacer le cookie",
   "cloud115.qrLogin": "Connexion par QR",
   "cloud115.qrApp": "Client de connexion",

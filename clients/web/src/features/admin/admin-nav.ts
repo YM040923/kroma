@@ -63,6 +63,13 @@ export const NAV_GROUPS: AdminNavGroup[] = [
     section: 'media',
     items: [
       {
+        to: '/admin/acquisition',
+        labelKey: 'admin.navAcquisition',
+        cap: ['library.manage', 'requests.manage'],
+        icon: 'download',
+        keywords: 'get acquire follow subscribe tasks',
+      },
+      {
         to: '/admin/monitoring',
         labelKey: 'admin.navMonitoring',
         cap: ['library.manage', 'requests.manage'],

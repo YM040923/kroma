@@ -1,5 +1,6 @@
 #![allow(clippy::result_large_err)]
 
+pub mod follow;
 pub mod routes;
 pub mod store;
 
@@ -28,11 +29,19 @@ impl<S: HostCtx + Clone + Send + Sync + 'static> ServerModule<S> for Subscriptio
 }
 
 fn poll<S: HostCtx + Clone + Send + Sync + 'static>(_host: &S) -> anyhow::Result<()> {
-    // Discovery is intentionally dry-run in the first slice. No 115 write or
-    // paid acquisition happens until an item is explicitly executed.
-    let _ = store::load();
+    // The tick is one minute; each pass decides its own cadence. Followed shares
+    // are cheap (a listing), new-release search probes prices and is paced
+    // separately. Neither spends points: an approved title is the only one that
+    // may, and that decision was the operator's.
+    let now = kroma_module_sdk::primitives::now_ms();
+    let mut stored = store::load();
+    let source = stored.source_url.clone();
     routes::poll_transfers();
-    routes::discover();
+    if !source.trim().is_empty() {
+        follow::discover(&source, &mut stored, now);
+        let _ = store::save(&stored);
+    }
+    follow::follow_shares(now);
     Ok(())
 }
 
