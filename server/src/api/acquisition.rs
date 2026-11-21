@@ -70,6 +70,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/acquisition/candidates", post(candidates))
         .route("/acquisition/confirm", post(confirm))
         .route("/acquisition/status", get(status))
+        .route("/acquisition/tasks", get(tasks))
 }
 
 /// Which kind of title the caller wants. Only `movie` gets the provider flow.
@@ -99,6 +100,11 @@ pub struct StartBody {
     /// per-library placement policy lands with the library settings work.
     #[serde(default)]
     library: Option<String>,
+    /// For a show: the season the panel was listing. Redundant with a
+    /// one-element `seasons`, but the panel sends it plainly and the transfer
+    /// needs it.
+    #[serde(default)]
+    season: Option<u32>,
     /// The release the caller picked in the acquisition panel, echoed back
     /// exactly as the search returned it. Absent means the server chooses, which
     /// is the plain `/start` behaviour.
@@ -218,9 +224,8 @@ fn acquire_show_candidate(
             .quote(quote_of(&normalized)));
     }
     let season = body
-        .seasons
-        .as_ref()
-        .and_then(|seasons| seasons.first().copied())
+        .season
+        .or_else(|| body.seasons.as_ref().and_then(|seasons| seasons.first().copied()))
         .unwrap_or(0);
     // A season pack has no per-episode unit; season 0 marks "the whole season"
     // so the attempt still has an identity the ledger can key on.
@@ -553,6 +558,7 @@ pub async fn confirm(
                 seasons: body.season.map(|season| vec![season]),
                 episodes: None,
                 library: body.library.clone(),
+                season: body.season,
                 candidate: Some(body.candidate.clone()),
             };
             acquire_show_candidate(&state, &cloud, &start, &body.candidate)
@@ -592,6 +598,27 @@ pub async fn status(
         Some(view) => Ok(Json(view).into_response()),
         None => Err(lerr(locale, StatusCode::NOT_FOUND, "error.itemNotFound")),
     }
+}
+
+/// `GET /api/acquisition/tasks` — every cloud acquisition the server has run,
+/// newest first. The request queue only knows BT-path work; a 115 grab has no
+/// request row, so the acquisition centre's "tasks" tab would miss it entirely
+/// without this.
+pub async fn tasks(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+) -> Result<Response, Response> {
+    require(&user, Permission::RequestsCreate)?;
+    let rows = blocking(move || {
+        let conn = state.db.get()?;
+        let mut attempts = db::attempts_by_provider(&conn, PROVIDER_CLOUD115)?;
+        // Newest first, and bounded: this is a recent-activity list.
+        attempts.reverse();
+        attempts.truncate(100);
+        Ok::<_, anyhow::Error>(attempts)
+    })
+    .await?;
+    Ok(Json(serde_json::json!({ "attempts": rows })).into_response())
 }
 
 /// The identity of a film ask, passed down the provider flow.
@@ -2242,8 +2269,12 @@ mod tests {
         assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
-    #[tokio::test]
-    async fn confirming_a_show_is_refused_rather_than_guessed() {
+    /// A show's candidate now takes the same transfer path its `/start` does. With
+/// no cloud provider installed, that path stops at "the provider is missing"
+/// (404), which is a different answer from the old flat "a show is not
+/// confirmed here" (400) — proof the request is no longer refused outright.
+#[tokio::test]
+    async fn confirming_a_show_reaches_the_show_path_instead_of_being_refused() {
         let app = test_app();
 
         let (status, _) = send(
@@ -2255,11 +2286,12 @@ mod tests {
                 "kind": "show",
                 "tmdbId": 1396,
                 "title": "Show",
+                "season": 1,
                 "candidate": candidate_json("one", Some(0), true),
             })),
         )
         .await;
 
-        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_ne!(status, StatusCode::BAD_REQUEST);
     }
 }

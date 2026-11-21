@@ -11,7 +11,11 @@ use crate::Pool;
 /// it. Two equal stamps mean the rows behind them are the same.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HomeActivity {
-    pub progress: (i64, Option<String>),
+    /// Count, newest `updated_at`, and the sum of resume positions. The sum is
+    /// what catches an update inside the same second: `updated_at` is an
+    /// RFC3339 string, so a viewer who seeks twice within one second would
+    /// otherwise leave the stamp unchanged and get a cached home.
+    pub progress: (i64, Option<String>, i64),
     pub watched: (i64, Option<String>),
     pub plays: (i64, Option<i64>),
     pub taste: Option<i64>,
@@ -27,6 +31,7 @@ pub fn home_activity(pool: &Pool, user_id: &str) -> Result<HomeActivity> {
         "SELECT \
            (SELECT COUNT(*) FROM progress WHERE user_id = ?1), \
            (SELECT MAX(updated_at) FROM progress WHERE user_id = ?1), \
+           (SELECT COALESCE(SUM(position_ms), 0) FROM progress WHERE user_id = ?1), \
            (SELECT COUNT(*) FROM watched WHERE user_id = ?1), \
            (SELECT MAX(watched_at) FROM watched WHERE user_id = ?1), \
            (SELECT COUNT(*) FROM play_history), \
@@ -38,12 +43,12 @@ pub fn home_activity(pool: &Pool, user_id: &str) -> Result<HomeActivity> {
         params![user_id],
         |r| {
             Ok(HomeActivity {
-                progress: (r.get(0)?, r.get(1)?),
-                watched: (r.get(2)?, r.get(3)?),
-                plays: (r.get(4)?, r.get(5)?),
-                taste: r.get(6)?,
-                vectors: r.get(7)?,
-                listed: (r.get(8)?, r.get(9)?),
+                progress: (r.get(0)?, r.get(1)?, r.get(2)?),
+                watched: (r.get(3)?, r.get(4)?),
+                plays: (r.get(5)?, r.get(6)?),
+                taste: r.get(7)?,
+                vectors: r.get(8)?,
+                listed: (r.get(9)?, r.get(10)?),
             })
         },
     )?;

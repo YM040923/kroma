@@ -73,10 +73,10 @@ describe('the console pages', () => {
     expect(new Set(sections).size).toBe(sections.length);
   });
 
-  it('opens the library to whoever can manage titles or requests', () => {
+  it('opens the acquisition centre and the library to whoever can manage titles or requests', () => {
     const items = adminNavSections([], moderator).sections.flatMap((section) => section.items);
 
-    expect(items.map((item) => item.to)).toEqual(['/admin/monitoring']);
+    expect(items.map((item) => item.to)).toEqual(['/admin/acquisition', '/admin/monitoring']);
   });
 
   it('keeps the watch history beside the dashboard, behind the users permission', () => {

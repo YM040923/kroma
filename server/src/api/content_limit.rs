@@ -159,7 +159,8 @@ mod tests {
     fn a_known_rating_over_the_limit_is_hidden() {
         let twelve = limit(12, true);
 
-        assert!(twelve.allows(Some("PG-13")));
+        // PG-13 stands for 13, which is above a 12 limit; PG and below are not.
+        assert!(!twelve.allows(Some("PG-13")));
         assert!(twelve.allows(Some("PG")));
         assert!(!twelve.allows(Some("R")));
         assert!(!twelve.allows(Some("TV-MA")));

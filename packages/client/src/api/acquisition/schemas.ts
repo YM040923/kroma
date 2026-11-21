@@ -155,6 +155,30 @@ export const AcquisitionCandidates = z.object({
 });
 export type AcquisitionCandidates = z.infer<typeof AcquisitionCandidates>;
 
+/** One cloud acquisition the server has run, as `GET /api/acquisition/tasks`
+ *  answers it. A 115 grab has no request row, so this list is the only place the
+ *  tasks tab can see it. */
+export const AcquisitionTask = z.object({
+  id: z.string(),
+  unitKey: z.string(),
+  provider: z.string(),
+  status: z.string(),
+  errorCode: z.string().nullish(),
+  errorMessage: z.string().nullish(),
+  jobId: z.string().nullish(),
+  costPoints: z.number().nullish(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  finishedAt: z.number().nullish(),
+});
+export type AcquisitionTask = z.infer<typeof AcquisitionTask>;
+
+/** `GET /api/acquisition/tasks`. */
+export const AcquisitionTasks = z.object({
+  attempts: z.array(AcquisitionTask).default([]),
+});
+export type AcquisitionTasks = z.infer<typeof AcquisitionTasks>;
+
 /** `GET /api/acquisition/status?attemptId=`. The attempt as its provider
  *  reports it: `state` is the provider's own word (`queued`, `running`,
  *  `done`, `failed`, ...), and everything else is what the provider could say

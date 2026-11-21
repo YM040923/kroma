@@ -6,6 +6,7 @@ import {
   AcquisitionOutcome,
   type AcquisitionStartBody,
   AcquisitionStatusView,
+  AcquisitionTasks,
 } from './schemas';
 
 /** Acquisition (`requests.create`): the one entry point a page uses to ask for
@@ -33,6 +34,11 @@ export default function acquisitionApi(ctx: RequestContext) {
     /** How the attempt a `started`/`needs_confirm` answer named is getting on. */
     status: (attemptId: string) =>
       ctx.get('/acquisition/status', AcquisitionStatusView, { query: { attemptId } }),
+
+    /** The cloud acquisitions the server has run, newest first. The request
+     *  queue does not know about 115 grabs, so this is what the tasks tab reads
+     *  for them. */
+    tasks: () => ctx.get('/acquisition/tasks', AcquisitionTasks),
   };
 }
 
