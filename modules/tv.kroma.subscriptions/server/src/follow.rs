@@ -213,11 +213,7 @@ pub fn follow_shares(now: i64) -> bool {
         }
     }
     stored.last_follow_at = now;
-    if touched {
-        let _ = store::save(&stored);
-    } else {
-        store::save(&stored).ok();
-    }
+    let _ = store::save(&stored);
     touched
 }
 

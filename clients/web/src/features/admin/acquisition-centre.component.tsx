@@ -7,7 +7,7 @@
 // than duplicating its storage.
 
 import { useT } from '@kromatv/ui';
-import { Box, Button, Column, EmptyState, Row, Section, Text } from '@kromatv/ui/kit';
+import { Button, Column, EmptyState, Row, Section, Text } from '@kromatv/ui/kit';
 import { PageHeader, useCap } from '#web/features/admin/shell';
 import { MonitoredList } from '#web/features/admin/monitored-list.component';
 import { AcquisitionTasks } from '#web/features/admin/acquisition-tasks.component';
@@ -80,9 +80,4 @@ function FollowTab() {
       </Column>
     </Section.Root>
   );
-}
-
-/** A page body wrapper the tabs share, so the spacing is one decision. */
-export function CentreBody({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <Box mt={8}>{children}</Box>;
 }

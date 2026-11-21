@@ -1,24 +1,24 @@
 import type { MessageKey } from '@kromatv/i18n';
 import { ModuleSlot, useSlotEntries } from '@kromatv/module-sdk';
 import { useT } from '@kromatv/ui';
-import { Box, EmptyState, SegmentGroup } from '@kromatv/ui/kit';
+import { Box, Button, EmptyState, SegmentGroup } from '@kromatv/ui/kit';
+import { useNavigate } from '@tanstack/react-router';
 import type { LibraryState } from '#web/features/admin/monitoring-index-model';
 import { LibraryTitles } from '#web/features/admin/monitoring-list.component';
-import { RequestsQueue } from '#web/features/admin/requests-queue.component';
 import { Denied, PageHeader, useCap } from '#web/features/admin/shell';
 import { UpcomingList } from '#web/shared/ui/upcoming-list.component';
 
-export type LibraryTab = 'titles' | 'upgrades' | 'upcoming' | 'requests';
+export type LibraryTab = 'titles' | 'upgrades' | 'upcoming';
 
 const LABEL: Record<LibraryTab, MessageKey> = {
   titles: 'monitoring.tab.titles',
   upgrades: 'monitoring.tab.upgrades',
   upcoming: 'monitoring.tab.upcoming',
-  requests: 'monitoring.tab.requests',
 };
 
-/** The one page an admin manages the library from: every title, what is due,
- *  and what people asked for, each a tab of the same page. */
+/** The one page an admin manages the library from: every title and what is
+ *  due. Requests and the paid side of acquiring live in the acquisition
+ *  centre, so this page does not repeat them. */
 export function LibraryHubPage({
   tab,
   view,
@@ -31,6 +31,7 @@ export function LibraryHubPage({
   onView: (view: LibraryState) => void;
 }>) {
   const t = useT();
+  const navigate = useNavigate();
   const library = useCap('library.manage');
   const requests = useCap('requests.manage');
   const upgrades = useSlotEntries('library.upgrades').length > 0;
@@ -38,9 +39,25 @@ export function LibraryHubPage({
     ...(library ? (['titles'] as const) : []),
     ...(library && upgrades ? (['upgrades'] as const) : []),
     ...(library ? (['upcoming'] as const) : []),
-    ...(requests ? (['requests'] as const) : []),
   ];
   if (tabs.length === 0) {
+    // A viewer who moderates requests but does not manage the library has one
+    // place to go, and it is not this page.
+    if (requests) {
+      return (
+        <EmptyState.Root icon="download">
+          <EmptyState.Title>{t('centre.title')}</EmptyState.Title>
+          <EmptyState.Hint>{t('centre.libraryMoved')}</EmptyState.Hint>
+          <EmptyState.Actions>
+            <Button
+              variant="primary"
+              label={t('centre.open')}
+              onPress={() => void navigate({ to: '/admin/acquisition' })}
+            />
+          </EmptyState.Actions>
+        </EmptyState.Root>
+      );
+    }
     return <Denied />;
   }
   const shown = tabs.includes(tab) ? tab : (tabs[0] as LibraryTab);
@@ -74,7 +91,6 @@ export function LibraryHubPage({
         />
       ) : null}
       {shown === 'upcoming' ? <UpcomingList /> : null}
-      {shown === 'requests' ? <RequestsQueue /> : null}
     </>
   );
 }

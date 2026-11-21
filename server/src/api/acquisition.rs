@@ -118,6 +118,8 @@ pub struct ConfirmBody {
     year: Option<u32>,
     #[serde(default)]
     library: Option<String>,
+    #[serde(default)]
+    season: Option<u32>,
     candidate: Value,
 }
 
@@ -156,7 +158,20 @@ pub async fn start(
         .filter(|value| !value.is_null())
         .cloned();
     let reply = service(move || match body.kind {
-        Kind::Show => show_step(&state, &user, &body),
+        Kind::Show => match picked {
+            // Picking a release for a show transfers that release as it is (a
+            // season pack or a single episode): there is no per-episode unit to
+            // plan, and the request queue is not involved.
+            Some(candidate) => {
+                let Some(resolve) = cloud.as_ref() else {
+                    return Ok(AcquisitionResponse::new(AcquisitionState::Failed)
+                        .provider(PROVIDER_CLOUD115)
+                        .error("the cloud provider is not available"));
+                };
+                acquire_show_candidate(&state, resolve, &body, &candidate)
+            }
+            None => show_step(&state, &user, &body),
+        },
         Kind::Movie => {
             let ask = movie_ask(
                 &state,
@@ -182,6 +197,86 @@ pub async fn start(
     Ok(Json(reply).into_response())
 }
 
+/// Transfer one picked show release. Shows carry no per-episode unit here: the
+/// provider's own acquire takes the season and index, prices the unlock the
+/// same way, and the transfer lands in the transit folder.
+fn acquire_show_candidate(
+    state: &SharedState,
+    resolve: &Resolver,
+    body: &StartBody,
+    candidate: &Value,
+) -> anyhow::Result<AcquisitionResponse> {
+    let Some(normalized) = normalize_candidate(candidate) else {
+        return Ok(AcquisitionResponse::new(AcquisitionState::Failed)
+            .provider(PROVIDER_CLOUD115)
+            .error("candidate is not a valid acquisition candidate"));
+    };
+    if needs_confirm(&normalized) {
+        return Ok(AcquisitionResponse::new(AcquisitionState::NeedsConfirm)
+            .provider(PROVIDER_CLOUD115)
+            .candidate(candidate.clone())
+            .quote(quote_of(&normalized)));
+    }
+    let season = body
+        .seasons
+        .as_ref()
+        .and_then(|seasons| seasons.first().copied())
+        .unwrap_or(0);
+    // A season pack has no per-episode unit; season 0 marks "the whole season"
+    // so the attempt still has an identity the ledger can key on.
+    let unit = planner::episode_unit(body.tmdb_id, season, 0);
+    planner::ensure_unit(state, &unit, body.title.trim(), body.year)?;
+    let attempt = new_attempt(
+        &unit,
+        PROVIDER_CLOUD115,
+        AttemptStatus::Queued,
+        Some(candidate.clone()),
+        quote_json(quote_of(&normalized)),
+    );
+    insert_attempt(state, &attempt)?;
+    let raw: Value = kroma_module_host::call_point(
+        resolve,
+        PROVIDER_CLOUD115,
+        "acquire",
+        &json!({
+            "attemptId": &attempt.id,
+            "kind": "show",
+            "tmdbId": body.tmdb_id,
+            "title": body.title.trim(),
+            "year": body.year,
+            "library": &body.library,
+            "season": season,
+            "candidate": candidate,
+            "confirmed": true,
+        }),
+    )?;
+    let reply = AcquireReply::parse(raw)?;
+    let now = jobs::now_ms();
+    record_acquire(
+        &state.db,
+        &attempt.id,
+        &reply.job_id,
+        reply.points.unwrap_or(0),
+        reply.unlock_key.as_deref(),
+        now,
+    )?;
+    db::set_attempt_status(
+        &state.db,
+        &attempt.id,
+        AttemptStatus::Transferring,
+        "",
+        "",
+        None,
+        now,
+    )?;
+    Ok(AcquisitionResponse::new(AcquisitionState::Started)
+        .provider(PROVIDER_CLOUD115)
+        .attempt(&attempt.id)
+        .job(&reply.job_id)
+        .candidate(candidate.clone())
+        .quote(quote_of(&normalized)))
+}
+
 /// `POST /api/acquisition/candidates` body: what the acquisition panel asks for
 /// before the caller picks a release.
 #[derive(Debug, Deserialize)]
@@ -194,20 +289,53 @@ pub struct CandidatesBody {
     year: Option<u32>,
     #[serde(default)]
     library: Option<String>,
+    /// For a show: which season to list. Absent lists the source's default
+    /// (usually the latest); the panel offers a season picker when it matters.
+    #[serde(default)]
+    season: Option<u32>,
 }
 
-/// One row the panel draws. The candidate is passed through untouched so
-/// `/confirm` can be handed back exactly what the caller saw.
+/// One row the panel draws. The candidate is flattened: the provider's own
+/// fields (index, fileName, link, shareCode, price, size) are lifted out of
+/// `extra` to the top level, because the panel reads them and hands the whole
+/// object back to `start`/`confirm` — a shape whose fields live one level down
+/// would reach the client as an object it cannot name. `extra` is kept as well,
+/// so the provider's own reader still finds it on the way back in.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CandidateView {
-    candidate: Candidate,
-    /// Whether accepting this one needs the caller's click (a price, or an
-    /// unknown price). A known-free or already-unlocked release does not.
+    /// The flat candidate, as one object: identity fields plus every provider
+    /// field, plus the original `extra`.
+    #[serde(flatten)]
+    fields: serde_json::Map<String, Value>,
     needs_confirm: bool,
-    /// The server's own pick under the same ranking `/start` uses, so the
-    /// panel's "automatic" mode and a manual pick converge.
     recommended: bool,
+}
+
+/// Lift a normalized candidate back into one flat object. The identity fields
+/// win on a name clash; everything the provider put in `extra` rides beside
+/// them, and `extra` itself is kept verbatim for a re-issued `acquire`.
+fn flat_candidate(candidate: &Candidate) -> serde_json::Map<String, Value> {
+    let mut flat = match &candidate.extra {
+        Value::Object(map) => map.clone(),
+        _ => serde_json::Map::new(),
+    };
+    flat.insert("id".into(), Value::String(candidate.id.clone()));
+    flat.insert("provider".into(), Value::String(candidate.provider.clone()));
+    flat.insert("title".into(), Value::String(candidate.title.clone()));
+    if let Some(size) = candidate.size_bytes {
+        flat.insert("sizeBytes".into(), Value::from(size));
+    }
+    if let Some(points) = candidate.price_points {
+        flat.insert("pricePoints".into(), Value::from(points));
+    }
+    flat.insert("priceKnown".into(), Value::Bool(candidate.price_known));
+    flat.insert("grabbable".into(), Value::Bool(candidate.grabbable));
+    if let Some(reason) = candidate.reject_reason.clone() {
+        flat.insert("rejectReason".into(), Value::String(reason));
+    }
+    flat.insert("extra".into(), candidate.extra.clone());
+    flat
 }
 
 #[derive(Debug, Serialize)]
@@ -244,14 +372,7 @@ pub async fn candidates(
         return Err(lerr(locale, StatusCode::NOT_FOUND, "error.moduleDisabled"));
     };
     let reply = service(move || match body.kind {
-        Kind::Show => Ok(CandidatesReply {
-            recommended_id: None,
-            candidates: Vec::new(),
-            blockers: vec![
-                "a show is requested as a whole; the request queue lists its releases".into(),
-            ],
-            owned: None,
-        }),
+        Kind::Show => list_show_candidates(&state, &cloud, &body),
         Kind::Movie => {
             let ask = movie_ask(
                 &state,
@@ -265,6 +386,84 @@ pub async fn candidates(
     })
     .await?;
     Ok(Json(reply).into_response())
+}
+
+/// A show's list, straight from the provider: a show has no single unit to
+/// place, so the panel is the whole decision. Nothing is written; picking a row
+/// is what starts a transfer (`/start` with that candidate).
+fn list_show_candidates(
+    state: &SharedState,
+    cloud: &Resolver,
+    body: &CandidatesBody,
+) -> anyhow::Result<CandidatesReply> {
+    let _ = state;
+    let readiness: ProviderReadiness = match kroma_module_host::call_point(
+        cloud,
+        PROVIDER_CLOUD115,
+        "readiness",
+        &json!({ "library": &body.library }),
+    ) {
+        Ok(readiness) => readiness,
+        Err(error) => {
+            return Ok(CandidatesReply {
+                recommended_id: None,
+                candidates: Vec::new(),
+                blockers: vec![format!("cloud115 is not reachable: {error}")],
+                owned: None,
+            });
+        }
+    };
+    if !readiness.ready {
+        return Ok(CandidatesReply {
+            recommended_id: None,
+            candidates: Vec::new(),
+            blockers: if readiness.blockers.is_empty() {
+                vec!["cloud115 is not ready".into()]
+            } else {
+                readiness.blockers
+            },
+            owned: None,
+        });
+    }
+    let found: Value = match kroma_module_host::call_point(
+        cloud,
+        PROVIDER_CLOUD115,
+        "search",
+        &json!({
+            "kind": "show",
+            "tmdbId": body.tmdb_id,
+            "title": body.title.trim(),
+            "year": body.year,
+            "library": &body.library,
+            "season": body.season.unwrap_or(0),
+        }),
+    ) {
+        Ok(found) => found,
+        Err(error) => {
+            return Ok(CandidatesReply {
+                recommended_id: None,
+                candidates: Vec::new(),
+                blockers: vec![format!("cloud115 search failed: {error}")],
+                owned: None,
+            });
+        }
+    };
+    let hits = hits_of(found);
+    let recommended_id = best_candidate(&hits).map(|hit| hit.candidate.id.clone());
+    let candidates = hits
+        .into_iter()
+        .map(|hit| CandidateView {
+            recommended: recommended_id.as_deref() == Some(hit.candidate.id.as_str()),
+            needs_confirm: needs_confirm(&hit.candidate),
+            fields: flat_candidate(&hit.candidate),
+        })
+        .collect();
+    Ok(CandidatesReply {
+        recommended_id,
+        candidates,
+        blockers: Vec::new(),
+        owned: None,
+    })
 }
 
 /// Read the provider's list for one film. A provider failure is reported in
@@ -303,7 +502,7 @@ fn list_candidates(
         .map(|hit| CandidateView {
             recommended: recommended_id.as_deref() == Some(hit.candidate.id.as_str()),
             needs_confirm: needs_confirm(&hit.candidate),
-            candidate: hit.candidate,
+            fields: flat_candidate(&hit.candidate),
         })
         .collect();
     Ok(CandidatesReply {
@@ -324,12 +523,6 @@ pub async fn confirm(
     Json(body): Json<ConfirmBody>,
 ) -> Result<Response, Response> {
     require(&user, Permission::RequestsCreate)?;
-    if body.kind != Kind::Movie {
-        return Err(json_error(
-            StatusCode::BAD_REQUEST,
-            "only a film is confirmed here; a show goes through the request queue",
-        ));
-    }
     if body.tmdb_id == 0 || body.title.trim().is_empty() {
         return Err(json_error(
             StatusCode::BAD_REQUEST,
@@ -348,15 +541,32 @@ pub async fn confirm(
     let Some(cloud) = point::require(&state, &user, PROVIDER_CLOUD115).ok() else {
         return Err(lerr(locale, StatusCode::NOT_FOUND, "error.moduleDisabled"));
     };
-    let reply = service(move || {
-        let ask = movie_ask(
-            &state,
-            body.tmdb_id,
-            body.title.trim(),
-            body.year,
-            body.library.as_deref(),
-        )?;
-        confirm_movie(&state, &cloud, &ask, &body.candidate)
+    let reply = service(move || match body.kind {
+        // A show's candidate is confirmed against the same transfer path its
+        // `/start` took: no request queue, no per-episode plan.
+        Kind::Show => {
+            let start = StartBody {
+                kind: Kind::Show,
+                tmdb_id: body.tmdb_id,
+                title: body.title.clone(),
+                year: body.year,
+                seasons: body.season.map(|season| vec![season]),
+                episodes: None,
+                library: body.library.clone(),
+                candidate: Some(body.candidate.clone()),
+            };
+            acquire_show_candidate(&state, &cloud, &start, &body.candidate)
+        }
+        Kind::Movie => {
+            let ask = movie_ask(
+                &state,
+                body.tmdb_id,
+                body.title.trim(),
+                body.year,
+                body.library.as_deref(),
+            )?;
+            confirm_movie(&state, &cloud, &ask, &body.candidate)
+        }
     })
     .await?;
     Ok(Json(reply).into_response())

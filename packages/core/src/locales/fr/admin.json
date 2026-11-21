@@ -316,6 +316,8 @@
   "centre.tasksEmpty": "Rien n'est en cours d'obtention",
   "centre.tasksEmptyHint": "Après avoir appuyé sur Obtenir, ce qui se télécharge ou se transfère apparaît ici.",
   "centre.taskOpen": "Voir",
+  "centre.libraryMoved": "La file des demandes, les abonnements et les tâches se trouvent dans le centre d'acquisition.",
+  "centre.open": "Ouvrir le centre d'acquisition",
   "admin.navNaming": "Nommage",
   "admin.navNetwork": "Réseau",
   "admin.navNotifications": "Notifications",

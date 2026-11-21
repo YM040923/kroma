@@ -5,7 +5,11 @@
 
 import type { KromaClient } from '@kromatv/client';
 import { apiErrorText } from '@kromatv/client';
-import type { AcquisitionCandidate, AcquisitionCandidates, Cloud115Candidate } from '@kromatv/client/acquisition';
+import {
+  type AcquisitionCandidate,
+  type AcquisitionCandidates,
+  candidatePayload,
+} from '@kromatv/client/acquisition';
 import type { Translate } from '@kromatv/i18n';
 import { useT } from '@kromatv/ui';
 import {
@@ -42,6 +46,8 @@ export interface AcquirePanelTarget {
   target: AcquisitionTarget;
   /** The library the title aims at, when the page knows it. */
   library?: string | null;
+  /** For a show: the season the panel lists. */
+  season?: number | null;
 }
 
 interface PanelProps {
@@ -51,7 +57,7 @@ interface PanelProps {
   ask: AcquirePanelTarget | null;
   /** What the caller does with the release it picked, or with the server's own
    *  choice (`null`) when the panel runs in automatic mode. */
-  onTake: (candidate: Cloud115Candidate | null) => Promise<void>;
+  onTake: (candidate: Record<string, unknown> | null) => Promise<void>;
 }
 
 function bytesOf(n: number | null | undefined): string {
@@ -69,7 +75,7 @@ function bytesOf(n: number | null | undefined): string {
 }
 
 function priceLabel(t: Translate, one: AcquisitionCandidate): string {
-  const price = one.candidate.price;
+  const price = one.price;
   if (price == null) {
     return t('acquire.priceUnknown');
   }
@@ -79,8 +85,8 @@ function priceLabel(t: Translate, one: AcquisitionCandidate): string {
   return t('acquire.pricePoints', { points: price });
 }
 
-function fileNameOf(candidate: Cloud115Candidate): string {
-  return candidate.fileName || candidate.resource || candidate.shareCode || `#${candidate.index}`;
+function fileNameOf(one: AcquisitionCandidate): string {
+  return one.fileName || one.resource || one.shareCode || `#${one.index}`;
 }
 
 function CandidateRow({
@@ -89,7 +95,7 @@ function CandidateRow({
   onPick,
 }: Readonly<{ one: AcquisitionCandidate; busy: boolean; onPick: () => void }>) {
   const t = useT();
-  const size = bytesOf(one.candidate.sizeBytes ?? null) || one.candidate.size || '';
+  const size = bytesOf(one.sizeBytes ?? null) || one.size || '';
   return (
     <Row gap={12} center>
       <Column flex gap={4}>
@@ -97,7 +103,7 @@ function CandidateRow({
           {one.recommended ? <Badge tone="info">{t('acquire.recommended')}</Badge> : null}
           {one.needsConfirm ? <Badge tone="warning">{t('acquire.needsConfirm')}</Badge> : null}
           <Text variant="body" lines={2}>
-            {fileNameOf(one.candidate)}
+            {fileNameOf(one)}
           </Text>
         </Row>
         <Row gap={10} wrap>
@@ -134,7 +140,7 @@ function AcquireList({
   client: KromaClient;
   ask: AcquirePanelTarget;
   tab: AcquireTab;
-  onTake: (candidate: Cloud115Candidate) => Promise<void>;
+  onTake: (candidate: Record<string, unknown>) => Promise<void>;
 }>) {
   const t = useT();
   const [data, setData] = useState<AcquisitionCandidates | null>(null);
@@ -153,6 +159,7 @@ function AcquireList({
         title: ask.target.title,
         year: ask.target.year,
         library: ask.library ?? null,
+        season: ask.season ?? null,
       })
       .then((reply) => {
         if (live) {
@@ -172,10 +179,10 @@ function AcquireList({
     return () => {
       live = false;
     };
-  }, [ask.target.kind, ask.target.tmdbId, ask.target.title, ask.target.year, ask.library, client, t]);
+  }, [ask.target.kind, ask.target.tmdbId, ask.target.title, ask.target.year, ask.library, ask.season, client, t]);
 
   const take = useCallback(
-    async (candidate: Cloud115Candidate) => {
+    async (candidate: Record<string, unknown>) => {
       setTaking(true);
       try {
         await onTake(candidate);
@@ -245,10 +252,10 @@ function AcquireList({
     <Column gap={4}>
       {data.candidates.map((one) => (
         <CandidateRow
-          key={one.candidate.index}
+          key={one.id}
           one={one}
           busy={taking}
-          onPick={() => void take(one.candidate)}
+          onPick={() => void take(candidatePayload(one))}
         />
       ))}
     </Column>
@@ -264,7 +271,7 @@ export function AcquirePanel({ open, onClose, client, ask, onTake }: Readonly<Pa
   const [autoBusy, setAutoBusy] = useState(false);
 
   const take = useCallback(
-    async (candidate: Cloud115Candidate) => {
+    async (candidate: Record<string, unknown>) => {
       await onTake(candidate);
       onClose();
     },

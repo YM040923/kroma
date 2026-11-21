@@ -114,11 +114,23 @@ fn failed(error: impl Into<String>) -> AcquireReply {
 }
 
 pub(super) async fn acquire(Json(body): Json<AcquireBody>) -> Json<Result<AcquireReply, String>> {
-    port_reply(move || {
-        let config = Config::load();
-        Ok(acquire_with(&config, &body))
-    })
-    .await
+    let config = Config::load();
+    // The transit folder is the operator's one answer to "where do acquisitions
+    // land". It is a drive path here; the source takes a numeric cid, so it is
+    // resolved (and created) before the unlock is asked for. Failing to resolve
+    // is a real reason to stop: a transfer into the wrong folder is invisible
+    // until somebody looks.
+    let target_cid = if config.transit_folder.trim().is_empty() {
+        String::new()
+    } else {
+        match crate::upload::ensure_folder_cid(&config, &config.transit_folder).await {
+            Ok(cid) => cid,
+            Err(why) => {
+                return Json(Err(format!("转存文件夹无法使用：{why}")));
+            }
+        }
+    };
+    port_reply(move || Ok(acquire_with(&config, &body, &target_cid))).await
 }
 
 #[derive(Debug, Clone)]
@@ -186,7 +198,7 @@ fn as_i64(value: &Value) -> Option<i64> {
         .or_else(|| value.as_str().and_then(|s| s.trim().parse().ok()))
 }
 
-fn acquire_with(config: &Config, body: &AcquireBody) -> AcquireReply {
+fn acquire_with(config: &Config, body: &AcquireBody, target_cid: &str) -> AcquireReply {
     let fields = candidate_fields(body);
     if !body.attempt_id.trim().is_empty() {
         let existing = crate::store::load()
@@ -229,14 +241,20 @@ fn acquire_with(config: &Config, body: &AcquireBody) -> AcquireReply {
             quote: Some(quote),
             ..AcquireReply::default()
         },
-        Gate::Start => start(config, body, &fields, kind),
+        Gate::Start => start(config, body, &fields, kind, target_cid),
     }
 }
 
 /// The existing unlock/transfer flow, as the source exposes it: `202` with a job
 /// id, polled through [`status`]. An attempt id is recorded before the write so a
 /// lost response cannot make a retry spend points twice.
-fn start(config: &Config, body: &AcquireBody, fields: &CandidateFields, kind: &str) -> AcquireReply {
+fn start(
+    config: &Config,
+    body: &AcquireBody,
+    fields: &CandidateFields,
+    kind: &str,
+    target_cid: &str,
+) -> AcquireReply {
     record(body, fields, "", "submitting", "");
     let mut payload = serde_json::json!({
         "tmdb": body.tmdb_id,
@@ -244,6 +262,12 @@ fn start(config: &Config, body: &AcquireBody, fields: &CandidateFields, kind: &s
         "index": fields.index,
         "transfer": true,
     });
+    // Land every acquisition in the one folder the operator set. The source
+    // falls back to its own default when this is absent, which is what an
+    // operator who has not configured one sees today.
+    if !target_cid.trim().is_empty() {
+        payload["targetCid"] = serde_json::json!(target_cid.trim());
+    }
     if body.season > 0 {
         payload["season"] = serde_json::json!(body.season);
     }

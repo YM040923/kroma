@@ -39,9 +39,11 @@ export type AcquisitionResult =
   | { state: 'failed'; error: string };
 
 /** An optional release the caller already picked in the panel. Present, the
- *  server grabs exactly that one; absent, it chooses. */
+ *  server grabs exactly that one; absent, it chooses. `season` names what a
+ *  show's panel was listing. */
 export interface AcquirePick {
   candidate?: Record<string, unknown> | null;
+  season?: number | null;
 }
 
 export type Acquire = (
@@ -85,6 +87,8 @@ function askBody(target: AcquisitionTarget, scope: AcquisitionScope): Acquisitio
     year: target.year,
     seasons: scope.seasons ?? null,
     episodes: scope.episodes ?? null,
+    // A show's confirm repeats the season its panel was listing.
+    season: target.kind === 'show' ? (scope.seasons?.[0] ?? null) : null,
   };
 }
 
@@ -159,7 +163,11 @@ export function useAcquisition(): Acquire {
       const picked = pick.candidate ?? null;
       try {
         if (picked) {
-          const done = await client.acquisition.start({ ...body, candidate: picked });
+          const done = await client.acquisition.start({
+            ...body,
+            candidate: picked,
+            season: pick.season ?? null,
+          });
           if (done.state === 'needs_confirm') {
             return await confirmCandidate({ ask: confirm, client, t, bytes: fmt.bytes }, body, done);
           }

@@ -1,7 +1,6 @@
 import type { EpisodeRef } from '@kromatv/client/requests';
 import { useT } from '@kromatv/ui';
 import { useCallback, useState } from 'react';
-import { EPISODES_ANCHOR } from '#web/shared/lib/show-search';
 import { epKey, toEpisodeRefs, toggle } from '#web/features/catalog/episode-selection';
 import type { TitleView } from '#web/shared/lib/title-view';
 import { useAcquisition } from '#web/shared/lib/use-acquisition.hook';
@@ -115,7 +114,10 @@ export function useTitleRequest(initial: TitleView): TitleRequestState {
     }
     setBusy(true);
     setError(null);
-    void acquire({ kind, tmdbId, title, year }, { seasons, episodes }, { candidate })
+    // A show's panel lists one season at a time; the same season rides on the
+    // start call so the transfer names what the panel showed.
+    const season = kind === 'show' ? (seasons?.[0] ?? null) : null;
+    void acquire({ kind, tmdbId, title, year }, { seasons, episodes }, { candidate, season })
       .then((outcome) => {
         if (outcome.state === 'failed') {
           setError(outcome.error || t('discover.requestFailed'));
@@ -157,13 +159,12 @@ export function useTitleRequest(initial: TitleView): TitleRequestState {
   const requestSeason = (season: number) => doRequest([season]);
   const requestAllSeasons = () => doRequest(null);
   const onRequestClick = () => {
-    // With no season list there is no section to scroll to and nothing to pick,
-    // so the button asks for the whole show rather than doing nothing at all.
-    if (view.kind !== 'show' || view.seasons.length === 0) {
-      openPanel({ seasons: null });
-      return;
-    }
-    document.getElementById(EPISODES_ANCHOR)?.scrollIntoView({ behavior: 'smooth' });
+    // The panel is where a release is picked, for a film and a show alike: a
+    // show opens it on the season its page is showing, so the list is not an
+    // empty "whole show" ask. Selecting episodes still has its own actions in
+    // the season section.
+    const season = view.seasons.find((one) => !one.available)?.number ?? view.seasons[0]?.number;
+    openPanel({ seasons: season != null ? [season] : null });
   };
 
   return {

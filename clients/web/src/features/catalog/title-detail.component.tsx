@@ -212,6 +212,7 @@ export function TitleDetail({
     selected,
     pendingEps,
     panelOpen,
+    panelScope,
     closePanel,
     takeFromPanel,
     toggleEpisode,
@@ -309,6 +310,7 @@ export function TitleDetail({
                   title: view.title,
                   year: view.year ?? null,
                 },
+                season: panelScope.seasons?.[0] ?? null,
               }
         }
         onTake={takeFromPanel}

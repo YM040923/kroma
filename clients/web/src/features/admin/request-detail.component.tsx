@@ -45,7 +45,7 @@ export function RequestDetailPage({ id }: Readonly<{ id: RequestId }>) {
   const [denying, setDenying] = useState(false);
   const [note, setNote] = useState('');
 
-  const backToQueue = () => navigate({ to: '/admin/monitoring', search: { tab: 'requests' } });
+  const backToQueue = () => navigate({ to: '/admin/acquisition', search: { tab: 'tasks' } });
   // Resolves to whether it worked: a caller that closes a form on success must
   // not close it on a 403, and `run` swallows the rejection.
   const act = (label: string, fn: () => Promise<unknown>): Promise<boolean> => {
@@ -79,7 +79,7 @@ export function RequestDetailPage({ id }: Readonly<{ id: RequestId }>) {
               label={t('requests.backToQueue')}
               asChild
             >
-              <RouteLink to="/admin/monitoring" search={{ tab: 'requests' }} />
+              <RouteLink to="/admin/acquisition" search={{ tab: 'tasks' }} />
             </Button>
           </EmptyState.Actions>
         </EmptyState.Root>
@@ -98,7 +98,7 @@ export function RequestDetailPage({ id }: Readonly<{ id: RequestId }>) {
     <>
       <PageHeader.Root>
         <PageHeader.Back label={t('admin.requestsTitle')} asChild>
-          <RouteLink to="/admin/monitoring" search={{ tab: 'requests' }} />
+          <RouteLink to="/admin/acquisition" search={{ tab: 'tasks' }} />
         </PageHeader.Back>
         <PageHeader.Title>{req.title}</PageHeader.Title>
         <PageHeader.Subtitle>{metaLine(req, t)}</PageHeader.Subtitle>

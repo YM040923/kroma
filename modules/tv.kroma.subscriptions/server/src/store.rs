@@ -99,8 +99,6 @@ pub struct Stored {
     /// Where releases are searched for. A local service that speaks the
     /// source's own protocol; the module never talks to the site itself.
     pub source_url: String,
-    /// Last discovery pass, so opening the page does not hammer the source.
-    pub last_discovery_at: i64,
     /// Last pass that asked the source for *new releases* (the expensive half:
     /// it probes prices). Followed shares are checked on their own, cheaper
     /// cadence, so a five-minute follow never turns into five-minute probing.

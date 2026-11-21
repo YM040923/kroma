@@ -24,6 +24,8 @@ export const AcquisitionStartBody = z.object({
   /** The release the panel picked, echoed back as the search returned it.
    *  Absent means the server chooses. */
   candidate: z.record(z.string(), z.unknown()).nullish(),
+  /** For a show: which season the panel lists. */
+  season: z.number().nullish(),
 });
 export type AcquisitionStartBody = z.infer<typeof AcquisitionStartBody>;
 
@@ -91,7 +93,8 @@ export const AcquisitionOutcome = z.discriminatedUnion('state', [
 export type AcquisitionOutcome = z.infer<typeof AcquisitionOutcome>;
 
 /** `POST /api/acquisition/confirm` body: the same ask, plus the candidate the
- *  caller was shown. `library` is not repeated, the attempt already has it. */
+ *  caller was shown. `library` is not repeated, the attempt already has it; a
+ *  show repeats the season its panel was listing. */
 export const AcquisitionConfirmBody = AcquisitionStartBody.omit({ library: true }).extend({
   candidate: Cloud115Candidate,
 });
@@ -104,17 +107,41 @@ export const AcquisitionConfirmResult = z.discriminatedUnion('state', [
 ]);
 export type AcquisitionConfirmResult = z.infer<typeof AcquisitionConfirmResult>;
 
-/** `POST /api/acquisition/status` and the panel's list: one candidate the search
- *  turned up, plus what the caller must do about it. `recommended` marks the
- *  release the automatic path would take, so a manual pick and the server's own
- *  choice converge. `needsConfirm` is true when accepting costs points or the
- *  price is unknown. */
-export const AcquisitionCandidate = z.object({
-  candidate: Cloud115Candidate,
-  needsConfirm: z.boolean(),
-  recommended: z.boolean(),
-});
+/** One row of the panel's list: the candidate, flattened, plus what the caller
+ *  must do about it. The server lifts the provider's own fields (`index`,
+ *  `fileName`, `link`, `shareCode`, `price`, `size`) out of `extra` to the top
+ *  level, so a row reads as one object and goes back to `start`/`confirm` as
+ *  one object. `recommended` marks the release the automatic path would take;
+ *  `needsConfirm` is true when accepting costs points or the price is unknown. */
+export const AcquisitionCandidate = z
+  .object({
+    id: z.string(),
+    provider: z.string(),
+    title: z.string(),
+    index: z.number(),
+    fileName: z.string().nullish(),
+    size: z.string().nullish(),
+    sizeBytes: z.number().nullish(),
+    price: z.number().nullish(),
+    pricePoints: z.number().nullish(),
+    priceKnown: z.boolean().default(false),
+    grabbable: z.boolean().default(true),
+    resource: z.string().nullish(),
+    link: z.string().nullish(),
+    shareCode: z.string().nullish(),
+    rejectReason: z.string().nullish(),
+    needsConfirm: z.boolean(),
+    recommended: z.boolean(),
+  })
+  .catchall(z.unknown());
 export type AcquisitionCandidate = z.infer<typeof AcquisitionCandidate>;
+
+/** The object handed back to `start`/`confirm` when a row is taken: the same
+ *  flat object the list answered with, minus the two panel-only flags. */
+export function candidatePayload(one: AcquisitionCandidate): Record<string, unknown> {
+  const { needsConfirm: _needsConfirm, recommended: _recommended, ...fields } = one;
+  return fields;
+}
 
 /** `POST /api/acquisition/candidates`: the list the acquisition panel draws.
  *  Nothing is charged or queued by asking; `blockers` says why the list is

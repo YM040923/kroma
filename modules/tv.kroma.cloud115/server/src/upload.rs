@@ -75,6 +75,35 @@ pub(crate) async fn resolve_folder_cid(
         .map_err(|error| error.to_string())
 }
 
+/// The same answer, creating the folders that do not exist yet. An acquisition
+/// must not fail because the operator named a transit folder the drive has not
+/// been given; the first transfer makes it.
+pub(crate) async fn ensure_folder_cid(config: &Config, remote: &str) -> Result<String, String> {
+    let remote = remote.trim();
+    if remote.is_empty() || remote == "/" {
+        return Ok("0".to_string());
+    }
+    // Fast path: the folder is usually already there.
+    if let Ok(cid) = client::folder_id_by_path(&config.cookie, client::MODULE_UA, remote).await {
+        return Ok(cid);
+    }
+    let mut parent = "0".to_string();
+    let mut walked = String::new();
+    for part in remote.split('/').filter(|part| !part.trim().is_empty()) {
+        walked.push('/');
+        walked.push_str(part);
+        match client::folder_id_by_path(&config.cookie, client::MODULE_UA, &walked).await {
+            Ok(cid) => parent = cid,
+            Err(_) => {
+                parent = client::mkdir(&config.cookie, client::MODULE_UA, &parent, part)
+                    .await
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+    }
+    Ok(parent)
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RapidResult {

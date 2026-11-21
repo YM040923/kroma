@@ -316,6 +316,8 @@
   "centre.tasksEmpty": "Nothing is being fetched",
   "centre.tasksEmptyHint": "After you press Get, what is downloading or transferring shows up here.",
   "centre.taskOpen": "View",
+  "centre.libraryMoved": "The request queue, subscriptions and tasks all live in the acquisition centre.",
+  "centre.open": "Open the acquisition centre",
   "admin.navNaming": "Naming",
   "admin.navNetwork": "Network",
   "admin.navNotifications": "Notifications",

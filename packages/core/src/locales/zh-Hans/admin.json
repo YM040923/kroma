@@ -314,6 +314,8 @@
   "centre.tasksEmpty": "现在没有正在进行的获取",
   "centre.tasksEmptyHint": "点「获取」后，正在下载或转存的条目会出现在这里。",
   "centre.taskOpen": "查看",
+  "centre.libraryMoved": "请求队列、订阅和任务都在获取与追更里。",
+  "centre.open": "前往获取与追更",
   "admin.navNaming": "命名",
   "admin.navNetwork": "网络",
   "admin.navNotifications": "通知",
