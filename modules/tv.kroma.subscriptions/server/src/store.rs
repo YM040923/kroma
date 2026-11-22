@@ -63,6 +63,10 @@ pub struct Item {
     pub size: String,
     pub link: String,
     pub price: i64,
+    /// The source's own key for the share behind this release. A listing's
+    /// positions shift as new shares appear, so the unlock is re-resolved by
+    /// this key just before it runs.
+    pub share_code: String,
 }
 
 /// One share this task unlocked and now follows. A share keeps receiving

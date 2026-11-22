@@ -259,18 +259,38 @@ pub fn take_auto(now: i64) -> bool {
             continue;
         };
         let resource = item.resource.clone();
+        let share_code = item.share_code.clone();
+        let listed_index = item.index;
         if already_sent(&stored.tasks[position], &resource) {
             item.state = "skipped".into();
             touched = true;
             continue;
         }
+        // The listing shifts every time a share is added, so an index read last
+        // time can point at a different release now. Re-resolve it by the
+        // source's share key; without one, the listing's own order is the only
+        // identity there is.
+        let index = if share_code.is_empty() {
+            listed_index
+        } else {
+            match resolve_index(&source, stored.tasks[position].tmdb_id, &share_code) {
+                Some(fresh) => fresh,
+                None => {
+                    item.state = "failed".into();
+                    item.last_error = "这个分享在源站已找不到，跳过".into();
+                    touched = true;
+                    continue;
+                }
+            }
+        };
         let kind = stored.tasks[position].kind.clone();
         let task = &mut stored.tasks[position];
         task.resource = resource.clone();
-        task.resource_index = item.index;
+        task.resource_index = index;
         task.price = item.price;
         task.link = item.link.clone();
         item.state = "sent".into();
+        item.index = index;
         task.last_run_at = now;
         record_sent(task, &resource);
         let started = crate::routes::start_transfer(task, &source, &kind);
@@ -395,7 +415,10 @@ pub fn discover(source: &str, stored: &mut Stored, now: i64) {
         })
         .collect();
     for (id, name, tmdb_id, approved) in tasks {
-        let path = format!("/search?tmdb={tmdb_id}&type=tv&probe=0");
+        // Prices are probed here on purpose: on a show listing the card carries
+        // no file name at all, so the confirm page is the only place an episode
+        // marker (S01E05 / 第05集) can come from. Probing costs nothing.
+        let path = format!("/search?tmdb={tmdb_id}&type=tv&limit=20");
         let Ok(value) = source_json(source, &path, None) else {
             continue;
         };
@@ -411,13 +434,25 @@ pub fn discover(source: &str, stored: &mut Stored, now: i64) {
                 .unwrap_or("")
                 .trim()
                 .to_string();
-            if resource.is_empty() {
+            let share_code = candidate
+                .get("shareKey")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            // No name and no share key is nothing we can follow or dedupe.
+            if resource.is_empty() && share_code.is_empty() {
                 continue;
             }
             if already_sent_per_task(stored, &id, &resource) {
                 continue;
             }
-            let key = format!("{id}:{resource}");
+            let identity = if resource.is_empty() {
+                format!("share:{share_code}")
+            } else {
+                resource.clone()
+            };
+            let key = format!("{id}:{identity}");
             if stored.items.iter().any(|item| item.key == key) {
                 continue;
             }
@@ -440,6 +475,7 @@ pub fn discover(source: &str, stored: &mut Stored, now: i64) {
                     .unwrap_or("")
                     .to_string(),
                 price: candidate.get("price").and_then(Value::as_i64).unwrap_or(0),
+                share_code,
             });
         }
     }
@@ -456,6 +492,23 @@ fn already_sent_per_task(stored: &Stored, task_id: &str, name: &str) -> bool {
         .iter()
         .find(|task| task.id == task_id)
         .is_some_and(|task| already_sent(task, name))
+}
+
+/// Where a share sits in the task's listing right now. The probe run is what
+/// names shares, so it is the same call the discovery made.
+fn resolve_index(source: &str, tmdb_id: i64, share_code: &str) -> Option<i64> {
+    let value = source_json(source, &format!("/search?tmdb={tmdb_id}&type=tv&limit=20"), None).ok()?;
+    value
+        .get("candidates")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|candidate| {
+            candidate
+                .get("shareKey")
+                .and_then(Value::as_str)
+                .is_some_and(|key| key.trim() == share_code)
+        })
+        .and_then(|candidate| candidate.get("index").and_then(Value::as_i64))
 }
 
 #[cfg(test)]
