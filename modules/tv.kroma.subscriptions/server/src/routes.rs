@@ -83,6 +83,10 @@ struct FollowBody {
     year: i64,
     #[serde(default)]
     link: String,
+    /// Whether the operator already agreed to spend points on this title (the
+    /// panel's price confirmation). A free grab is not that answer.
+    #[serde(default)]
+    approved: bool,
 }
 
 pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
@@ -527,6 +531,12 @@ async fn follow_title<S: HostCtx + Clone + Send + Sync + 'static>(
         .find(|task| task.tmdb_id == body.tmdb_id && (season == 0 || task.season == season));
     if let Some(task) = existing {
         task.enabled = true;
+        // A title the panel confirmed for points stays approved; a later free
+        // grab never revokes an earlier approval, and never grants one either.
+        if body.approved {
+            task.approved_at = kroma_module_sdk::primitives::now_ms();
+        }
+        crate::follow::attach_unlocked_shares(&stored.source_url, task);
         let result = task.clone();
         store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
         return Ok(Json(result));
@@ -554,10 +564,14 @@ async fn follow_title<S: HostCtx + Clone + Send + Sync + 'static>(
         season,
         episode_start: 0,
         episode_total: 0,
-                link: body.link.trim().into(),
-        // The panel's price confirmation is the per-title approval: later priced
-        // episodes of this title are taken without asking again.
-        approved_at: kroma_module_sdk::primitives::now_ms(),
+        link: body.link.trim().into(),
+        // Only the panel's price confirmation is the per-title approval; a free
+        // grab must not let a later priced episode spend points unasked.
+        approved_at: if body.approved {
+            kroma_module_sdk::primitives::now_ms()
+        } else {
+            0
+        },
         sent_episodes: Vec::new(),
         following_shares: Vec::new(),
     };

@@ -157,13 +157,22 @@ export function SubscriptionGrid() {
                   {card.lastError}
                 </Text>
               ) : null}
-              <Button
-                size="sm"
-                variant="glass"
-                label={t('centre.subsTakeNow')}
-                loading={busyId === card.id}
-                onPress={() => act(card.id, '/execute', 'POST')}
-              />
+              {/* A follow-only task has no release of its own: its first
+                  transfer already happened through the acquisition panel, so
+                  there is nothing here to grab and nothing to pay twice for. */}
+              {card.resource ? (
+                <Button
+                  size="sm"
+                  variant="glass"
+                  label={t('centre.subsTakeNow')}
+                  loading={busyId === card.id}
+                  onPress={() => act(card.id, '/execute', 'POST')}
+                />
+              ) : (
+                <Text variant="meta" color="textMuted" lines={1}>
+                  {t('centre.subsFollowingOnly')}
+                </Text>
+              )}
             </Column>
           );
         })}

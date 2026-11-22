@@ -313,6 +313,7 @@
   "centre.subsOpen": "Open subscription management",
   "centre.subsTakeNow": "Take now",
   "centre.subsFollowing": "Following {count} shares",
+  "centre.subsFollowingOnly": "Following automatically",
   "centre.subsActionDone": "Submitted",
   "centre.subsCount": "{count} subscriptions",
   "centre.tasksUnavailable": "The task list could not be read",

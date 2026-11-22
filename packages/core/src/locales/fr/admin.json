@@ -313,6 +313,7 @@
   "centre.subsOpen": "Ouvrir la gestion des abonnements",
   "centre.subsTakeNow": "Prendre maintenant",
   "centre.subsFollowing": "{count} partages suivis",
+  "centre.subsFollowingOnly": "Suivi automatique",
   "centre.subsActionDone": "Envoyé",
   "centre.subsCount": "{count} abonnements",
   "centre.tasksUnavailable": "La liste des tâches n'a pas pu être lue",

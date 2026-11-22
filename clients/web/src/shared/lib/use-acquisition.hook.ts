@@ -116,7 +116,12 @@ function toResult(outcome: AcquisitionOutcome): AcquisitionResult {
  *  episodes that land in a share this account already unlocked are taken
  *  without asking. Best effort — a module that is not installed, or a title that
  *  cannot be followed, must never turn a successful grab into a failure. */
-async function followTitle(token: string | undefined, target: AcquisitionTarget, season: number | null) {
+async function followTitle(
+  token: string | undefined,
+  target: AcquisitionTarget,
+  season: number | null,
+  approved: boolean,
+) {
   if (target.kind !== 'show') {
     return;
   }
@@ -132,6 +137,7 @@ async function followTitle(token: string | undefined, target: AcquisitionTarget,
         title: target.title,
         kind: 'show',
         season: season ?? 0,
+        approved,
       }),
     });
   } catch {
@@ -189,6 +195,9 @@ export function useAcquisition(): Acquire {
       // exactly what `/confirm` would, so the price is the one quoted for this
       // release.
       const picked = pick.candidate ?? null;
+      // Whether this ask passed the price confirmation. Only that is the
+      // operator's consent to spend points on the title's later episodes.
+      let approvedThisAsk = false;
       try {
         let result: AcquisitionResult;
         if (picked) {
@@ -197,21 +206,32 @@ export function useAcquisition(): Acquire {
             candidate: picked,
             season: pick.season ?? null,
           });
-          result =
-            done.state === 'needs_confirm'
-              ? await confirmCandidate({ ask: confirm, client, t, bytes: fmt.bytes }, body, done)
-              : toResult(done);
+          if (done.state === 'needs_confirm') {
+            approvedThisAsk = true;
+            result = await confirmCandidate({ ask: confirm, client, t, bytes: fmt.bytes }, body, done);
+          } else {
+            result = toResult(done);
+          }
         } else {
           const outcome = await client.acquisition.start(body);
-          result =
-            outcome.state === 'needs_confirm'
-              ? await confirmCandidate({ ask: confirm, client, t, bytes: fmt.bytes }, body, outcome)
-              : toResult(outcome);
+          if (outcome.state === 'needs_confirm') {
+            approvedThisAsk = true;
+            result = await confirmCandidate({ ask: confirm, client, t, bytes: fmt.bytes }, body, outcome);
+          } else {
+            result = toResult(outcome);
+          }
         }
         // A show that was grabbed is worth following: the module takes what
-        // lands later inside a share this account already unlocked.
+        // lands later inside a share this account already unlocked. The
+        // approval rides along only when the operator confirmed a price here —
+        // a free grab is not consent to spend points on a later episode.
         if (result.state === 'started') {
-          await followTitle(client.sessionToken, target, pick.season ?? scope.seasons?.[0] ?? null);
+          await followTitle(
+            client.sessionToken,
+            target,
+            pick.season ?? scope.seasons?.[0] ?? null,
+            approvedThisAsk,
+          );
         }
         return result;
       } catch (error) {
