@@ -3,7 +3,7 @@
   "schemaVersion": 3,
   "id": "tv.kroma.subscriptions",
   "name": "Subscriptions",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Manage monitored 115 subscription tasks and dry-run discovery without duplicating cloud-drive logic.",
   "engines": { "server": ">=0.1.39" },
   "component": { "instances": 2, "cpuSeconds": 300 },
@@ -11,7 +11,7 @@
   "permissions": {
     "net": {
       "connect": [
-        { "purpose": "subscription-source", "to": ["172.17.0.1", "host.docker.internal"], "ports": [8790] }
+        { "purpose": "subscription-source", "to": ["172.17.0.1", "172.29.96.1", "host.docker.internal"], "ports": [8790] }
       ]
     },
     "fs": { "read": ["module"], "write": ["module"] }

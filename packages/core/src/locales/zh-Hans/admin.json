@@ -312,6 +312,8 @@
   "centre.subsTakeNow": "立即转存",
   "centre.subsFollowing": "跟进 {count} 个分享",
   "centre.subsFollowingOnly": "自动跟进中",
+  "centre.subsRefresh": "刷新资源",
+  "centre.subsRefreshing": "正在探测资源…",
   "centre.subsActionDone": "已提交",
   "centre.subsCount": "共 {count} 个订阅",
   "centre.tasksUnavailable": "读不到任务列表",

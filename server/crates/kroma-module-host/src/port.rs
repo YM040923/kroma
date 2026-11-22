@@ -106,6 +106,11 @@ pub fn call_raw<B: serde::Serialize, T: serde::de::DeserializeOwned>(
     let (base, token) =
         resolve().ok_or_else(|| anyhow::anyhow!("no module contributes this point"))?;
     let resp = kroma_http::Loopback::new()
+        // A provider method may legitimately be slow: `search` probes every
+        // release on its upstream (tens of seconds per title), and the default
+        // 30 s loopback budget turns that into "the peer did not answer".
+        // The provider's own fetch already bounds its side.
+        .max_time(PORT_CALL_SECS)
         .header("authorization", format!("Bearer {token}"))
         .post_json(
             &format!("{base}/_port/{path}"),
@@ -114,6 +119,10 @@ pub fn call_raw<B: serde::Serialize, T: serde::de::DeserializeOwned>(
         .ensure_ok()?;
     resp.json()
 }
+
+/// How long the host waits on one provider call. Longer than the provider's
+/// own upstream budget so its own timeout, with its message, is the one seen.
+const PORT_CALL_SECS: u32 = 300;
 
 /// Wrap a provider-side point handler: run the blocking work off the runtime and
 /// answer with the `Result<T, String>` envelope [`call`] expects.

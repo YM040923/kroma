@@ -314,6 +314,8 @@
   "centre.subsTakeNow": "Prendre maintenant",
   "centre.subsFollowing": "{count} partages suivis",
   "centre.subsFollowingOnly": "Suivi automatique",
+  "centre.subsRefresh": "Actualiser",
+  "centre.subsRefreshing": "Analyse des sources…",
   "centre.subsActionDone": "Envoyé",
   "centre.subsCount": "{count} abonnements",
   "centre.tasksUnavailable": "La liste des tâches n'a pas pu être lue",

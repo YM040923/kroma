@@ -4,7 +4,7 @@
 // this panel does.
 
 import { useT } from '@kromatv/ui';
-import { Badge, Button, Column, EmptyState, Img, Row, Text } from '@kromatv/ui/kit';
+import { Badge, Button, Column, EmptyState, Img, Row, Spacer, Text } from '@kromatv/ui/kit';
 import { useCallback, useEffect, useState } from 'react';
 import { apiBase } from '#web/shared/lib/api';
 import { useAuth } from '#web/shared/lib/auth';
@@ -72,6 +72,7 @@ export function SubscriptionGrid() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -124,11 +125,29 @@ export function SubscriptionGrid() {
         <Text variant="meta" color="textMuted">
           {t('centre.subsCount', { count: cards.length })}
         </Text>
+        <Spacer />
         {notice ? (
           <Text variant="meta" color="textMuted">
             {notice}
           </Text>
         ) : null}
+        {/* Discovery probes each release on the source, so it is an explicit,
+            honestly slow action rather than something the page does on open. */}
+        <Button
+          size="sm"
+          variant="glass"
+          icon="refresh"
+          label={refreshing ? t('centre.subsRefreshing') : t('centre.subsRefresh')}
+          disabled={refreshing}
+          onPress={() => {
+            setRefreshing(true);
+            setNotice(null);
+            moduleCall('/refresh', client.sessionToken, { method: 'POST', body: {} })
+              .then(() => load())
+              .catch((reason) => setNotice(String(reason)))
+              .finally(() => setRefreshing(false));
+          }}
+        />
       </Row>
       <Row gap={12} wrap>
         {cards.map((card) => {

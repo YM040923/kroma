@@ -100,6 +100,7 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/search", post(search::<S>))
         .route("/subscribe", post(subscribe::<S>))
         .route("/follow", post(follow_title::<S>))
+        .route("/refresh", post(refresh::<S>))
         .route("/subscriptions/{id}/execute", post(execute::<S>))
         .route("/subscriptions/{id}/execute-item", post(execute_item::<S>))
         .route("/subscriptions/{id}/job", get(job::<S>))
@@ -212,14 +213,30 @@ fn validate(body: &TaskBody) -> Result<(), String> {
 
 async fn list<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser) -> Result<Json<store::Stored>, axum::response::Response> {
     require(&host, &user)?;
+    // Reading the page must stay cheap. New-release discovery probes every
+    // candidate on the source (tens of seconds per title), so it runs on the
+    // background tick and right after a follow, never while someone waits for
+    // this response.
+    poll_transfers();
+    let now = kroma_module_sdk::primitives::now_ms();
+    crate::follow::follow_shares(now);
+    Ok(Json(store::load()))
+}
+
+/// `POST /refresh`: one discovery pass on demand — what the page's refresh
+/// button asks for. It is slow by nature (it probes prices) and says so.
+async fn refresh<S: HostCtx + Clone + Send + Sync + 'static>(State(host): State<S>, AuthUser(user): AuthUser) -> Result<Json<store::Stored>, axum::response::Response> {
+    require(&host, &user)?;
     poll_transfers();
     let now = kroma_module_sdk::primitives::now_ms();
     let mut stored = store::load();
     let source = stored.source_url.clone();
     if !source.trim().is_empty() {
+        stored.last_search_at = 0;
         crate::follow::discover(&source, &mut stored, now);
         let _ = store::save(&stored);
     }
+    crate::follow::take_auto(now);
     crate::follow::follow_shares(now);
     Ok(Json(store::load()))
 }
@@ -538,6 +555,9 @@ async fn follow_title<S: HostCtx + Clone + Send + Sync + 'static>(
         }
         crate::follow::attach_unlocked_shares(&stored.source_url, task);
         let result = task.clone();
+        // Asking to follow again is also a reason to look now rather than on the
+        // next half-hour tick: the operator is on this page.
+        stored.last_search_at = 0;
         store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
         return Ok(Json(result));
     }
@@ -580,6 +600,9 @@ async fn follow_title<S: HostCtx + Clone + Send + Sync + 'static>(
         task.status = "running".into();
     }
     stored.tasks.push(task.clone());
+    // A title just added is worth a look now, not on the next half-hour tick:
+    // the operator is watching this page and expects the first pass to count.
+    stored.last_search_at = 0;
     store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
     Ok(Json(task))
 }

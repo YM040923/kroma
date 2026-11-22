@@ -314,6 +314,8 @@
   "centre.subsTakeNow": "Take now",
   "centre.subsFollowing": "Following {count} shares",
   "centre.subsFollowingOnly": "Following automatically",
+  "centre.subsRefresh": "Refresh",
+  "centre.subsRefreshing": "Probing releases…",
   "centre.subsActionDone": "Submitted",
   "centre.subsCount": "{count} subscriptions",
   "centre.tasksUnavailable": "The task list could not be read",
