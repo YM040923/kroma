@@ -136,7 +136,58 @@ fn run(config: &Config, body: &SearchBody) -> Result<Vec<Candidate>, String> {
         .get("candidates")
         .and_then(Value::as_array)
         .ok_or_else(|| "订阅源返回里没有候选列表".to_string())?;
-    Ok(candidates_of(list))
+    let mut found = candidates_of(list);
+    // The source indexes by TMDB id, but its own mapping is not always right:
+    // asking for one film has answered another film's releases. A candidate
+    // whose name does not carry the title we asked for is not this title's, and
+    // handing it to the user is worse than answering "nothing here" — so it is
+    // dropped, and if nothing survives the search says why.
+    if !body.title.trim().is_empty() {
+        let before = found.len();
+        found.retain(|candidate| title_matches(&body.title, &candidate.file_name));
+        if found.is_empty() && before > 0 {
+            return Err(format!(
+                "资源站把《{}》指向了别的影片（返回的是 {}），已拦下；请在资源站确认标题",
+                body.title.trim(),
+                list.iter()
+                    .map(|item| text(item, &["fileName", "resource", "name"]))
+                    .find(|name| !name.is_empty())
+                    .unwrap_or_else(|| "无法识别的条目".to_string())
+            ));
+        }
+    }
+    Ok(found)
+}
+
+/// Whether a release name is plausibly the title that was asked for. Compared on
+/// letters and digits only, case-folded: `The.Matrix.1999.1080p.mkv` carries
+/// `thematrix`, and a Chinese title is compared as-is. A one-character overlap
+/// is not a match; the whole normalized title has to appear.
+pub(crate) fn title_matches(title: &str, file_name: &str) -> bool {
+    let want = normalize_letters(title);
+    if want.is_empty() {
+        return true;
+    }
+    let name = normalize_letters(file_name);
+    if name.contains(&want) {
+        return true;
+    }
+    // A release often carries a translated or romanised title; fall back to
+    // word-by-word coverage so `Dune.Part.Two` still matches `Dune 2` is NOT
+    // assumed — instead every meaningful word of the request must be present.
+    let words: Vec<String> = title
+        .split(|c: char| !c.is_alphanumeric())
+        .map(normalize_letters)
+        .filter(|word| word.chars().count() >= 2)
+        .collect();
+    !words.is_empty() && words.iter().all(|word| name.contains(word.as_str()))
+}
+
+fn normalize_letters(raw: &str) -> String {
+    raw.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 /// Map the source's candidate array onto the point's shape. Never fails: an
@@ -464,5 +515,20 @@ mod tests {
         )
         .unwrap_err();
         assert!(bad_kind.contains("未知类型"), "{bad_kind}");
+    }
+
+    #[test]
+    fn a_release_name_has_to_carry_the_title_it_was_asked_for() {
+        // The real incident: asking for one film answered another film's release.
+        assert!(!title_matches(
+            "奥德赛",
+            "Godzilla.Minus.Zero.2026.TS.1080p.mkv"
+        ));
+        assert!(title_matches("The Matrix", "The.Matrix.1999.1080p.mkv"));
+        assert!(title_matches("Dune", "Dune.Part.Two.2024.2160p.mkv"));
+        assert!(title_matches("奥德赛", "奥德赛.2026.1080p.mkv"));
+        assert!(title_matches("蝙蝠侠：黑暗骑士", "蝙蝠侠：黑暗骑士.2008.BluRay.mkv"));
+        // A partial word overlap is not a match.
+        assert!(!title_matches("Dune", "Duncan.2019.mkv"));
     }
 }

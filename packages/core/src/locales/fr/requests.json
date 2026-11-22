@@ -25,6 +25,8 @@
   "acquire.autoHint": "L'automatique laisse le serveur choisir selon la qualité, le prix et les sources ; une version payante vous est soumise d'abord.",
   "acquire.autoRun": "Obtenir automatiquement",
   "acquire.searchFailed": "La recherche a échoué",
+  "acquire.searching": "Recherche et lecture des prix — cela peut prendre une demi-minute…",
+  "acquire.season": "Saison {season}",
   "acquire.notReady": "Pas encore prêt",
   "acquire.noRelease": "Aucune version trouvée",
   "acquire.noReleaseBody": "Rien n'est disponible pour ce titre pour l'instant. Essayez une autre source, ou plus tard.",

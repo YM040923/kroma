@@ -441,6 +441,8 @@ fn list_show_candidates(
             "year": body.year,
             "library": &body.library,
             "season": body.season.unwrap_or(0),
+            // Probe, so a show's panel shows what each release costs too.
+            "probe": true,
         }),
     ) {
         Ok(found) => found,
@@ -615,7 +617,41 @@ pub async fn tasks(
         // Newest first, and bounded: this is a recent-activity list.
         attempts.reverse();
         attempts.truncate(100);
-        Ok::<_, anyhow::Error>(attempts)
+        // The unit row knows what the title is; an attempt row alone says only
+        // `movie:1381071`, which reads as an id, not a film.
+        let titles: Vec<(String, String)> = {
+            let mut stmt = conn.prepare("SELECT unit_key, title FROM media_units")?;
+            let mapped = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            mapped.filter_map(Result::ok).collect()
+        };
+        let named: Vec<Value> = attempts
+            .iter()
+            .map(|attempt| {
+                let title = titles
+                    .iter()
+                    .find(|(key, _)| key == &attempt.unit_key)
+                    .map(|(_, title)| title.clone())
+                    .unwrap_or_default();
+                serde_json::json!({
+                    "id": attempt.id,
+                    "unitKey": attempt.unit_key,
+                    "title": title,
+                    "provider": attempt.provider,
+                    "status": attempt.status,
+                    "errorCode": attempt.error_code,
+                    "errorMessage": attempt.error_message,
+                    "jobId": attempt.job_id,
+                    "costPoints": attempt.cost_points,
+                    "quote": attempt.quote,
+                    "createdAt": attempt.created_at,
+                    "updatedAt": attempt.updated_at,
+                    "finishedAt": attempt.finished_at,
+                })
+            })
+            .collect();
+        Ok::<_, anyhow::Error>(named)
     })
     .await?;
     Ok(Json(serde_json::json!({ "attempts": rows })).into_response())
@@ -1233,6 +1269,10 @@ fn cloud_search(
             "year": ask.year,
             "library": &ask.library,
             "unitKey": unit.key(),
+            // Probe: open each candidate's confirmation page (costs no points)
+            // so the panel can show what unlocking really costs. Without it the
+            // source reports `price: null` and a paid release reads as unknown.
+            "probe": true,
         }),
     )
     .map_err(|error| format!("cloud115 search failed: {error}"))?;

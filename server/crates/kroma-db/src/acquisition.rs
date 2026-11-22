@@ -249,17 +249,28 @@ pub fn create_attempt(pool: &Pool, attempt: &AcquisitionAttempt) -> Result<()> {
 }
 
 pub fn active_attempt(conn: &Connection, unit_key: &str) -> Result<Option<AcquisitionAttempt>> {
+    // An attempt that has not moved in half an hour is not running: the provider
+    // it waits on is gone, or the job it named died with the process. Treating it
+    // as active would refuse every later ask for the same title with "already
+    // running", and nothing anywhere would show why.
+    let cutoff = kroma_primitives::now_ms() - STALE_AFTER_MS;
     let sql = format!(
         "SELECT {ATTEMPT_COLS} FROM acquisition_attempts \
          WHERE unit_key = ?1 AND status IN (\
             'queued','searching','candidate_ready','waiting_confirm',\
             'transferring','downloading','importing','verifying') \
+           AND updated_at >= ?2 \
          ORDER BY created_at DESC LIMIT 1"
     );
-    conn.query_row(&sql, params![unit_key], attempt_from_row)
+    conn.query_row(&sql, params![unit_key, cutoff], attempt_from_row)
         .optional()
         .map_err(Into::into)
 }
+
+/// How long an attempt may sit without an update before it stops counting as
+/// running. A 115 transfer that takes longer keeps moving (the provider reports
+/// each step), so half an hour of silence means it is not coming back.
+pub const STALE_AFTER_MS: i64 = 30 * 60 * 1000;
 
 pub fn attempts_for_unit(conn: &Connection, unit_key: &str) -> Result<Vec<AcquisitionAttempt>> {
     let sql = format!(

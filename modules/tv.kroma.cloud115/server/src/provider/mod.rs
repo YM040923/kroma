@@ -129,21 +129,23 @@ mod tests {
     }
 
     #[test]
-    fn readiness_names_both_settings_until_they_are_filled() {
+    fn readiness_names_the_missing_settings_until_they_are_filled() {
         let bare = readiness_of(&config());
         assert!(!bare.ready);
-        assert_eq!(bare.blockers.len(), 2, "{:?}", bare.blockers);
+        assert_eq!(bare.blockers.len(), 3, "{:?}", bare.blockers);
         assert!(bare.blockers.iter().any(|b| b.contains("Cookie")), "{bare:?}");
         assert!(bare.blockers.iter().any(|b| b.contains("订阅源")), "{bare:?}");
+        assert!(bare.blockers.iter().any(|b| b.contains("转存文件夹")), "{bare:?}");
 
         let mut half = config();
         half.cookie = "UID=1_A1_2; CID=x".into();
         let readiness = readiness_of(&half);
         assert!(!readiness.ready, "a cookie alone cannot search a source");
-        assert_eq!(readiness.blockers.len(), 1);
+        assert_eq!(readiness.blockers.len(), 2, "{readiness:?}");
 
         let mut ready = half;
         ready.source_url = "http://172.17.0.1:8790".into();
+        ready.transit_folder = "/转存".into();
         let readiness = readiness_of(&ready);
         assert!(readiness.ready, "{readiness:?}");
         assert!(readiness.blockers.is_empty());

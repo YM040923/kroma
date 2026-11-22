@@ -25,6 +25,8 @@
   "acquire.autoHint": "自动模式由服务端按画质、价格、做种排序挑一条；需要花积分时会先问你。",
   "acquire.autoRun": "自动获取",
   "acquire.searchFailed": "搜索资源失败",
+  "acquire.searching": "正在搜索并读取价格，最多需要半分钟…",
+  "acquire.season": "第 {season} 季",
   "acquire.notReady": "还不能获取",
   "acquire.noRelease": "没有找到资源",
   "acquire.noReleaseBody": "这个标题目前没有可用的资源，可以换一个来源标签，或稍后再试。",

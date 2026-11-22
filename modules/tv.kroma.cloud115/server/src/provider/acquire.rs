@@ -457,6 +457,7 @@ mod tests {
         Config {
             cookie: "UID=1_A1_2; CID=x".into(),
             source_url: "http://127.0.0.1:9".into(),
+            transit_folder: "/转存".into(),
             ..Config::default()
         }
     }
@@ -471,6 +472,7 @@ mod tests {
                 tmdb_id: 155,
                 ..AcquireBody::default()
             },
+            "",
         );
         assert_eq!(reply.status, "failed");
         assert!(reply.error.unwrap().contains("未知类型"));
@@ -487,6 +489,7 @@ mod tests {
                 confirmed: true,
                 ..AcquireBody::default()
             },
+            "",
         );
         assert_eq!(reply.status, "failed");
         let error = reply.error.unwrap();
@@ -506,6 +509,7 @@ mod tests {
                 price: Some(9),
                 ..AcquireBody::default()
             },
+            "",
         );
         // The gate answers before any transport is attempted: nothing about this
         // needs the source to be reachable.

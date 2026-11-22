@@ -182,6 +182,110 @@ pub fn approved_for_points(task: &Task) -> bool {
     task.approved_at > 0
 }
 
+/// Attach the shares this account already unlocked for a title, so their later
+/// additions are followed for free. Used right after a transfer was started
+/// outside this module (the acquisition panel), where the source, not the
+/// module, owns the job id.
+pub fn attach_unlocked_shares(source: &str, task: &mut Task) {
+    if task.tmdb_id <= 0 {
+        return;
+    }
+    let Ok(value) = source_json(source, &format!("/unlocked?tmdb={}", task.tmdb_id), None) else {
+        return;
+    };
+    let Some(shares) = value.get("shares").and_then(Value::as_array) else {
+        return;
+    };
+    for share in shares {
+        let code = share.get("shareCode").and_then(Value::as_str).unwrap_or("").trim();
+        if code.is_empty() {
+            continue;
+        }
+        if task.following_shares.iter().any(|one| one.share_code == code) {
+            continue;
+        }
+        // A season this task does not want is not followed: the same title can
+        // have several unlocked shares, one per season.
+        let season = share.get("season").and_then(Value::as_i64).unwrap_or(0);
+        if task.season > 0 && season > 0 && season != task.season {
+            continue;
+        }
+        task.following_shares.push(FollowedShare {
+            share_code: code.to_string(),
+            password: share.get("password").and_then(Value::as_str).unwrap_or("").to_string(),
+            name: share
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            unlocked_at: kroma_module_sdk::primitives::now_ms(),
+            ..FollowedShare::default()
+        });
+    }
+}
+
+/// Take the releases `discover` found on titles the operator already approved:
+/// one transfer per task per pass, never the same episode twice. This is the
+/// per-title approval in action — a priced new episode spends points without
+/// asking again, because the operator's answer was for the title, not the file.
+pub fn take_auto(now: i64) -> bool {
+    let mut stored = store::load();
+    let source = stored.source_url.clone();
+    if source.trim().is_empty() {
+        return false;
+    }
+    let mut touched = false;
+    let ids: Vec<String> = stored
+        .tasks
+        .iter()
+        .filter(|task| task.enabled && task.kind == "show" && task.approved_at > 0)
+        .map(|task| task.id.clone())
+        .collect();
+    for id in ids {
+        let Some(position) = stored.tasks.iter().position(|task| task.id == id) else {
+            continue;
+        };
+        if matches!(
+            stored.tasks[position].status.as_str(),
+            "unlocking" | "running" | "transferring"
+        ) {
+            continue;
+        }
+        let Some(item) = stored
+            .items
+            .iter_mut()
+            .find(|item| item.task_id == id && item.state == "auto")
+        else {
+            continue;
+        };
+        let resource = item.resource.clone();
+        if already_sent(&stored.tasks[position], &resource) {
+            item.state = "skipped".into();
+            touched = true;
+            continue;
+        }
+        let kind = stored.tasks[position].kind.clone();
+        let task = &mut stored.tasks[position];
+        task.resource = resource.clone();
+        task.resource_index = item.index;
+        task.price = item.price;
+        task.link = item.link.clone();
+        item.state = "sent".into();
+        task.last_run_at = now;
+        record_sent(task, &resource);
+        let started = crate::routes::start_transfer(task, &source, &kind);
+        if !started {
+            item.state = "failed".into();
+            item.last_error = task.last_error.clone();
+        }
+        touched = true;
+    }
+    if touched {
+        let _ = store::save(&stored);
+    }
+    touched
+}
+
 /// Follow every enabled task's unlocked shares and transfer what arrived since
 /// the last pass. Cheap: it lists a share and only writes when there is more.
 pub fn follow_shares(now: i64) -> bool {

@@ -1,7 +1,7 @@
-// The acquisition panel: every "get this" entry opens this, one place where the
-// releases a search found are listed, picked, and confirmed. The tabs name the
-// sources the server can ask; MADREEL is the one wired today, so the other two
-// say why they are empty instead of pretending to search.
+// The acquisition panel: the one place a release is listed, priced and taken.
+// There is one source today (MADREEL), so there is no source switcher to click
+// through — a tab that always says "not wired" is worse than no tab. Probing a
+// price opens each candidate's page, which takes a while, so the wait says so.
 
 import type { KromaClient } from '@kromatv/client';
 import { apiErrorText } from '@kromatv/client';
@@ -14,32 +14,17 @@ import type { Translate } from '@kromatv/i18n';
 import { useT } from '@kromatv/ui';
 import {
   Badge,
-  Box,
   Button,
   Column,
   Dialog,
   EmptyState,
   Row,
-  SegmentGroup,
   Skeleton,
   Spacer,
   Text,
 } from '@kromatv/ui/kit';
 import { useCallback, useEffect, useState } from 'react';
 import type { AcquisitionTarget } from '#web/shared/lib/use-acquisition.hook';
-
-/** The tabs the panel can show. `madreel` is the only source with a provider
- *  behind it today; the rest are named so the shape of the thing is honest
- *  rather than hidden. */
-export type AcquireTab = 'madreel' | 'bt' | 'site';
-
-const TABS: readonly AcquireTab[] = ['madreel', 'bt', 'site'];
-
-const TAB_LABEL = {
-  madreel: 'acquire.tabMadreel',
-  bt: 'acquire.tabBt',
-  site: 'acquire.tabSite',
-} as const;
 
 /** What the panel needs to ask for one title. */
 export interface AcquirePanelTarget {
@@ -97,7 +82,7 @@ function CandidateRow({
   const t = useT();
   const size = bytesOf(one.sizeBytes ?? null) || one.size || '';
   return (
-    <Row gap={12} center>
+    <Row gap={12} center p={12} radius="md" bg="surface1">
       <Column flex gap={4}>
         <Row gap={6} center wrap>
           {one.recommended ? <Badge tone="info">{t('acquire.recommended')}</Badge> : null}
@@ -112,7 +97,7 @@ function CandidateRow({
               {size}
             </Text>
           ) : null}
-          <Text variant="meta" color="textMuted">
+          <Text variant="meta" color={one.needsConfirm ? 'danger' : 'textMuted'}>
             {priceLabel(t, one)}
           </Text>
         </Row>
@@ -129,17 +114,14 @@ function CandidateRow({
   );
 }
 
-/** The panel body for one target: fetch the list once per open, and let the
- *  caller take a row. */
+/** The list for one target: fetched once per open, taken row by row. */
 function AcquireList({
   client,
   ask,
-  tab,
   onTake,
 }: Readonly<{
   client: KromaClient;
   ask: AcquirePanelTarget;
-  tab: AcquireTab;
   onTake: (candidate: Record<string, unknown>) => Promise<void>;
 }>) {
   const t = useT();
@@ -193,18 +175,12 @@ function AcquireList({
     [onTake],
   );
 
-  if (tab !== 'madreel') {
-    return (
-      <EmptyState.Root>
-        <EmptyState.Title>{t(TAB_LABEL[tab])}</EmptyState.Title>
-        <EmptyState.Hint>{t('acquire.tabNotWired')}</EmptyState.Hint>
-      </EmptyState.Root>
-    );
-  }
-
   if (loading) {
     return (
       <Column gap={8}>
+        <Text variant="meta" color="textMuted">
+          {t('acquire.searching')}
+        </Text>
         <Skeleton shape="block" style={{ height: 54 }} />
         <Skeleton shape="block" style={{ height: 54 }} />
         <Skeleton shape="block" style={{ height: 54 }} />
@@ -263,10 +239,9 @@ function AcquireList({
 }
 
 /** The one acquisition panel. Closing it never cancels work the server already
- *  started: the attempt keeps its own id and the task list follows it. */
+ *  started: the attempt keeps its own id and the tasks tab follows it. */
 export function AcquirePanel({ open, onClose, client, ask, onTake }: Readonly<PanelProps>) {
   const t = useT();
-  const [tab, setTab] = useState<AcquireTab>('madreel');
   const [auto, setAuto] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
 
@@ -292,7 +267,16 @@ export function AcquirePanel({ open, onClose, client, ask, onTake }: Readonly<Pa
     <Dialog.Root open={open} onClose={onClose} title={t('acquire.title')} width="lg" fullHeight>
       <Dialog.Header>
         <Row gap={12} center wrap>
-          <Text variant="title">{t('acquire.title')}</Text>
+          <Column gap={2} flex>
+            <Text variant="title">{t('acquire.title')}</Text>
+            {ask ? (
+              <Text variant="meta" color="textMuted">
+                {ask.target.title}
+                {ask.target.year ? ` (${ask.target.year})` : ''}
+                {ask.season ? ` · ${t('acquire.season', { season: ask.season })}` : ''}
+              </Text>
+            ) : null}
+          </Column>
           <Spacer />
           <Button
             size="sm"
@@ -302,26 +286,9 @@ export function AcquirePanel({ open, onClose, client, ask, onTake }: Readonly<Pa
             onPress={() => setAuto((value) => !value)}
           />
         </Row>
-        {ask ? (
-          <Text variant="meta" color="textMuted">
-            {ask.target.title}
-            {ask.target.year ? ` (${ask.target.year})` : ''}
-          </Text>
-        ) : null}
       </Dialog.Header>
       <Dialog.Panel>
         <Column gap={16}>
-          <SegmentGroup.Root
-            value={tab}
-            onValueChange={(next) => setTab(next as AcquireTab)}
-            label={t('acquire.source')}
-          >
-            {TABS.map((one) => (
-              <SegmentGroup.Item key={one} value={one}>
-                <SegmentGroup.Label>{t(TAB_LABEL[one])}</SegmentGroup.Label>
-              </SegmentGroup.Item>
-            ))}
-          </SegmentGroup.Root>
           {auto ? (
             <Row gap={12} center wrap>
               <Text variant="body">{t('acquire.autoHint')}</Text>
@@ -334,7 +301,7 @@ export function AcquirePanel({ open, onClose, client, ask, onTake }: Readonly<Pa
               />
             </Row>
           ) : null}
-          {ask ? <AcquireList client={client} ask={ask} tab={tab} onTake={take} /> : <Box />}
+          {ask ? <AcquireList client={client} ask={ask} onTake={take} /> : null}
         </Column>
       </Dialog.Panel>
     </Dialog.Root>

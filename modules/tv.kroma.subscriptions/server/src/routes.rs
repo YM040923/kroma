@@ -69,6 +69,22 @@ struct SubscribeBody {
     link: String,
 }
 
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct FollowBody {
+    tmdb_id: i64,
+    title: String,
+    kind: String,
+    #[serde(default)]
+    season: i64,
+    #[serde(default)]
+    poster: String,
+    #[serde(default)]
+    year: i64,
+    #[serde(default)]
+    link: String,
+}
+
 pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
     Router::new()
         .route("/subscriptions", get(list::<S>).post(create::<S>))
@@ -79,6 +95,7 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/calendar", get(calendar::<S>))
         .route("/search", post(search::<S>))
         .route("/subscribe", post(subscribe::<S>))
+        .route("/follow", post(follow_title::<S>))
         .route("/subscriptions/{id}/execute", post(execute::<S>))
         .route("/subscriptions/{id}/execute-item", post(execute_item::<S>))
         .route("/subscriptions/{id}/job", get(job::<S>))
@@ -488,7 +505,72 @@ async fn subscribe<S: HostCtx + Clone + Send + Sync + 'static>(State(host): Stat
     Ok(Json(task))
 }
 
-fn start_transfer(task: &mut Task, source_url: &str, kind: &str) -> bool {
+/// `POST /follow`: the acquisition panel created a show attempt (a season was
+/// transferred through the core's own path), so the module registers the title
+/// for follow-up only — no transfer of its own here. Later additions inside
+/// the account's already-unlocked shares are taken automatically; anything
+/// needing points waits for the per-title approval the panel sets.
+async fn follow_title<S: HostCtx + Clone + Send + Sync + 'static>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+    Json(body): Json<FollowBody>,
+) -> Result<Json<Task>, axum::response::Response> {
+    require(&host, &user)?;
+    if body.tmdb_id <= 0 || body.title.trim().is_empty() {
+        return Err(json_error(StatusCode::BAD_REQUEST, "追更缺少影片信息"));
+    }
+    let mut stored = store::load();
+    let season = if body.kind == "show" { body.season } else { 0 };
+    let existing = stored
+        .tasks
+        .iter_mut()
+        .find(|task| task.tmdb_id == body.tmdb_id && (season == 0 || task.season == season));
+    if let Some(task) = existing {
+        task.enabled = true;
+        let result = task.clone();
+        store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
+        return Ok(Json(result));
+    }
+    let mut task = Task {
+        id: format!("sub-{}", kroma_module_sdk::primitives::now_ms()),
+        name: body.title.trim().to_string(),
+        source: "madreel".into(),
+        monitor_path: String::new(),
+        target_path: String::new(),
+        failure_path: String::new(),
+        monitor_mode: "follow".into(),
+        enabled: true,
+        status: "pending".into(),
+        last_run_at: kroma_module_sdk::primitives::now_ms(),
+        last_error: String::new(),
+        tmdb_id: body.tmdb_id,
+        kind: if body.kind.is_empty() { "show".into() } else { body.kind.clone() },
+        resource: String::new(),
+        resource_index: 0,
+        price: 0,
+        job_id: String::new(),
+        poster: body.poster.trim().into(),
+        year: body.year,
+        season,
+        episode_start: 0,
+        episode_total: 0,
+                link: body.link.trim().into(),
+        // The panel's price confirmation is the per-title approval: later priced
+        // episodes of this title are taken without asking again.
+        approved_at: kroma_module_sdk::primitives::now_ms(),
+        sent_episodes: Vec::new(),
+        following_shares: Vec::new(),
+    };
+    crate::follow::attach_unlocked_shares(&stored.source_url, &mut task);
+    if !task.following_shares.is_empty() {
+        task.status = "running".into();
+    }
+    stored.tasks.push(task.clone());
+    store::save(&stored).map_err(|e| json_error(StatusCode::INTERNAL_SERVER_ERROR, &e))?;
+    Ok(Json(task))
+}
+
+pub(crate) fn start_transfer(task: &mut Task, source_url: &str, kind: &str) -> bool {
     if source_url.trim().is_empty() {
         task.status = "pending".into();
         task.last_error = "来源服务地址未配置".into();

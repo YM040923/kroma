@@ -41,6 +41,9 @@ fn poll<S: HostCtx + Clone + Send + Sync + 'static>(_host: &S) -> anyhow::Result
         follow::discover(&source, &mut stored, now);
         let _ = store::save(&stored);
     }
+    // An approved title takes the episodes discovery just recorded; an
+    // unapproved one leaves them as items for the operator to pick.
+    follow::take_auto(now);
     follow::follow_shares(now);
     Ok(())
 }

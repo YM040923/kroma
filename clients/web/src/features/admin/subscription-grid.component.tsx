@@ -1,6 +1,7 @@
-// Subscriptions as the centre draws them: one card per followed title, read from
-// the subscriptions module's own admin API. The module keeps the data and the
-// full editing page; this is the shelf, plus the one button that opens it.
+// Subscriptions, managed here rather than on a second page: the same module
+// routes the old page called, driven by a grid of posters. A subscription's only
+// jobs are "watch this share for me" and "take what arrives", so that is all
+// this panel does.
 
 import { useT } from '@kromatv/ui';
 import { Badge, Button, Column, EmptyState, Img, Row, Text } from '@kromatv/ui/kit';
@@ -24,26 +25,37 @@ interface SubscriptionCard {
   episodeTotal: number;
   link: string;
   tmdbId: number;
+  resource: string;
+  followingShares?: { shareCode: string; name: string; seen?: string[] }[];
+  sentEpisodes?: string[];
 }
 
-/** `{ tasks, items, sourceUrl, ... }` is what the module's list route answers;
- *  only the cards are read here. */
 interface SubscriptionView {
   tasks?: SubscriptionCard[];
   sourceUrl?: string;
 }
 
-async function readSubscriptions(token: string | undefined): Promise<SubscriptionView> {
-  const response = await fetch(`${apiBase()}/api/admin/m/${MODULE}/subscriptions`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+async function moduleCall<T>(
+  path: string,
+  token: string | undefined,
+  init?: { method?: string; body?: unknown },
+): Promise<T> {
+  const response = await fetch(`${apiBase()}/api/admin/m/${MODULE}${path}`, {
+    method: init?.method ?? 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: init?.body ? JSON.stringify(init.body) : undefined,
   });
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    const text = await response.text().catch(() => '');
+    throw new Error(text.trim().slice(0, 200) || `HTTP ${response.status}`);
   }
-  return (await response.json()) as SubscriptionView;
+  return (await response.json()) as T;
 }
 
-const STATE_TONE: Record<string, 'info' | 'warning' | 'danger' | 'success'> = {
+const TONE: Record<string, 'info' | 'warning' | 'danger' | 'success' | 'neutral'> = {
   done: 'success',
   running: 'info',
   unlocking: 'info',
@@ -52,16 +64,18 @@ const STATE_TONE: Record<string, 'info' | 'warning' | 'danger' | 'success'> = {
   failed: 'danger',
 };
 
-export function SubscriptionGrid({ onOpen }: Readonly<{ onOpen: () => void }>) {
+export function SubscriptionGrid() {
   const t = useT();
   const { client } = useAuth();
   const [view, setView] = useState<SubscriptionView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    readSubscriptions(client.sessionToken)
+    moduleCall<SubscriptionView>('/subscriptions', client.sessionToken)
       .then((reply) => {
         setView(reply);
         setError(null);
@@ -71,6 +85,18 @@ export function SubscriptionGrid({ onOpen }: Readonly<{ onOpen: () => void }>) {
   }, [client.sessionToken]);
 
   useEffect(load, [load]);
+
+  const act = (id: string, path: string, method: 'POST' | 'PUT') => {
+    setBusyId(id);
+    setNotice(null);
+    moduleCall(`/subscriptions/${id}${path}`, client.sessionToken, { method, body: {} })
+      .then(() => {
+        setNotice(t('centre.subsActionDone'));
+        load();
+      })
+      .catch((reason) => setNotice(String(reason)))
+      .finally(() => setBusyId(null));
+  };
 
   if (loading && !view) {
     return <TableSkeleton rows={3} />;
@@ -89,9 +115,6 @@ export function SubscriptionGrid({ onOpen }: Readonly<{ onOpen: () => void }>) {
       <EmptyState.Root>
         <EmptyState.Title>{t('centre.subsEmpty')}</EmptyState.Title>
         <EmptyState.Hint>{t('centre.subsEmptyHint')}</EmptyState.Hint>
-        <EmptyState.Actions>
-          <Button variant="primary" label={t('centre.subsOpen')} onPress={onOpen} />
-        </EmptyState.Actions>
       </EmptyState.Root>
     );
   }
@@ -101,30 +124,49 @@ export function SubscriptionGrid({ onOpen }: Readonly<{ onOpen: () => void }>) {
         <Text variant="meta" color="textMuted">
           {t('centre.subsCount', { count: cards.length })}
         </Text>
-        <Button size="sm" variant="glass" label={t('centre.subsOpen')} onPress={onOpen} />
+        {notice ? (
+          <Text variant="meta" color="textMuted">
+            {notice}
+          </Text>
+        ) : null}
       </Row>
       <Row gap={12} wrap>
-        {cards.map((card) => (
-          <Column key={card.id} gap={6} style={{ width: 140 }}>
-            <Img src={card.poster} style={{ width: 140, height: 210, borderRadius: 8 }} />
-            <Text variant="body" lines={2}>
-              {card.name}
-            </Text>
-            <Row gap={6} center wrap>
-              <Badge tone={STATE_TONE[card.status] ?? 'neutral'}>{card.status}</Badge>
-              {card.year ? (
-                <Text variant="meta" color="textMuted">
-                  {card.year}
+        {cards.map((card) => {
+          const shares = card.followingShares ?? [];
+          return (
+            <Column key={card.id} gap={6} style={{ width: 150 }}>
+              <Img src={card.poster} style={{ width: 150, height: 225, borderRadius: 8 }} />
+              <Text variant="body" lines={2}>
+                {card.name}
+              </Text>
+              <Row gap={6} center wrap>
+                <Badge tone={TONE[card.status] ?? 'neutral'}>{card.status}</Badge>
+                {card.year ? (
+                  <Text variant="meta" color="textMuted">
+                    {card.year}
+                  </Text>
+                ) : null}
+              </Row>
+              {shares.length > 0 ? (
+                <Text variant="meta" color="textMuted" lines={1}>
+                  {t('centre.subsFollowing', { count: shares.length })}
                 </Text>
               ) : null}
-            </Row>
-            {card.lastError ? (
-              <Text variant="meta" color="danger" lines={2}>
-                {card.lastError}
-              </Text>
-            ) : null}
-          </Column>
-        ))}
+              {card.lastError ? (
+                <Text variant="meta" color="danger" lines={2}>
+                  {card.lastError}
+                </Text>
+              ) : null}
+              <Button
+                size="sm"
+                variant="glass"
+                label={t('centre.subsTakeNow')}
+                loading={busyId === card.id}
+                onPress={() => act(card.id, '/execute', 'POST')}
+              />
+            </Column>
+          );
+        })}
       </Row>
     </Column>
   );

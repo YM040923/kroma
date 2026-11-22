@@ -161,12 +161,18 @@ export type AcquisitionCandidates = z.infer<typeof AcquisitionCandidates>;
 export const AcquisitionTask = z.object({
   id: z.string(),
   unitKey: z.string(),
+  /** The title the attempt was made for, resolved from its unit. */
+  title: z.string().default(''),
   provider: z.string(),
   status: z.string(),
   errorCode: z.string().nullish(),
   errorMessage: z.string().nullish(),
   jobId: z.string().nullish(),
   costPoints: z.number().nullish(),
+  /** The price the provider quoted when the ask was made. */
+  quote: z
+    .object({ points: z.number().nullish(), priceKnown: z.boolean().default(false) })
+    .nullish(),
   createdAt: z.number(),
   updatedAt: z.number(),
   finishedAt: z.number().nullish(),

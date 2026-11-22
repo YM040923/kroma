@@ -13,6 +13,7 @@ import type { Translate } from '@kromatv/i18n';
 import { useFormat, useT } from '@kromatv/ui';
 import { useConfirm } from '@kromatv/ui/kit';
 import { useCallback } from 'react';
+import { apiBase } from '#web/shared/lib/api';
 import { useAuth } from '#web/shared/lib/auth';
 
 /** The title an acquisition aims at: resolved before the ask, never guessed. */
@@ -111,6 +112,33 @@ function toResult(outcome: AcquisitionOutcome): AcquisitionResult {
   }
 }
 
+/** Tells the subscriptions module a show was grabbed, so it follows the title:
+ *  episodes that land in a share this account already unlocked are taken
+ *  without asking. Best effort — a module that is not installed, or a title that
+ *  cannot be followed, must never turn a successful grab into a failure. */
+async function followTitle(token: string | undefined, target: AcquisitionTarget, season: number | null) {
+  if (target.kind !== 'show') {
+    return;
+  }
+  try {
+    await fetch(`${apiBase()}/api/admin/m/tv.kroma.subscriptions/follow`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tmdbId: target.tmdbId,
+        title: target.title,
+        kind: 'show',
+        season: season ?? 0,
+      }),
+    });
+  } catch {
+    // Following is a convenience on top of the grab that already succeeded.
+  }
+}
+
 /** What confirming needs: the transport, how to speak, and how to ask. */
 interface ConfirmDeps {
   ask: Ask;
@@ -162,22 +190,30 @@ export function useAcquisition(): Acquire {
       // release.
       const picked = pick.candidate ?? null;
       try {
+        let result: AcquisitionResult;
         if (picked) {
           const done = await client.acquisition.start({
             ...body,
             candidate: picked,
             season: pick.season ?? null,
           });
-          if (done.state === 'needs_confirm') {
-            return await confirmCandidate({ ask: confirm, client, t, bytes: fmt.bytes }, body, done);
-          }
-          return toResult(done);
+          result =
+            done.state === 'needs_confirm'
+              ? await confirmCandidate({ ask: confirm, client, t, bytes: fmt.bytes }, body, done)
+              : toResult(done);
+        } else {
+          const outcome = await client.acquisition.start(body);
+          result =
+            outcome.state === 'needs_confirm'
+              ? await confirmCandidate({ ask: confirm, client, t, bytes: fmt.bytes }, body, outcome)
+              : toResult(outcome);
         }
-        const outcome = await client.acquisition.start(body);
-        if (outcome.state !== 'needs_confirm') {
-          return outcome;
+        // A show that was grabbed is worth following: the module takes what
+        // lands later inside a share this account already unlocked.
+        if (result.state === 'started') {
+          await followTitle(client.sessionToken, target, pick.season ?? scope.seasons?.[0] ?? null);
         }
-        return await confirmCandidate({ ask: confirm, client, t, bytes: fmt.bytes }, body, outcome);
+        return result;
       } catch (error) {
         return { state: 'failed', error: apiErrorText(error, t('discover.requestFailed')) };
       }
