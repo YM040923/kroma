@@ -542,12 +542,18 @@ async fn follow_title<S: HostCtx + Clone + Send + Sync + 'static>(
     }
     let mut stored = store::load();
     let season = if body.kind == "show" { body.season } else { 0 };
+    // One follow task per title, whatever season it was first opened for: the
+    // same show asked for a second season is the same watch, and two tasks
+    // would discover — and pay for — the same releases twice.
     let existing = stored
         .tasks
         .iter_mut()
-        .find(|task| task.tmdb_id == body.tmdb_id && (season == 0 || task.season == season));
+        .find(|task| task.tmdb_id == body.tmdb_id && task.kind == "show");
     if let Some(task) = existing {
         task.enabled = true;
+        if season > 0 {
+            task.season = season;
+        }
         // A title the panel confirmed for points stays approved; a later free
         // grab never revokes an earlier approval, and never grants one either.
         if body.approved {
@@ -555,6 +561,13 @@ async fn follow_title<S: HostCtx + Clone + Send + Sync + 'static>(
         }
         crate::follow::attach_unlocked_shares(&stored.source_url, task);
         let result = task.clone();
+        // Two tasks for one title (an earlier one, or a duplicate) would show
+        // the same episode twice and pay twice; fold them here.
+        let keep = result.id.clone();
+        stored.tasks.retain(|other| {
+            other.id == keep || !(other.tmdb_id == result.tmdb_id && other.kind == "show")
+        });
+        stored.items.retain(|item| item.task_id == keep);
         // Asking to follow again is also a reason to look now rather than on the
         // next half-hour tick: the operator is on this page.
         stored.last_search_at = 0;

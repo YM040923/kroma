@@ -174,7 +174,7 @@ pub async fn start(
                         .provider(PROVIDER_CLOUD115)
                         .error("the cloud provider is not available"));
                 };
-                acquire_show_candidate(&state, resolve, &body, &candidate)
+                acquire_show_candidate(&state, resolve, &body, &candidate, false)
             }
             None => show_step(&state, &user, &body),
         },
@@ -211,13 +211,17 @@ fn acquire_show_candidate(
     resolve: &Resolver,
     body: &StartBody,
     candidate: &Value,
+    confirmed: bool,
 ) -> anyhow::Result<AcquisitionResponse> {
     let Some(normalized) = normalize_candidate(candidate) else {
         return Ok(AcquisitionResponse::new(AcquisitionState::Failed)
             .provider(PROVIDER_CLOUD115)
             .error("candidate is not a valid acquisition candidate"));
     };
-    if needs_confirm(&normalized) {
+    // `/confirm` is the operator's own answer to the price question, so it
+    // must not be asked again: only an unconfirmed `/start` may come back with
+    // `needs_confirm`.
+    if !confirmed && needs_confirm(&normalized) {
         return Ok(AcquisitionResponse::new(AcquisitionState::NeedsConfirm)
             .provider(PROVIDER_CLOUD115)
             .candidate(candidate.clone())
@@ -563,7 +567,7 @@ pub async fn confirm(
                 season: body.season,
                 candidate: Some(body.candidate.clone()),
             };
-            acquire_show_candidate(&state, &cloud, &start, &body.candidate)
+            acquire_show_candidate(&state, &cloud, &start, &body.candidate, true)
         }
         Kind::Movie => {
             let ask = movie_ask(
