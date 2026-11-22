@@ -79,7 +79,9 @@ impl MediaUnitRef {
         self.tmdb_id > 0
             && match self.kind {
                 MediaUnitKind::Movie => self.season == 0 && self.episode == 0,
-                MediaUnitKind::Episode => self.season > 0 && self.episode > 0,
+                // Episode 0 is a whole-season grab (a pack, not one episode),
+                // which is exactly what a show's release list offers.
+                MediaUnitKind::Episode => self.season > 0 && self.episode <= 2000,
             }
     }
 }
