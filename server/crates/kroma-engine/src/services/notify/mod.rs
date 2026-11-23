@@ -221,7 +221,6 @@ pub fn publish_counts<S: HostStorage>(state: &S, user_id: &str, unread: u32, uns
 }
 
 #[cfg(test)]
-mod request_news;
 
 #[cfg(test)]
 mod tests {

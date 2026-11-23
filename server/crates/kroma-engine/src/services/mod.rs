@@ -43,5 +43,3 @@ pub mod updates;
 pub mod upgrade_tasks;
 pub mod vocab;
 
-pub use kroma_requests::lifecycle as requests;
-pub use kroma_requests::{monitoring, request_ledger};

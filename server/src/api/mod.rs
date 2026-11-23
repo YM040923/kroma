@@ -11,14 +11,12 @@ pub mod poster;
 pub mod ws;
 
 mod accounts;
-mod acquisition;
 mod cast;
 mod content_limit;
 mod diagnostics;
 mod direct;
 mod discover;
 mod douban;
-mod downloads_overlay;
 mod etag;
 mod extract;
 mod handoff;
@@ -34,7 +32,6 @@ mod media;
 pub mod media_ticket;
 mod metadata;
 mod modules;
-mod monitoring;
 mod notifications;
 pub mod online_subs;
 mod origin;
@@ -49,7 +46,6 @@ mod releases;
 mod rematch;
 mod remote_art;
 mod reports;
-mod requests;
 pub mod seam;
 mod search;
 mod server_status;
@@ -134,7 +130,6 @@ mod it_member_reach;
 #[cfg(test)]
 mod it_module_frontend;
 #[cfg(test)]
-mod it_monitoring;
 #[cfg(test)]
 mod it_movie_cards;
 #[cfg(test)]
@@ -170,9 +165,7 @@ mod it_remote_art;
 #[cfg(test)]
 mod it_reports;
 #[cfg(test)]
-mod it_requests_calendar;
 #[cfg(test)]
-mod it_requests_ledger;
 #[cfg(test)]
 mod it_reset;
 #[cfg(test)]
@@ -334,9 +327,6 @@ pub fn router(state: SharedState, supervisor: Arc<Supervisor>) -> Router {
         .merge(discover::routes())
         .merge(trailers::routes())
         .merge(rematch::routes())
-        .merge(monitoring::routes())
-        .merge(requests::routes())
-        .merge(acquisition::routes())
         .merge(reports::routes())
         .merge(notifications::routes())
         .merge(releases::routes())

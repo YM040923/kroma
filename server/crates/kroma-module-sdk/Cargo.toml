@@ -19,7 +19,6 @@ kroma-module-host = { workspace = true }
 kroma-domain = { workspace = true, optional = true }
 kroma-db = { workspace = true, optional = true }
 # The core's request and monitoring workflows, behind `requests`.
-kroma-requests = { workspace = true, optional = true }
 # Reading and re-encoding one input, behind `transcode`.
 kroma-media = { workspace = true, optional = true }
 # What a module links: the wire types, the HTTP client, the i18n engine its
@@ -71,7 +70,6 @@ core = ["dep:kroma-db", "storage"]
 domain = ["dep:kroma-domain"]
 # `requests::{lifecycle, monitoring, request_ledger}`: the core's request and
 # monitoring workflows, for the first-party module that orchestrates them.
-requests = ["dep:kroma-requests", "core", "domain"]
 
 [dev-dependencies]
 # The shared HostCtx double (`testing::StubHost`) for the seam tests.

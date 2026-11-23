@@ -63,19 +63,6 @@ export const NAV_GROUPS: AdminNavGroup[] = [
     section: 'media',
     items: [
       {
-        to: '/admin/acquisition',
-        labelKey: 'admin.navAcquisition',
-        cap: ['library.manage', 'requests.manage'],
-        icon: 'download',
-        keywords: 'get acquire follow subscribe tasks',
-      },
-      {
-        to: '/admin/monitoring',
-        labelKey: 'admin.navMonitoring',
-        cap: ['library.manage', 'requests.manage'],
-        icon: 'radar',
-      },
-      {
         to: '/admin/libraries',
         labelKey: 'admin.navLibraries',
         cap: 'library.manage',
@@ -95,13 +82,6 @@ export const NAV_GROUPS: AdminNavGroup[] = [
       },
       { to: '/admin/ai', labelKey: 'admin.navAi', cap: 'settings.manage', icon: 'sparkles' },
     ],
-  },
-  {
-    // Section anchor: the acquisition module pages (Indexers, Downloads, ...)
-    // target `section: "acquisition"` and render here; no built-in items of its own.
-    labelKey: 'admin.groupAcquisition',
-    section: 'acquisition',
-    items: [],
   },
   {
     labelKey: 'admin.groupSystem',

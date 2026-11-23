@@ -4,7 +4,6 @@ import { useT } from '@kromatv/ui';
 import { Box, EmptyState, Section } from '@kromatv/ui/kit';
 import { useMemo } from 'react';
 import { useAccountRoster } from '#web/features/admin/dashboard-accounts.hook';
-import { MissingCallout } from '#web/features/admin/dashboard-library.component';
 import {
   BandwidthSection,
   CpuSection,
@@ -73,7 +72,6 @@ export function DashboardScreen() {
       {canManageSettings ? <UpdateCallout /> : null}
       {canManageLibrary ? (
         <Box mt={24}>
-          <MissingCallout />
         </Box>
       ) : null}
 

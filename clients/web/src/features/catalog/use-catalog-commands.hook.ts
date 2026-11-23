@@ -17,7 +17,6 @@ export function useCatalogCommands(): void {
   useCommands(
     [
       { label: t('nav.myList'), icon: 'bookmark', to: '/my-list' },
-      { label: t('nav.requests'), icon: 'inbox', cap: 'requests.create', to: '/requests' },
       ...modulePages.map(modulePageCommand),
     ],
     { group: t('nav.yourSpace') },

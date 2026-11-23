@@ -4,24 +4,21 @@ import { useWebRuntime } from '#web/shared/lib/web-runtime';
 import { tmdbKindOf } from '@kromatv/client/discovery';
 import { ItemId, type SubjectId } from '@kromatv/client/media';
 import { useCast, useT } from '@kromatv/ui';
-import { classes, type HostElement, styles, Text, useStyles } from '@kromatv/ui/kit';
+import { classes, type HostElement, styles, useStyles } from '@kromatv/ui/kit';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { AiSuggestRail } from '#web/features/catalog/ai-suggest-rail.component';
-import { AcquirePanel } from '#web/features/catalog/acquire-panel.component';
 import { CastRail, type SimilarItem, SimilarRail } from '#web/features/catalog/detail.component';
 import { SeasonSection } from '#web/features/catalog/episode-list.component';
 import { TitleHero } from '#web/features/catalog/title-hero.component';
 import { SharePanel } from '#web/features/catalog/share-panel.component';
 import { TreatmentsPanel } from '#web/features/catalog/treatments-panel.component';
 import { useTitleCommands } from '#web/features/catalog/use-title-commands.hook';
-import { useTitleRequest } from '#web/features/catalog/use-title-request.hook';
 import { useAuth } from '#web/shared/lib/auth';
 import { useMyList } from '#web/shared/lib/mylist';
 
 import type { SimilarTarget, TitleView } from '#web/shared/lib/title-view';
 import { useWatched } from '#web/shared/lib/watched';
-import { page } from '#web/shared/ui';
 import { RouteLink } from '#web/shared/ui/route-link.component';
 
 // The page gutter is a fluid CSS custom property, which no style number can
@@ -85,58 +82,31 @@ function TitleBody({
   view,
   owned,
   localId,
-  error,
   similarItems,
   collectionItems,
   collectionTitle,
   epProgress,
-  busy,
-  pendingEps,
-  selected,
   isWatched,
   toggleWatched,
   onPlay,
-  onToggleEpisode,
-  onRequestSelected,
-  onRequestSeason,
   season,
-  onRequestAll,
-  onClearSelection,
 }: Readonly<{
   view: TitleView;
   owned: boolean;
   localId: string | null | undefined;
-  error: string | null;
   similarItems: SimilarItem[];
   collectionItems: SimilarItem[];
   collectionTitle: string;
   epProgress: Record<string, number>;
-  busy: boolean;
-  pendingEps: Set<string>;
-  selected: Set<string>;
   isWatched: (id: SubjectId) => boolean;
   toggleWatched: (id: SubjectId) => void;
   onPlay: (id: ItemId) => void;
-  onToggleEpisode: (season: number, episode: number) => void;
-  onRequestSelected: () => void;
-  onRequestSeason: (season: number) => void;
   season: number | undefined;
-  onRequestAll: () => void;
-  onClearSelection: () => void;
 }>) {
-  const pageScoped = useStyles(page);
 
   const t = useT();
   return (
     <>
-      {error ? (
-        <div className={classes(pageScoped.gutter)}>
-          <Text variant="label" color="dangerHover" mt={8}>
-            {error}
-          </Text>
-        </div>
-      ) : null}
-
       {owned && localId ? (
         <TreatmentsPanel
           kind={view.kind === 'show' ? 'show' : 'item'}
@@ -163,15 +133,6 @@ function TitleBody({
           toggleWatched={toggleWatched}
           progressOf={(id) => epProgress[id] ?? null}
           onPlay={onPlay}
-          canRequest={view.canRequest}
-          selected={selected}
-          onToggleEpisode={onToggleEpisode}
-          onRequestSelected={onRequestSelected}
-          onRequestSeason={onRequestSeason}
-          onRequestAll={onRequestAll}
-          onClearSelection={onClearSelection}
-          pendingEpisodes={pendingEps}
-          requestBusy={busy}
         />
       )}
 
@@ -203,25 +164,10 @@ export function TitleDetail({
   const s = useStyles(sDefinition);
 
   const t = useT();
-  const { user, client } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const {
-    view,
-    busy,
-    error,
-    selected,
-    pendingEps,
-    panelOpen,
-    panelScope,
-    closePanel,
-    takeFromPanel,
-    toggleEpisode,
-    requestSelected,
-    requestSeason,
-    requestAllSeasons,
-    clearSelection,
-    onRequestClick,
-  } = useTitleRequest(initial);
+  const view = initial;
+  const openSeason = season ?? initial.seasons[0]?.number ?? 1;
   const { isWatched, toggleWatched } = useWatched();
   const { inList, toggle: toggleList } = useMyList();
 
@@ -262,14 +208,12 @@ export function TitleDetail({
         view={view}
         owned={owned}
         localId={localId}
-        busy={busy}
         overline={overline}
         isWatched={isWatched}
         toggleWatched={toggleWatched}
         inList={inList}
         toggleList={toggleList}
         onPlay={play}
-        onRequest={onRequestClick}
         back={<RouteLink to={backTo} />}
       />
 
@@ -277,43 +221,14 @@ export function TitleDetail({
         view={view}
         owned={owned}
         localId={localId}
-        error={error}
         similarItems={similarItems}
         collectionItems={collectionItems}
         collectionTitle={collectionTitle}
         epProgress={epProgress}
-        busy={busy}
-        pendingEps={pendingEps}
-        selected={selected}
         isWatched={isWatched}
         toggleWatched={toggleWatched}
         onPlay={play}
-        onToggleEpisode={toggleEpisode}
-        onRequestSelected={requestSelected}
-        onRequestSeason={requestSeason}
-        season={season}
-        onRequestAll={requestAllSeasons}
-        onClearSelection={clearSelection}
-      />
-
-      <AcquirePanel
-        open={panelOpen}
-        onClose={closePanel}
-        client={client}
-        ask={
-          view.tmdbId == null
-            ? null
-            : {
-                target: {
-                  kind: view.kind,
-                  tmdbId: view.tmdbId,
-                  title: view.title,
-                  year: view.year ?? null,
-                },
-                season: panelScope.seasons?.[0] ?? null,
-              }
-        }
-        onTake={takeFromPanel}
+        season={openSeason}
       />
     </main>
   );

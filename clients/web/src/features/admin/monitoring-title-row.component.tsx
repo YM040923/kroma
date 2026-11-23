@@ -139,8 +139,8 @@ function RowBody({
   return (
     <Focusable asChild label={row.title} ring="focusInset" style={s.row}>
       <RouteLink
-        to="/admin/monitoring/$kind/$tmdbId"
-        params={{ kind: row.kind, tmdbId: String(row.tmdbId) }}
+        to={row.kind === 'show' ? '/shows/$id' : '/movies/$id'}
+        params={{ id: row.localId ?? '' }}
       >
         {facts}
       </RouteLink>

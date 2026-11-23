@@ -301,6 +301,18 @@ pub fn set_attempt_job(pool: &Pool, id: &str, job_id: &str, now_ms: i64) -> Resu
     Ok(())
 }
 
+/// Record what an attempt actually cost, without touching its status. A
+/// provider that charged on unlock and failed on transfer must still say what
+/// the points were.
+pub fn set_attempt_cost(pool: &Pool, id: &str, cost_points: i64, now_ms: i64) -> Result<()> {
+    let conn = pool.get()?;
+    conn.execute(
+        "UPDATE acquisition_attempts SET cost_points = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, cost_points, now_ms],
+    )?;
+    Ok(())
+}
+
 pub fn set_attempt_status(
     pool: &Pool,
     id: &str,

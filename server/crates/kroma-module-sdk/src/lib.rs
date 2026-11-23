@@ -51,14 +51,6 @@ pub mod host {
     pub use kroma_module_host::*;
 }
 
-/// The core's request and monitoring workflows, over [`host::HostStorage`]: the
-/// same code the core runs. Behind the `requests` feature, which brings the core's
-/// queries and shapes and no engine, so a component can hold it.
-#[cfg(feature = "requests")]
-pub mod requests {
-    pub use kroma_requests::*;
-}
-
 /// What the host and a module exchange: the session user and its permissions,
 /// notifications and their audience, metadata answers. Behind the `domain`
 /// feature, the whole of `kroma-domain` on top, for a first-party module that

@@ -88,15 +88,6 @@ function mount(over: Partial<Parameters<typeof SeasonSection>[0]> = {}) {
     toggleWatched: () => {},
     progressOf: () => null,
     onPlay: () => {},
-    canRequest: true,
-    selected: new Set<string>(),
-    onToggleEpisode: () => {},
-    onRequestSelected: () => {},
-    onRequestSeason: () => {},
-    onRequestAll: () => {},
-    onClearSelection: () => {},
-    pendingEpisodes: new Set<string>(),
-    requestBusy: false,
     ...over,
   };
   return render(

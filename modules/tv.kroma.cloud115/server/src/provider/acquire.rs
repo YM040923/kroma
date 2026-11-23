@@ -140,6 +140,7 @@ struct CandidateFields {
     price: Option<i64>,
     link: String,
     already_unlocked: bool,
+    share_code: String,
 }
 
 fn candidate_fields(body: &AcquireBody) -> CandidateFields {
@@ -188,6 +189,10 @@ fn candidate_fields(body: &AcquireBody) -> CandidateFields {
         price,
         link: if link.is_empty() { body.link.trim().into() } else { link },
         already_unlocked,
+        share_code: {
+            let code = text("shareCode");
+            if code.is_empty() { text("shareKey") } else { code }
+        },
     }
 }
 
@@ -261,7 +266,16 @@ fn start(
         "type": kind,
         "index": fields.index,
         "transfer": true,
+        // The price this caller confirmed, and the share it was confirmed on.
+        // The source re-reads the confirm page before spending and refuses when
+        // either no longer matches — a listing that shifted between probe and
+        // click otherwise pays for a different release.
+        "price": fields.price.unwrap_or(0),
+        "fileName": fields.resource,
     });
+    if !fields.share_code.is_empty() {
+        payload["shareCode"] = serde_json::json!(fields.share_code);
+    }
     // Land every acquisition in the one folder the operator set. The source
     // falls back to its own default when this is absent, which is what an
     // operator who has not configured one sees today.

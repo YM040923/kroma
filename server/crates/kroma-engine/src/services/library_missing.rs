@@ -14,10 +14,20 @@ use crate::db;
 use crate::infra::metadata::{self, discover};
 use crate::model::RequestKind;
 use crate::services::jobs::now_ms;
-use crate::services::requests::today_ymd;
 
 // One missing episode: `(season, episode, air_date)`.
 type Gap = (u32, u32, Option<String>);
+
+/// Today's UTC date as `YYYY-MM-DD`, the vocabulary episode air dates use.
+fn today_ymd() -> String {
+    let today = time::OffsetDateTime::now_utc().date();
+    format!(
+        "{:04}-{:02}-{:02}",
+        today.year(),
+        u8::from(today.month()),
+        today.day()
+    )
+}
 
 #[derive(Debug, Default)]
 pub struct MissingScanSummary {

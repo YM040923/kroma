@@ -16,7 +16,6 @@ import { useState } from 'react';
 import { CastRail } from '#web/features/catalog/detail.component';
 import { EpisodeRow, MissingEpisodeRow } from '#web/features/catalog/episode-row.component';
 import { epKey } from '#web/features/catalog/episode-selection';
-import { RequestBar, SeasonAsk } from '#web/features/catalog/request-bar.component';
 import { SeasonRequestCard } from '#web/features/catalog/season-card.component';
 import { EPISODES_ANCHOR } from '#web/shared/lib/show-search';
 
@@ -223,15 +222,6 @@ export function SeasonSection({
   toggleWatched,
   progressOf,
   onPlay,
-  canRequest,
-  selected,
-  onToggleEpisode,
-  onRequestSelected,
-  onRequestSeason,
-  onRequestAll,
-  onClearSelection,
-  pendingEpisodes,
-  requestBusy,
 }: Readonly<{
   seasons: TitleSeason[];
   openOn?: number;
@@ -244,16 +234,14 @@ export function SeasonSection({
   toggleWatched: (id: SubjectId) => void;
   progressOf: (id: ItemId) => number | null;
   onPlay: (id: ItemId) => void;
-  canRequest: boolean;
-  selected: Set<string>;
-  onToggleEpisode: (season: number, episode: number) => void;
-  onRequestSelected: () => void;
-  onRequestSeason: (season: number) => void;
-  onRequestAll: () => void;
-  onClearSelection: () => void;
-  pendingEpisodes: Set<string>;
-  requestBusy: boolean;
 }>) {
+  // Requesting is gone from this server: no season/episode can be asked for, so
+  // the selection and request controls below are unreachable and render nothing.
+  const canRequest = false;
+  const selected: Set<string> = new Set();
+  const pendingEpisodes: Set<string> = new Set();
+  const onToggleEpisode = (_season: number, _episode: number) => {};
+  const onClearSelection = () => {};
   const webRuntime = useWebRuntime();
 
   const s = useStyles(sDefinition);
@@ -320,15 +308,6 @@ export function SeasonSection({
   const partial = local && missingNumbers.length > 0;
   const showMissing = !local || missingOpen;
   const listedBy = new Map(current.missing.map((gap) => [gap.episode, gap]));
-
-  const requestableAll = canRequest
-    ? seasons
-        .filter((one) => !one.available && !one.requested)
-        .map((one) => ({ number: one.number, count: missingEpisodeNumbers(one, true).length }))
-        .filter((one) => one.count > 0)
-    : [];
-  const seasonRequestable =
-    canRequest && !current.available && !current.requested && missingNumbers.length > 0;
 
   const missingRows = missingNumbers.map((n) => (
     <MissingEpisodeRow
@@ -449,34 +428,6 @@ export function SeasonSection({
             <Box gap={10}>{missingRows}</Box>
           </Box>
         </div>
-      ) : null}
-
-      {canRequest && (seasonRequestable || requestableAll.length > 0) ? (
-        <div className={classes(s.gutter)}>
-          <Box mt={20} gap={8}>
-            <SeasonAsk
-              season={current.number}
-              seasonMissing={missingNumbers.length}
-              seasonRequestable={seasonRequestable}
-              allMissing={requestableAll}
-              busy={requestBusy}
-              onRequestSeason={() => onRequestSeason(current.number)}
-              onRequestAll={onRequestAll}
-            />
-            <Text variant="meta" color="textDim">
-              {t('requests.requestSkipNote')}
-            </Text>
-          </Box>
-        </div>
-      ) : null}
-
-      {canRequest ? (
-        <RequestBar
-          count={selected.size}
-          busy={requestBusy}
-          onRequestSelected={onRequestSelected}
-          onClear={onClearSelection}
-        />
       ) : null}
     </section>
   );

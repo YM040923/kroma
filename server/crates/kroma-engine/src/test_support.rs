@@ -20,7 +20,7 @@ use crate::state::{AppState, SharedState};
 
 pub(crate) mod recording_server;
 
-pub(crate) use kroma_requests::testing::{serve_bytes, serve_json, FakeTmdb};
+pub(crate) use crate::infra::tmdb_wire::fake_tmdb::{serve_bytes, serve_json, FakeTmdb};
 
 // Monotonic counter for seeded rows that must not collide across parallel tests.
 static SEQ: AtomicU32 = AtomicU32::new(0);

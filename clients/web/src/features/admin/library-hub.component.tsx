@@ -1,8 +1,7 @@
 import type { MessageKey } from '@kromatv/i18n';
 import { ModuleSlot, useSlotEntries } from '@kromatv/module-sdk';
 import { useT } from '@kromatv/ui';
-import { Box, Button, EmptyState, SegmentGroup } from '@kromatv/ui/kit';
-import { useNavigate } from '@tanstack/react-router';
+import { Box, EmptyState, SegmentGroup } from '@kromatv/ui/kit';
 import type { LibraryState } from '#web/features/admin/monitoring-index-model';
 import { LibraryTitles } from '#web/features/admin/monitoring-list.component';
 import { Denied, PageHeader, useCap } from '#web/features/admin/shell';
@@ -31,9 +30,7 @@ export function LibraryHubPage({
   onView: (view: LibraryState) => void;
 }>) {
   const t = useT();
-  const navigate = useNavigate();
   const library = useCap('library.manage');
-  const requests = useCap('requests.manage');
   const upgrades = useSlotEntries('library.upgrades').length > 0;
   const tabs: LibraryTab[] = [
     ...(library ? (['titles'] as const) : []),
@@ -41,23 +38,6 @@ export function LibraryHubPage({
     ...(library ? (['upcoming'] as const) : []),
   ];
   if (tabs.length === 0) {
-    // A viewer who moderates requests but does not manage the library has one
-    // place to go, and it is not this page.
-    if (requests) {
-      return (
-        <EmptyState.Root icon="download">
-          <EmptyState.Title>{t('centre.title')}</EmptyState.Title>
-          <EmptyState.Hint>{t('centre.libraryMoved')}</EmptyState.Hint>
-          <EmptyState.Actions>
-            <Button
-              variant="primary"
-              label={t('centre.open')}
-              onPress={() => void navigate({ to: '/admin/acquisition' })}
-            />
-          </EmptyState.Actions>
-        </EmptyState.Root>
-      );
-    }
     return <Denied />;
   }
   const shown = tabs.includes(tab) ? tab : (tabs[0] as LibraryTab);

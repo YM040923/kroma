@@ -127,7 +127,6 @@ kroma-module-supervisor = { path = "crates/kroma-module-supervisor" }
 # Push transports: Web Push (self-hosted), APNs and FCM.
 kroma-push = { path = "crates/kroma-push" }
 # The request and monitoring workflows, below the engine so a module runs them too.
-kroma-requests = { path = "crates/kroma-requests" }
 kroma-config = { path = "crates/kroma-config" }
 kroma-primitives = { path = "crates/kroma-primitives" }
 # Dev-only leaf: the `TempDir` every test harness scratches in.
@@ -191,7 +190,6 @@ kroma-db = { workspace = true }
 # re-exports both crates privately, so the binary names them here. Both are
 # already in the graph through kroma-engine, so this adds no compilation.
 kroma-domain = { workspace = true }
-kroma-requests = { workspace = true }
 # The byte routes are a thin shell over this: the HLS engine, the per-request
 # program over it, and the range streamer.
 kroma-media = { workspace = true }

@@ -83,7 +83,6 @@ pub async fn list_libraries(
                 last_scan: last_scan.clone(),
                 auto_scan: d.auto_scan,
                 scrape: settings::library_scrape(&state.settings, &d.id),
-                acquisition_mode: settings::library_acquisition(&state.settings, &d.id),
                 cover: covers
                     .get(&d.id)
                     .and_then(|art| art.get("poster").or_else(|| art.get("backdrop")).cloned()),
@@ -167,8 +166,6 @@ pub struct UpdateLibraryBody {
     pub auto_scan: Option<bool>,
     #[serde(default)]
     pub scrape: Option<settings::ScrapeOptions>,
-    #[serde(rename = "acquisitionMode", default)]
-    pub acquisition_mode: Option<kroma_domain::AcquisitionMode>,
 }
 
 pub async fn update_library(
@@ -202,9 +199,6 @@ pub async fn update_library(
     }
     if let Some(scrape) = body.scrape {
         settings::set_library_scrape(&state.settings, &state.db, &id, &scrape);
-    }
-    if let Some(mode) = body.acquisition_mode {
-        settings::set_library_acquisition(&state.settings, &state.db, &id, mode);
     }
     settings::set_library_defs(&state.settings, &state.db, &defs);
     if needs_scan {

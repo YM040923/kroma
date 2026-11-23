@@ -10,14 +10,14 @@ pub mod person;
 mod search;
 mod videos;
 
-use kroma_requests::tmdb::common;
+use crate::infra::tmdb_wire::common;
 
 pub use cache::Cache;
 pub use client::{
     images, lookup, lookup_all, lookup_all_by_id, season_images, ArtImage, ArtLists, Target,
 };
 pub(crate) use find::{find_id, Catalogue};
-pub use kroma_requests::tmdb::{
+pub use crate::infra::tmdb_wire::{
     discover, season_episodes, season_episodes_multi, EpisodeArt, SeasonData,
 };
 pub use videos::{title_videos, TitleVideos};

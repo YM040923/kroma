@@ -1,17 +1,13 @@
 //! Flagging TMDB hits against this server: the catalogue row a title already
-//! has in a library the viewer was granted, and the request covering it with
-//! its live download.
+//! has in a library the viewer was granted.
 
 use std::collections::HashMap;
 
 use rusqlite::Connection;
 
-use crate::api::downloads_overlay::{active_downloads, ActiveDownload};
 use crate::db;
 use crate::infra::metadata::discover;
-use crate::model::{
-    DiscoverDetail, DiscoverEntry, DiscoverSeason, RequestKind, RequestStatus, User,
-};
+use crate::model::{DiscoverDetail, DiscoverEntry, DiscoverSeason, RequestKind, User};
 
 fn local_id_for(
     conn: &Connection,
@@ -30,25 +26,9 @@ pub fn flag_hits(
     hits: Vec<discover::DiscoverHit>,
     viewer: &User,
 ) -> anyhow::Result<Vec<DiscoverEntry>> {
-    // One pass over the download ledger (not per-hit), so cards can show the
-    // live downloading/importing phase + progress.
-    let active = active_downloads(conn);
-    flag_hits_with(conn, hits, &active, viewer)
-}
-
-// Reuses an already-built active-download map so a caller (the detail page)
-// doesn't re-aggregate the download ledger a second time.
-fn flag_hits_with(
-    conn: &Connection,
-    hits: Vec<discover::DiscoverHit>,
-    active: &HashMap<String, ActiveDownload>,
-    viewer: &User,
-) -> anyhow::Result<Vec<DiscoverEntry>> {
     hits.into_iter()
         .map(|h| {
             let local_id = local_id_for(conn, h.kind, h.tmdb_id, viewer)?;
-            let request = db::latest_request_for(conn, h.kind, h.tmdb_id)?;
-            let (status, progress) = overlay_active(active, request.as_ref());
             Ok(DiscoverEntry {
                 kind: h.kind,
                 tmdb_id: h.tmdb_id,
@@ -60,36 +40,12 @@ fn flag_hits_with(
                 rating: h.rating,
                 in_library: local_id.is_some(),
                 local_id,
-                request_id: request.as_ref().map(|(id, _)| id.clone()),
-                request_status: status,
-                request_progress: progress,
+                request_id: None,
+                request_status: None,
+                request_progress: None,
             })
         })
         .collect()
-}
-
-fn overlay_active(
-    active: &HashMap<String, ActiveDownload>,
-    request: Option<&(String, RequestStatus)>,
-) -> (Option<RequestStatus>, Option<f64>) {
-    let mut status = request.map(|(_, s)| *s);
-    let mut progress = None;
-    if let Some((rid, _)) = request {
-        if let Some(a) = active.get(rid) {
-            if matches!(
-                status,
-                Some(RequestStatus::Approved | RequestStatus::PartiallyAvailable)
-            ) {
-                status = Some(if a.importing {
-                    RequestStatus::Importing
-                } else {
-                    RequestStatus::Downloading
-                });
-                progress = Some(a.progress);
-            }
-        }
-    }
-    (status, progress)
 }
 
 pub fn flag_detail(
@@ -98,13 +54,8 @@ pub fn flag_detail(
     viewer: &User,
 ) -> anyhow::Result<DiscoverDetail> {
     let local_id = local_id_for(conn, d.kind, d.tmdb_id, viewer)?;
-    let request = db::latest_request_for(conn, d.kind, d.tmdb_id)?;
 
-    let active = active_downloads(conn);
-    let (request_status, request_progress) = overlay_active(&active, request.as_ref());
-
-    // Season flags: available = every listed episode is on disk; requested =
-    // covered by the newest open request (None = whole show).
+    // Season flags: available = every listed episode is on disk.
     let mut seasons: Vec<DiscoverSeason> = Vec::with_capacity(d.seasons.len());
     if d.kind == RequestKind::Show && !d.seasons.is_empty() {
         let present = match &local_id {
@@ -115,12 +66,6 @@ pub fn flag_detail(
         for (s, _e) in present {
             *per_season.entry(s).or_default() += 1;
         }
-        let open_request = db::find_open_request(conn, RequestKind::Show, d.tmdb_id)?;
-        let requested_seasons: Option<Vec<u32>> = open_request.as_ref().map(|r| {
-            r.seasons
-                .clone()
-                .unwrap_or_else(|| d.seasons.iter().map(|s| s.season).collect())
-        });
         for s in &d.seasons {
             let have = per_season.get(&s.season).copied().unwrap_or(0);
             seasons.push(DiscoverSeason {
@@ -130,9 +75,7 @@ pub fn flag_detail(
                 air_date: s.air_date.clone(),
                 available: s.episode_count > 0 && have >= s.episode_count,
                 episodes_available: have,
-                requested: requested_seasons
-                    .as_ref()
-                    .is_some_and(|list| list.contains(&s.season)),
+                requested: false,
             });
         }
     }
@@ -159,12 +102,12 @@ pub fn flag_detail(
         seasons,
         cast: d.cast,
         crew: d.crew,
-        similar: flag_hits_with(conn, d.similar, &active, viewer)?,
+        similar: flag_hits(conn, d.similar, viewer)?,
         in_library: local_id.is_some(),
         local_id,
-        request_id: request.as_ref().map(|(id, _)| id.clone()),
-        request_status,
-        request_progress,
+        request_id: None,
+        request_status: None,
+        request_progress: None,
         air_status,
         next_air_date,
     })

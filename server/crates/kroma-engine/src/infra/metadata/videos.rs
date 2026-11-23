@@ -9,7 +9,7 @@ use kroma_domain::TmdbVideo;
 use super::client::{api, tmdb_json, Target};
 
 const FRESH_FOR: Duration = Duration::from_secs(12 * 60 * 60);
-const PURPOSE: &str = kroma_requests::tmdb::PURPOSE;
+const PURPOSE: &str = crate::infra::tmdb_wire::PURPOSE;
 
 /// What TMDB lists for one title: its videos in the languages asked for, and
 /// the language the title was made in.
@@ -95,7 +95,7 @@ pub fn title_videos(
 mod tests {
     use super::*;
 
-    use kroma_requests::testing::FakeTmdb;
+    use crate::infra::tmdb_wire::fake_tmdb::FakeTmdb;
     use serde_json::json;
 
     fn video(key: &str, lang: &str) -> serde_json::Value {

@@ -3,7 +3,7 @@ import { ModuleSlot } from '@kromatv/module-sdk';
 import type { ItemId, SubjectId } from '@kromatv/client/media';
 import { formatRuntime } from '@kromatv/core';
 import { useT } from '@kromatv/ui';
-import { Button, type HostElement } from '@kromatv/ui/kit';
+import type { HostElement } from '@kromatv/ui/kit';
 import { ArtworkButton } from '#web/features/catalog/artwork-picker.component';
 import {
   audioFlagLabel,
@@ -13,38 +13,32 @@ import {
   qualityBadges,
   subString,
 } from '#web/features/catalog/detail.component';
-import { FollowState } from '#web/features/catalog/follow-state.component';
 import { ReportDialog } from '#web/features/catalog/report-dialog.component';
 import { TrailerButton } from '#web/features/catalog/trailer-button.component';
 import { savedTitleId } from '#web/shared/lib/saved-title-id';
 import { type TitleView, tmdbMetaLine } from '#web/shared/lib/title-view';
-import { RequestStatusChip } from '#web/shared/ui/request-status-chip.component';
 
 export function TitleHero({
   view,
   owned,
   localId,
-  busy,
   overline,
   isWatched,
   toggleWatched,
   inList,
   toggleList,
   onPlay,
-  onRequest,
   back,
 }: Readonly<{
   view: TitleView;
   owned: boolean;
   localId: string | null | undefined;
-  busy: boolean;
   overline: string;
   isWatched: (id: SubjectId) => boolean;
   toggleWatched: (id: SubjectId) => void;
   inList: (id: SubjectId) => boolean;
   toggleList: (id: SubjectId) => void;
   onPlay: (id: ItemId) => void;
-  onRequest: () => void;
   back: HostElement;
 }>) {
   const t = useT();
@@ -91,9 +85,7 @@ export function TitleHero({
       onToggleWatched={listState.onToggleWatched}
       inList={listState.inList}
       onToggleList={listState.onToggleList}
-      primaryAction={
-        owned ? undefined : <RequestCta view={view} busy={busy} onRequest={onRequest} />
-      }
+      primaryAction={undefined}
       trailerAction={
         view.tmdbId == null ? null : (
           <TrailerButton kind={tmdbKindOf(view.kind)} tmdbId={view.tmdbId} title={view.title} />
@@ -110,10 +102,6 @@ export function TitleHero({
             poster={view.poster}
             owned={owned}
           />
-          <FollowState
-            kind={view.kind === 'show' ? 'show' : 'movie'}
-            tmdbId={view.tmdbId ?? null}
-          />
           {localId ? <ArtworkButton itemId={localId} title={view.title} /> : null}
         </>
       }
@@ -129,30 +117,6 @@ export function TitleHero({
               })
           : undefined
       }
-    />
-  );
-}
-
-function RequestCta({
-  view,
-  busy,
-  onRequest,
-}: Readonly<{ view: TitleView; busy: boolean; onRequest: () => void }>) {
-  const t = useT();
-  if (view.requestStatus && view.requestStatus !== 'denied') {
-    return (
-      <RequestStatusChip status={view.requestStatus} size="hero" progress={view.requestProgress} />
-    );
-  }
-  if (!view.canRequest) {
-    return null;
-  }
-  return (
-    <Button
-      icon="plus"
-      label={view.kind === 'show' ? t('requests.acquireShow') : t('requests.acquire')}
-      onPress={onRequest}
-      loading={busy}
     />
   );
 }

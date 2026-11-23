@@ -13,4 +13,5 @@ pub mod probe;
 pub mod storyboard;
 pub mod subtitles;
 pub mod theme;
+pub mod tmdb_wire;
 pub mod watch;

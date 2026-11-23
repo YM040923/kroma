@@ -2165,7 +2165,6 @@ dependencies = [
  "kroma-module-wire",
  "kroma-primitives",
  "kroma-push",
- "kroma-requests",
  "kroma-testing",
  "lettre",
  "lzma-rust2",
@@ -2348,7 +2347,6 @@ dependencies = [
  "kroma-module-runtime",
  "kroma-module-wire",
  "kroma-primitives",
- "kroma-requests",
  "kroma-sqlite",
  "kroma-testing",
  "serde",
@@ -2428,25 +2426,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kroma-requests"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "kroma-db",
- "kroma-domain",
- "kroma-http",
- "kroma-module-host",
- "kroma-primitives",
- "kroma-testing",
- "serde",
- "serde_json",
- "time",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "kroma-server"
 version = "0.1.39"
 dependencies = [
@@ -2470,7 +2449,6 @@ dependencies = [
  "kroma-module-kernel",
  "kroma-module-manifest",
  "kroma-module-supervisor",
- "kroma-requests",
  "kroma-testing",
  "libmimalloc-sys",
  "mimalloc",

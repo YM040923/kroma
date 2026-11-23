@@ -6,7 +6,7 @@ fn inputs() -> Inputs {
     Inputs {
         catalog: 0,
         activity: HomeActivity {
-            progress: (0, None),
+            progress: (0, None, 0),
             watched: (0, None),
             plays: (0, None),
             taste: None,

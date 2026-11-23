@@ -7,13 +7,11 @@ use crate::model::Category;
 
 use super::{JobContext, JobKey, JobManager, Trigger};
 
-mod acquisition_staging;
 mod artwork_refresh;
 mod cache_cleanup;
 mod database_tidy;
 mod household_import;
 mod library_missing;
-mod library_monitoring;
 mod library_scan;
 mod metadata_enrich;
 mod notifications_digest;
@@ -53,7 +51,6 @@ const JOBS: &[Builtin] = &[
     sections_curate::SPEC,
     library_scan::SPEC,
     library_missing::SPEC,
-    library_monitoring::SPEC,
     artwork_refresh::SPEC,
     household_import::SPEC,
     metadata_enrich::SPEC,
@@ -62,7 +59,6 @@ const JOBS: &[Builtin] = &[
     stats_report::SPEC,
     update_check::SPEC,
     update_install::SPEC,
-    acquisition_staging::SPEC,
     // Acquisition jobs (search/import/match) moved to the tv.kroma.torrents
     // crate; the binary registers them separately via `AppState::new`.
     // Per-element pipeline stages: each drains its `pipeline_tasks` queue via

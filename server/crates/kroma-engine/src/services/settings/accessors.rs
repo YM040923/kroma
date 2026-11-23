@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use kroma_domain::{AcquisitionMode, DeploymentMode};
+use kroma_domain::DeploymentMode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -384,40 +384,6 @@ pub fn library_scrape(settings: &Settings, library_id: &str) -> ScrapeOptions {
         .map(ScrapeOptions::sane)
         .map(migrate_nfo)
         .unwrap_or_default()
-}
-
-/// The library-specific storage policy for new acquisitions. A missing or
-/// malformed value preserves the legacy cloud-only staged behavior.
-pub fn library_acquisition(settings: &Settings, library_id: &str) -> AcquisitionMode {
-    settings
-        .get("libraryAcquisition")
-        .get(library_id)
-        .and_then(|value| serde_json::from_value(value.clone()).ok())
-        .unwrap_or_default()
-}
-
-pub fn set_library_acquisition(
-    settings: &Settings,
-    pool: &Pool,
-    library_id: &str,
-    mode: AcquisitionMode,
-) {
-    let mut map = settings
-        .get("libraryAcquisition")
-        .as_object()
-        .cloned()
-        .unwrap_or_default();
-    if mode == AcquisitionMode::default() {
-        map.remove(library_id);
-    } else {
-        map.insert(
-            library_id.to_string(),
-            serde_json::to_value(mode).unwrap_or_default(),
-        );
-    }
-    let mut patch = BTreeMap::new();
-    patch.insert("libraryAcquisition".to_string(), Value::Object(map));
-    settings.set_patch(pool, patch);
 }
 
 pub fn all_library_scrape(settings: &Settings) -> BTreeMap<String, ScrapeOptions> {
@@ -1084,39 +1050,6 @@ mod tests {
         assert!(!got[0].auto_scan);
         let folders = all_folders(&s, &cfg);
         assert_eq!(folders, vec![PathBuf::from("/a"), PathBuf::from("/b")]);
-    }
-
-    #[test]
-    fn library_acquisition_modes_are_isolated_defaulted_and_resettable() {
-        let pool = test_pool();
-        let s = settings(&pool);
-        assert_eq!(
-            library_acquisition(&s, "movies"),
-            AcquisitionMode::CloudOnlyStaged
-        );
-
-        set_library_acquisition(&s, &pool, "movies", AcquisitionMode::HybridLocalFirst);
-        set_library_acquisition(&s, &pool, "shows", AcquisitionMode::LocalOnly);
-        assert_eq!(
-            library_acquisition(&s, "movies"),
-            AcquisitionMode::HybridLocalFirst
-        );
-        assert_eq!(library_acquisition(&s, "shows"), AcquisitionMode::LocalOnly);
-        assert_eq!(
-            library_acquisition(&s, "other"),
-            AcquisitionMode::CloudOnlyStaged
-        );
-
-        set_library_acquisition(&s, &pool, "movies", AcquisitionMode::CloudOnlyStaged);
-        assert_eq!(
-            library_acquisition(&s, "movies"),
-            AcquisitionMode::CloudOnlyStaged
-        );
-        assert_eq!(
-            s.get("libraryAcquisition").get("movies"),
-            None,
-            "the default mode is represented by the absence of an override"
-        );
     }
 
     #[test]

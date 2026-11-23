@@ -7,7 +7,7 @@ mod details;
 mod details_json;
 mod lookup;
 
-pub(super) use kroma_requests::tmdb::{api, tmdb_json, IMG};
+pub(super) use crate::infra::tmdb_wire::{api, tmdb_json, IMG};
 pub use lookup::{lookup, lookup_all, lookup_all_by_id};
 
 use serde::{Deserialize, Serialize};
