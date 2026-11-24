@@ -56,6 +56,20 @@ async fn main() -> anyhow::Result<()> {
     kroma_http::egress::require_gate();
     #[cfg(target_os = "linux")]
     boot::allocator::spawn_collector();
+    // A portable build keeps ffmpeg/ffprobe beside the exe. Launched by a double
+    // click it inherits whatever PATH the shell had, so put its own `bin` first
+    // before anything looks for those tools.
+    if let Some(home) = Config::portable_home() {
+        let bin = home.join("bin");
+        if bin.is_dir() {
+            let mut path = bin.into_os_string();
+            if let Some(existing) = std::env::var_os("PATH") {
+                path.push(if cfg!(windows) { ";" } else { ":" });
+                path.push(existing);
+            }
+            std::env::set_var("PATH", path);
+        }
+    }
     let config = Config::from_env();
     // Held for the whole process so buffered log lines flush to disk.
     let log_guard = boot::tracing::init_tracing(&config.logs_dir());

@@ -141,7 +141,33 @@ impl Install {
     }
 }
 
+/// The folder the executable sits in, when that folder looks like a portable
+/// install: it carries a built web client beside the binary. Launching the exe
+/// from a file manager runs it with its own folder as the working directory, so
+/// `./data` and a relative `web` would otherwise point at wherever it was
+/// double-clicked from. Resolved once; the OS reports one path per process.
+fn portable_home() -> Option<PathBuf> {
+    static HOME: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    HOME.get_or_init(|| {
+        let exe_dir = env::current_exe().ok()?.parent()?.to_path_buf();
+        exe_dir
+            .join("web")
+            .join("_shell.html")
+            .is_file()
+            .then_some(exe_dir)
+    })
+    .clone()
+}
+
 impl Config {
+    /// The folder this executable was launched from, when it sits beside a built
+    /// web client (`web/_shell.html`). `None` for a normal install where the
+    /// environment names everything. `bin/` under it is where a portable build
+    /// keeps its own ffmpeg/ffprobe.
+    pub fn portable_home() -> Option<PathBuf> {
+        portable_home()
+    }
+
     /// Build configuration from the process environment.
     pub fn from_env() -> Self {
         let host = env::var("KROMA_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
@@ -149,7 +175,7 @@ impl Config {
         let port = env::var("KROMA_PORT")
             .ok()
             .and_then(|p| p.parse::<u16>().ok())
-            .unwrap_or(4040);
+            .unwrap_or(if portable_home().is_some() { 4041 } else { 4040 });
 
         let media_dirs = env::var("KROMA_MEDIA_DIRS")
             .ok()
@@ -168,7 +194,11 @@ impl Config {
 
         let data_dir = env::var("KROMA_DATA_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("./data"));
+            .unwrap_or_else(|_| {
+                portable_home()
+                    .map(|home| home.join("data"))
+                    .unwrap_or_else(|| PathBuf::from("./data"))
+            });
 
         let tmdb_api_key = env::var("KROMA_TMDB_API_KEY")
             .ok()
@@ -207,7 +237,12 @@ impl Config {
         let web_dir = env::var("KROMA_WEB_DIR")
             .ok()
             .map(|s| PathBuf::from(s.trim()))
-            .filter(|p| !p.as_os_str().is_empty() && p.join("_shell.html").is_file());
+            .filter(|p| !p.as_os_str().is_empty() && p.join("_shell.html").is_file())
+            .or_else(|| {
+                portable_home()
+                    .map(|home| home.join("web"))
+                    .filter(|web| web.join("_shell.html").is_file())
+            });
 
         let update_dir = env::var("KROMA_UPDATE_DIR")
             .ok()
