@@ -91,6 +91,15 @@ impl Supervisor {
         }
     }
 
+    /// An endpoint pinned to a port the caller already bound.
+    #[cfg(not(unix))]
+    pub(crate) fn assign_endpoint_at(&self, _id: &str, port: u16) -> anyhow::Result<Endpoint> {
+        Ok(Endpoint {
+            socket: PathBuf::new(),
+            port,
+        })
+    }
+
     pub(crate) fn peer_base(&self, peer: &str, endpoint: &Endpoint, via_core: bool) -> String {
         if via_core {
             return format!("{}/api/module/{peer}", self.host_base());

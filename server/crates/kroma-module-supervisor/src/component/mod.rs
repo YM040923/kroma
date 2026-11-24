@@ -58,11 +58,14 @@ fn bind_module_listener(endpoint: &super::endpoint::Endpoint) -> std::io::Result
     UnixListener::from_std(listener)
 }
 
+/// Bind a loopback port and hand back both the listener and the port it got, so
+/// the endpoint records the port the module truly answers on.
 #[cfg(not(unix))]
-fn bind_module_listener(endpoint: &super::endpoint::Endpoint) -> std::io::Result<ModuleListener> {
-    let listener = std::net::TcpListener::bind(("127.0.0.1", endpoint.port))?;
+fn bind_tcp_listener() -> std::io::Result<(ModuleListener, u16)> {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+    let port = listener.local_addr()?.port();
     listener.set_nonblocking(true)?;
-    TcpListener::from_std(listener)
+    Ok((TcpListener::from_std(listener)?, port))
 }
 
 fn limits_of(needs: ComponentNeeds) -> Limits {
@@ -140,8 +143,22 @@ impl Supervisor {
             .spawn(kroma_egress::serve_tcp(TcpListener::from_std(tcp)?, policy))
             .abort_handle()];
 
-        let endpoint = self.assign_endpoint(id)?;
-        let listener = bind_module_listener(&endpoint)?;
+        // Bind first, then read the real port back: a port reserved earlier would
+        // have to be released for the listener to bind it, and another process
+        // could claim it in the gap. This way the endpoint always matches the
+        // socket the module actually answers on.
+        #[cfg(not(unix))]
+        let (endpoint, listener) = {
+            let (listener, port) = bind_tcp_listener()?;
+            let endpoint = self.assign_endpoint_at(id, port)?;
+            (endpoint, listener)
+        };
+        #[cfg(unix)]
+        let (endpoint, listener) = {
+            let endpoint = self.assign_endpoint(id)?;
+            let listener = bind_module_listener(&endpoint)?;
+            (endpoint, listener)
+        };
         let say = {
             let log_line = self.cfg.log_line.clone();
             let id = id.to_string();

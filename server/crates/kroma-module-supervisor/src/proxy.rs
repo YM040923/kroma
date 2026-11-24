@@ -23,9 +23,23 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const READ_TIMEOUT: Duration = Duration::from_secs(600);
 
 fn builder() -> reqwest::ClientBuilder {
+    // Loopback only, so an HTTP(S)_PROXY in the environment must never route a
+    // module call through a proxy: it is a same-machine hop, and a proxy would
+    // either refuse it or add a pointless third party. (This is what turned
+    // every module call into "no client reaches this module" on a machine that
+    // exports a proxy for the browser.)
     reqwest::Client::builder()
+        .no_proxy()
         .connect_timeout(CONNECT_TIMEOUT)
         .read_timeout(READ_TIMEOUT)
+}
+
+/// One shared client for every loopback TCP module (Windows). A client per
+/// module would leak a connection pool per module restart.
+fn tcp_client() -> Option<reqwest::Client> {
+    use std::sync::OnceLock;
+    static CLIENT: OnceLock<Option<reqwest::Client>> = OnceLock::new();
+    CLIENT.get_or_init(|| builder().build().ok()).clone()
 }
 
 #[cfg(unix)]
@@ -43,15 +57,22 @@ fn socket_client(socket: &std::path::Path) -> Option<reqwest::Client> {
     Some(client)
 }
 
-#[cfg(not(unix))]
-fn socket_client(_socket: &std::path::Path) -> Option<reqwest::Client> {
-    None
-}
-
 fn target(endpoint: &Endpoint, path_and_query: &str) -> Option<(reqwest::Client, String)> {
+    #[cfg(unix)]
+    if !endpoint.socket.as_os_str().is_empty() {
+        return Some((
+            socket_client(&endpoint.socket)?,
+            format!("http://localhost{path_and_query}"),
+        ));
+    }
+    let port = endpoint.port;
+    if port == 0 {
+        return None;
+    }
+    let client = tcp_client()?;
     Some((
-        socket_client(&endpoint.socket)?,
-        format!("http://localhost{path_and_query}"),
+        client,
+        format!("http://127.0.0.1:{port}{path_and_query}"),
     ))
 }
 
