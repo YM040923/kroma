@@ -143,7 +143,6 @@ function SidebarNav({ collapsed = false }: Readonly<{ collapsed?: boolean }>) {
         <SideNav.Item to="/my-list" icon="bookmark">
           <SideNav.Label>{t('nav.myList')}</SideNav.Label>
         </SideNav.Item>
-        <RequestsLink />
         <ModuleNavLinks />
       </SideNav.Group>
       <SideNav.Footer>
@@ -221,19 +220,6 @@ export function MobileTopbar() {
         {actions}
       </Box>
     </header>
-  );
-}
-
-function RequestsLink() {
-  const t = useT();
-  const { user } = useAuth();
-  if (!user || !hasPermission(user, 'requests.create')) {
-    return null;
-  }
-  return (
-    <SideNav.Item to="/requests" icon="inbox">
-      <SideNav.Label>{t('nav.requests')}</SideNav.Label>
-    </SideNav.Item>
   );
 }
 
