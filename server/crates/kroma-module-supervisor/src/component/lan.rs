@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use kroma_http::address::primary_address;
 use kroma_module_manifest::Discovery;
 use kroma_wasm_host::{Lan, Reply, Service};
+#[cfg(unix)]
 use mdns_sd::{ServiceDaemon, ServiceInfo};
 
 const SSDP_ADDRESS: &str = "239.255.255.250:1900";
@@ -20,6 +21,7 @@ pub(super) struct ModuleLan {
     module: String,
     mdns: bool,
     ssdp: bool,
+    #[cfg(unix)]
     daemon: Mutex<Option<ServiceDaemon>>,
     announced: Mutex<HashMap<u64, String>>,
     next: AtomicU64,
@@ -49,6 +51,7 @@ impl ModuleLan {
             module: module.to_string(),
             mdns: discovery.contains(&Discovery::Mdns),
             ssdp: discovery.contains(&Discovery::Ssdp),
+            #[cfg(unix)]
             daemon: Mutex::new(None),
             announced: Mutex::new(HashMap::new()),
             next: AtomicU64::new(0),
@@ -63,17 +66,23 @@ impl ModuleLan {
             .drain()
             .map(|(_, name)| name)
             .collect();
-        let mut daemon = self.daemon.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(running) = daemon.take() {
-            for name in names {
-                let _ = running.unregister(&name);
+        #[cfg(unix)]
+        {
+            let mut daemon = self.daemon.lock().unwrap_or_else(PoisonError::into_inner);
+            if let Some(running) = daemon.take() {
+                for name in names {
+                    let _ = running.unregister(&name);
+                }
+                let _ = running.shutdown();
             }
-            let _ = running.shutdown();
         }
+        #[cfg(not(unix))]
+        let _ = names;
     }
 }
 
 impl Lan for ModuleLan {
+    #[cfg(unix)]
     fn announce(&self, service: Service) -> Result<u64, String> {
         if !self.mdns {
             return Err(format!("{} does not declare mdns", self.module));
@@ -116,6 +125,7 @@ impl Lan for ModuleLan {
         Ok(announcement)
     }
 
+    #[cfg(unix)]
     fn withdraw(&self, announcement: u64) {
         let name = self
             .announced
@@ -127,6 +137,20 @@ impl Lan for ModuleLan {
             let _ = daemon.unregister(&name);
         }
     }
+
+    /// mDNS is not wired on Windows yet (the `mdns-sd` crate is Unix-only in
+    /// this build); a module that wants it is told so rather than silently
+    /// failing, and SSDP search below still works everywhere.
+    #[cfg(not(unix))]
+    fn announce(&self, _service: Service) -> Result<u64, String> {
+        Err(format!(
+            "{} cannot announce over mDNS on this platform",
+            self.module
+        ))
+    }
+
+    #[cfg(not(unix))]
+    fn withdraw(&self, _announcement: u64) {}
 
     #[expect(
         clippy::disallowed_methods,

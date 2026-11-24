@@ -91,6 +91,25 @@ pub async fn require_beacon_origin(
     next.run(req).await
 }
 
+/// The origins a passkey ceremony (and the OIDC redirect URI list) may name:
+/// the configured web URL and the operator's public URL, normalised and
+/// de-duplicated. Lives here rather than in the passkeys module so a build
+/// without passkeys still answers the sign-in page and SSO.
+pub(crate) fn allowed_origins(state: &SharedState) -> Vec<String> {
+    let trim = |s: String| s.trim().trim_end_matches('/').to_string();
+    let mut out = Vec::new();
+    if let Some(web) = state.config.web_url.clone() {
+        out.push(trim(web));
+    }
+    let remote = crate::services::settings::public_url(&state.settings);
+    if !remote.is_empty() {
+        out.push(trim(remote));
+    }
+    out.retain(|o| !o.is_empty());
+    out.dedup();
+    out
+}
+
 fn may_read(origin: &str, named: &[String]) -> bool {
     !matches!(may_announce(origin, named), Placement::Refused)
 }

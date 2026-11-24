@@ -93,7 +93,7 @@ pub(crate) fn accepted_origin(state: &SharedState, origin: &str) -> Option<Strin
     if !bare || web_target(origin).is_none() {
         return None;
     }
-    let allowed = crate::api::passkeys::allowed_origins(state);
+    let allowed = crate::api::origin::allowed_origins(state);
     (allowed.is_empty() || allowed.iter().any(|o| o == origin)).then(|| origin.to_string())
 }
 

@@ -26,7 +26,9 @@ use anyhow::Context;
 use kroma_http::egress::Gateway;
 use kroma_module_manifest::{ComponentNeeds, FsRoot, MediaTool, ModuleManifest};
 use kroma_wasm_host::{Limits, Readied, WasmHost};
-use tokio::net::{TcpListener, UnixListener};
+use tokio::net::TcpListener;
+#[cfg(unix)]
+use tokio::net::UnixListener;
 use tokio::sync::Semaphore;
 
 use super::asked::Watch;
@@ -41,6 +43,27 @@ const MAX_INSTANCES: u32 = 16;
 const CORE_DATABASE: &str = "/kroma/core.sqlite";
 const COMPILED_COPY: &str = "module.cwasm";
 const LOG_FILTERS: [&str; 2] = ["KROMA_MODULE_LOG", "RUST_LOG"];
+
+/// The listener a module answers on: a Unix socket on Unix, a loopback TCP port
+/// on Windows (which has no usable tokio Unix-socket listener).
+#[cfg(unix)]
+type ModuleListener = UnixListener;
+#[cfg(not(unix))]
+type ModuleListener = TcpListener;
+
+#[cfg(unix)]
+fn bind_module_listener(endpoint: &super::endpoint::Endpoint) -> std::io::Result<ModuleListener> {
+    let listener = std::os::unix::net::UnixListener::bind(&endpoint.socket)?;
+    listener.set_nonblocking(true)?;
+    UnixListener::from_std(listener)
+}
+
+#[cfg(not(unix))]
+fn bind_module_listener(endpoint: &super::endpoint::Endpoint) -> std::io::Result<ModuleListener> {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", endpoint.port))?;
+    listener.set_nonblocking(true)?;
+    TcpListener::from_std(listener)
+}
 
 fn limits_of(needs: ComponentNeeds) -> Limits {
     Limits {
@@ -118,11 +141,7 @@ impl Supervisor {
             .abort_handle()];
 
         let endpoint = self.assign_endpoint(id)?;
-        let listener = UnixListener::from_std({
-            let listener = std::os::unix::net::UnixListener::bind(&endpoint.socket)?;
-            listener.set_nonblocking(true)?;
-            listener
-        })?;
+        let listener = bind_module_listener(&endpoint)?;
         let say = {
             let log_line = self.cfg.log_line.clone();
             let id = id.to_string();
@@ -234,7 +253,7 @@ impl Supervisor {
             outside: Arc::new(outside::Outside {
                 module: id.to_string(),
                 token,
-                host_socket: self.host_socket(),
+                core_base: self.host_base(),
                 gateway,
                 network: wiring.network.0.clone(),
                 no_network,

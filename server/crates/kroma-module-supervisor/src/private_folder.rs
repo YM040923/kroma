@@ -1,8 +1,14 @@
 use std::io;
-use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 use std::path::Path;
 
+/// A folder only the server's own user may open. On Unix that is `chmod 0700`,
+/// re-applied if a previous run left it looser. Windows has no POSIX mode; a
+/// per-user data directory is already private to that account, so creating it
+/// is the whole guarantee (an explicit ACL would need a security descriptor the
+/// caller's SID is resolved into, and the default one is equivalent here).
+#[cfg(unix)]
 pub(crate) fn private_folder(dir: &Path) -> io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
     if let Some(parent) = dir.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -19,7 +25,12 @@ pub(crate) fn private_folder(dir: &Path) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(not(unix))]
+pub(crate) fn private_folder(dir: &Path) -> io::Result<()> {
+    std::fs::create_dir_all(dir)
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

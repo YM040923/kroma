@@ -75,7 +75,7 @@ fn method_view(method: Method) -> MethodView {
 }
 
 fn redirect_uris(state: &SharedState) -> Vec<String> {
-    crate::api::passkeys::allowed_origins(state)
+    crate::api::origin::allowed_origins(state)
         .into_iter()
         .map(|origin| format!("{origin}{CALLBACK_PATH}"))
         .collect()

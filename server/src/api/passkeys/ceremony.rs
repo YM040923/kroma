@@ -86,20 +86,8 @@ pub(super) fn user_uuid(user_id: &str) -> Uuid {
 /// port from relaying an assertion for this server. Empty when neither is set:
 /// a fresh install then trusts the request origin, so passkeys work out of the
 /// box and a LAN-only server is not locked out.
-pub(crate) fn allowed_origins(state: &SharedState) -> Vec<String> {
-    let trim = |s: String| s.trim().trim_end_matches('/').to_string();
-    let mut out = Vec::new();
-    if let Some(web) = state.config.web_url.clone() {
-        out.push(trim(web));
-    }
-    let remote = crate::services::settings::public_url(&state.settings);
-    if !remote.is_empty() {
-        out.push(trim(remote));
-    }
-    out.retain(|o| !o.is_empty());
-    out.dedup();
-    out
-}
+#[cfg(not(windows))]
+pub(crate) use crate::api::origin::allowed_origins;
 
 pub(super) fn relying_party(
     headers: &HeaderMap,

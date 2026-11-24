@@ -60,12 +60,35 @@ pub(super) struct Programs {
     fetching: Mutex<()>,
 }
 
+#[cfg(unix)]
 fn signal(pid: u32, signal: libc::c_int) {
     let Ok(pid) = libc::pid_t::try_from(pid) else {
         return;
     };
     // SAFETY: kill takes no pointers, and a pid that has gone is reported, not undefined.
     let _ = unsafe { libc::kill(pid, signal) };
+}
+
+/// Windows: a module helper is a child process. There is no SIGTERM; a forced
+/// stop opens the process and terminates it, and a graceful one asks it to
+/// close its window (the helper has no window, so it terminates as well).
+#[cfg(windows)]
+fn signal(pid: u32, graceful: bool) {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, TerminateProcess, PROCESS_TERMINATE,
+    };
+    // SAFETY: OpenProcess/TerminateProcess/CloseHandle take plain handles; a pid
+    // that is gone yields a null handle, which is checked.
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+        if handle.is_null() {
+            return;
+        }
+        let _ = graceful;
+        TerminateProcess(handle, 1);
+        CloseHandle(handle);
+    }
 }
 
 impl Programs {
@@ -280,10 +303,7 @@ impl Processes for Programs {
             .get(&child)
             .ok_or("this program has been forgotten")?;
         if matches!(spawned.state, State::Running(_)) {
-            signal(
-                spawned.pid,
-                if force { libc::SIGKILL } else { libc::SIGTERM },
-            );
+            signal(spawned.pid, !force);
         }
         Ok(())
     }

@@ -35,6 +35,7 @@ mod modules;
 mod notifications;
 pub mod online_subs;
 mod origin;
+#[cfg(not(windows))]
 mod passkeys;
 mod people;
 mod permission;
@@ -144,7 +145,7 @@ mod it_notification_types;
 mod it_notifications;
 #[cfg(test)]
 mod it_online_subs;
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod it_passkeys;
 #[cfg(test)]
 mod it_people;
@@ -278,9 +279,10 @@ pub fn router(state: SharedState, supervisor: Arc<Supervisor>) -> Router {
     // byte streams. The byte routes sit outside this middleware because a
     // `<video>`/hls element can't attach a bearer, and carry their own credential
     // in the URL instead (see `media_ticket`); they are not open.
-    let public = Router::new()
-        .merge(accounts::routes())
-        .merge(passkeys::routes())
+    let public = Router::new().merge(accounts::routes());
+    #[cfg(not(windows))]
+    let public = public.merge(passkeys::routes());
+    let public = public
         .merge(sso::routes())
         .merge(pin::routes())
         .merge(handoff::public_routes(state.clone()))

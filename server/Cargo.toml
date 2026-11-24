@@ -123,7 +123,10 @@ kroma-module-macros = { path = "crates/kroma-module-macros" }
 # The out-of-process module runtime (each module binary's serve() entrypoint).
 kroma-module-runtime = { path = "crates/kroma-module-runtime" }
 # The core side: spawn/supervise module processes + reverse-proxy + callback API.
-kroma-module-supervisor = { path = "crates/kroma-module-supervisor" }
+# `features = ["core"]` explicitly: a `--no-default-features` build of THIS
+# crate must not accidentally strip the supervisor's own default `core` feature
+# through feature unification with kroma-module-audit (which asks for it off).
+kroma-module-supervisor = { path = "crates/kroma-module-supervisor", features = ["core"] }
 # Push transports: Web Push (self-hosted), APNs and FCM.
 kroma-push = { path = "crates/kroma-push" }
 # The request and monitoring workflows, below the engine so a module runs them too.
@@ -157,7 +160,6 @@ kroma-engine = { path = "crates/kroma-engine" }
 # Dev only, and never in a shipped build: the subsecond hot-patch client that
 # `dx serve --hot-patch` talks to. It opens a websocket to the dev server.
 hotpatch = ["dep:dioxus-devtools"]
-# Nothing here selects a module's build any more; see the note above `[features]`.
 default = []
 
 # NB: there is no `torrent-rqbit` knob here any more. The download engine is a
@@ -261,19 +263,19 @@ tiny-skia = { workspace = true }
 fontdue = { workspace = true }
 jpeg-encoder = { workspace = true }
 
-# WebAuthn / passkeys relying-party (api/passkeys). `conditional-ui` unlocks the
-# discoverable (usernameless) authentication API.
+# The `v5` uuid feature is the deterministic per-account WebAuthn user handle;
+# the crate itself is always present.
+uuid = { workspace = true, features = ["v5"] }
+
+# WebAuthn / passkeys relying-party (api/passkeys), Unix only. `webauthn-rs`
+# pulls vendored OpenSSL, which needs perl + NASM to compile — neither is on a
+# plain Windows toolchain, and a personal Windows build signs in with a password
+# anyway. Gating on the target (not a cargo feature) keeps every other build's
+# `--no-default-features` from also stripping unrelated crates' features.
+[target.'cfg(not(windows))'.dependencies]
 webauthn-rs = { workspace = true, features = ["conditional-ui"] }
 webauthn-rs-proto = { workspace = true }
-# webauthn-rs pulls openssl. Force the `vendored` feature so openssl-sys compiles
-# it from source and links it statically instead of hunting for a system libssl.
-# This is what makes the x86_64-musl Synology build (no musl libssl) link, and it
-# keeps the glibc Docker/CI builds independent of libssl-dev too.
 openssl = { version = "0.10", features = ["vendored"] }
-# `v5` for the deterministic per-account WebAuthn user handle (api/passkeys
-# derives it from the account id). Enabled on the bin dep so it's present in the
-# real build, not only when dev-deps happen to pull it in.
-uuid = { workspace = true, features = ["v5"] }
 
 # Integration tests for the HTTP API layer (src/api/*): drive the real axum
 # router in-process with `tower::ServiceExt::oneshot`.

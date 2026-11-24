@@ -4,7 +4,6 @@
 #[cfg(target_os = "linux")]
 pub mod allocator;
 pub mod background;
-#[cfg(unix)]
 pub mod folders;
 #[cfg(feature = "hotpatch")]
 pub mod hot;

@@ -33,7 +33,7 @@ impl Programs {
                 kept.push(pid);
             } else if is_named(pid, program) {
                 tracing::warn!(module = %self.module, program, pid, "stopping what an earlier run left");
-                signal(pid, libc::SIGKILL);
+                signal(pid, false);
             }
         }
         kept

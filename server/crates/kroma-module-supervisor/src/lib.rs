@@ -13,13 +13,10 @@ use serde_json::Value;
 #[cfg(feature = "core")]
 mod adopt;
 mod asked;
-#[cfg(unix)]
 mod component;
-#[cfg(unix)]
 mod databases;
 mod endpoint;
 mod frontend;
-#[cfg(unix)]
 mod gateway;
 mod host_api;
 mod install;
@@ -29,7 +26,6 @@ mod manifests;
 mod notifications;
 mod origin;
 mod permissions;
-#[cfg(unix)]
 mod private_folder;
 mod program_env;
 mod proxy;
@@ -38,7 +34,6 @@ mod run_dir;
 mod tokens;
 mod watch;
 
-#[cfg(unix)]
 pub use asked::{Asked, AskedSink};
 pub use component::{FolderRoots, Folders};
 pub use endpoint::Endpoint;
@@ -94,13 +89,14 @@ pub struct Supervisor {
     // itself in quick succession; within the TTL they share one fetch.
     catalog_cache: RwLock<HashMap<String, (std::time::Instant, Value)>>,
     registry_clients: registry::Clients,
-    #[cfg(unix)]
     gateway: gateway::Slot,
-    #[cfg(unix)]
     wasm: std::sync::OnceLock<kroma_wasm_host::WasmHost>,
-    #[cfg(unix)]
     worker_lifetime: RwLock<std::time::Duration>,
     watching: std::sync::OnceLock<AskedSink>,
+    /// The loopback port the seam router is bound on (Windows). Reserved once,
+    /// on first use, so the module callbacks and the seam share it.
+    #[cfg(not(unix))]
+    seam_port: std::sync::OnceLock<u16>,
 }
 
 impl Supervisor {
@@ -118,16 +114,34 @@ impl Supervisor {
             frontends: frontend::FrontendCache::new(),
             catalog_cache: RwLock::new(HashMap::new()),
             registry_clients: registry::Clients::default(),
-            #[cfg(unix)]
             gateway: gateway::Slot::new(),
-            #[cfg(unix)]
             wasm: std::sync::OnceLock::new(),
-            #[cfg(unix)]
             worker_lifetime: RwLock::new(component::WORKER_LIFETIME),
             watching: std::sync::OnceLock::new(),
+            #[cfg(not(unix))]
+            seam_port: std::sync::OnceLock::new(),
         });
         supervisor.keep_installs_apart();
         supervisor
+    }
+
+    /// A loopback port for a module to answer on (Windows). The OS picks a free
+    /// one by binding and releasing it; the module rebinds it when it starts, so
+    /// a racing claim is a rare race that simply fails that module's start.
+    #[cfg(not(unix))]
+    pub(crate) fn reserve_port(&self) -> anyhow::Result<u16> {
+        let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+        Ok(probe.local_addr()?.port())
+    }
+
+    /// The core's own loopback port for modules (Windows). A dedicated port the
+    /// core binds its seam router on, never the public HTTP port: the module
+    /// callbacks must not be reachable by a client.
+    #[cfg(not(unix))]
+    pub fn host_port(&self) -> u16 {
+        *self
+            .seam_port
+            .get_or_init(|| self.reserve_port().unwrap_or(0))
     }
 
     /// Sends every program and file a module asks the host for to `sink`, from

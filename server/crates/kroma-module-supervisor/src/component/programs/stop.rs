@@ -21,14 +21,14 @@ impl Programs {
             return;
         }
         for (_, pid) in &running {
-            signal(*pid, libc::SIGTERM);
+            signal(*pid, true);
         }
         let deadline = Instant::now() + STOP_GRACE;
         while Instant::now() < deadline && !self.running(ids).is_empty() {
             std::thread::sleep(POLL);
         }
         for (_, pid) in self.running(ids) {
-            signal(pid, libc::SIGKILL);
+            signal(pid, false);
         }
         let _ = self.running(ids);
     }

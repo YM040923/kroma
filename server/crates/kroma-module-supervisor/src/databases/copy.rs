@@ -1,6 +1,9 @@
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
 use anyhow::{ensure, Context};
@@ -47,6 +50,7 @@ pub(super) fn copy_databases(own: &Path, moving: &Path) -> anyhow::Result<Vec<St
     Ok(names)
 }
 
+#[cfg(unix)]
 fn only_name(path: &Path) -> anyhow::Result<Option<File>> {
     let regular = |meta: &std::fs::Metadata| meta.file_type().is_file() && meta.nlink() == 1;
     if !std::fs::symlink_metadata(path).is_ok_and(|meta| regular(&meta)) {
@@ -58,6 +62,25 @@ fn only_name(path: &Path) -> anyhow::Result<Option<File>> {
         .open(path)
         .with_context(|| format!("open {}", path.display()))?;
     Ok(regular(&file.metadata()?).then_some(file))
+}
+
+/// Windows has no `O_NOFOLLOW` / link count; a reparse point (symlink/junction)
+/// is refused up front via `symlink_metadata`, and the opened handle must still
+/// be a plain file.
+#[cfg(not(unix))]
+fn only_name(path: &Path) -> anyhow::Result<Option<File>> {
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(_) => return Ok(None),
+    };
+    if !meta.file_type().is_file() || meta.file_type().is_symlink() {
+        return Ok(None);
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .open(path)
+        .with_context(|| format!("open {}", path.display()))?;
+    Ok(file.metadata()?.file_type().is_file().then_some(file))
 }
 
 fn is_database(file: &mut File) -> anyhow::Result<bool> {
@@ -72,10 +95,14 @@ fn is_database(file: &mut File) -> anyhow::Result<bool> {
 fn carry(mut source: File, to: &Path) -> anyhow::Result<()> {
     let expected = source.metadata()?.len();
     source.seek(SeekFrom::Start(0))?;
-    let mut copy = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut copy = options
         .open(to)
         .with_context(|| format!("create {}", to.display()))?;
     let copied = io::copy(&mut source, &mut copy)?;

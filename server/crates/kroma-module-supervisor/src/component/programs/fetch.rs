@@ -60,9 +60,16 @@ fn read_member<T>(
     Err(format!("the archive holds no {member}"))
 }
 
+#[cfg(unix)]
 pub(super) fn make_executable(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+}
+
+/// Windows decides executable-ness by extension, not a mode bit.
+#[cfg(not(unix))]
+pub(super) fn make_executable(_path: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 impl Programs {

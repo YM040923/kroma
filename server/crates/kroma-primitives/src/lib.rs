@@ -80,19 +80,15 @@ pub fn random_bytes(n: usize) -> Vec<u8> {
 }
 
 /// See the `wasm` twin above: in a component there is no `/dev/urandom`, and the
-/// host's `wasi:random` is the same CSPRNG.
+/// host's `wasi:random` is the same CSPRNG. On a native host the same crate
+/// reads the OS source directly: `/dev/urandom` on Unix, `BCryptGenRandom` on
+/// Windows — no platform-specific code here.
 #[cfg(not(target_family = "wasm"))]
 pub fn random_bytes(n: usize) -> Vec<u8> {
-    use std::io::Read;
     let mut buf = vec![0u8; n];
-    for path in ["/dev/urandom", "/dev/random"] {
-        if let Ok(mut f) = std::fs::File::open(path) {
-            if f.read_exact(&mut buf).is_ok() {
-                return buf;
-            }
-        }
-    }
-    panic!("kroma-primitives: OS CSPRNG unavailable; refusing to generate insecure randomness");
+    getrandom::fill(&mut buf)
+        .expect("kroma-primitives: OS CSPRNG unavailable; refusing to generate insecure randomness");
+    buf
 }
 
 /// A fresh opaque session token: 32 random bytes, hex-encoded (64 chars).

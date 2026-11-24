@@ -10,8 +10,8 @@ license.workspace = true
 time = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
-
-[target.'cfg(target_family = "wasm")'.dependencies]
+# The OS CSPRNG. Used on every target now: `/dev/urandom` on Unix, BCryptGenRandom
+# on Windows, `wasi:random` in a component.
 getrandom = "0.3"
 
 [dev-dependencies]

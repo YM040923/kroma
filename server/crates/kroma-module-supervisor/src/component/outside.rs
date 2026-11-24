@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use kroma_http::egress::{Gateway, BLOCKED};
-use kroma_http::{loopback, Fetch, Loopback};
+use kroma_http::{Fetch, Loopback};
 use kroma_module_host::{NetworkAction, NetworkAsk, NetworkFlow, NetworkPolicy, NetworkRoute};
 use kroma_wasm_host::{FetchRequest, Header, NetPolicy, Preopen, Request, Response, Verdict};
 
@@ -17,7 +17,9 @@ const CALL_MAX_TIME_SECS: u32 = 300;
 pub(super) struct Outside {
     pub(super) module: String,
     pub(super) token: String,
-    pub(super) host_socket: std::path::PathBuf,
+    /// The `kroma_http::Loopback` base of the core's own API (a unix socket on
+    /// Unix, a loopback TCP port on Windows).
+    pub(super) core_base: String,
     pub(super) gateway: Gateway,
     pub(super) network: Arc<dyn NetworkPolicy>,
     pub(super) no_network: bool,
@@ -222,7 +224,7 @@ impl NetPolicy for Outside {
         if to_core {
             call = call.header(AUTHORIZATION, format!("Bearer {}", self.token));
         }
-        let url = format!("{}{}", loopback::unix_url(&self.host_socket), request.path);
+        let url = format!("{}{}", self.core_base, request.path);
         let answered = if request.method == "GET" {
             call.get(&url)
         } else {

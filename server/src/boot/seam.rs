@@ -7,6 +7,8 @@ use kroma_module_supervisor::Supervisor;
 pub struct SeamSocket {
     #[cfg(unix)]
     bound: Option<(std::os::unix::net::UnixListener, std::path::PathBuf)>,
+    #[cfg(not(unix))]
+    bound: Option<std::net::TcpListener>,
 }
 
 /// Serving the socket; dropping it stops.
@@ -44,9 +46,24 @@ impl SeamSocket {
         }
     }
 
+    /// Windows: the seam is a loopback TCP port of its own, never the public
+    /// HTTP one. A port that cannot be bound is logged, not fatal.
     #[cfg(not(unix))]
-    pub fn bind(_supervisor: &Supervisor) -> Self {
-        Self {}
+    pub fn bind(supervisor: &Supervisor) -> Self {
+        let port = supervisor.host_port();
+        match std::net::TcpListener::bind(("127.0.0.1", port)) {
+            Ok(listener) => {
+                let _ = listener.set_nonblocking(true);
+                tracing::info!("modules call back on 127.0.0.1:{port}");
+                Self {
+                    bound: Some(listener),
+                }
+            }
+            Err(e) => {
+                tracing::error!("modules on the seam cannot call back: {e}");
+                Self { bound: None }
+            }
+        }
     }
 
     #[cfg(unix)]
@@ -61,8 +78,14 @@ impl SeamSocket {
     }
 
     #[cfg(not(unix))]
-    pub fn serve(&self, _app: axum::Router) -> Option<Served> {
-        None
+    pub fn serve(&self, app: axum::Router) -> Option<Served> {
+        let listener = self.bound.as_ref()?.try_clone().ok()?;
+        let listener = tokio::net::TcpListener::from_std(listener).ok()?;
+        Some(Served(tokio::spawn(async move {
+            if let Err(e) = axum::serve(listener, app).await {
+                tracing::error!("the module seam stopped serving: {e}");
+            }
+        })))
     }
 }
 

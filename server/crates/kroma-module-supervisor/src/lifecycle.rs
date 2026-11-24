@@ -5,13 +5,9 @@ use super::{check_manifest_schema, Endpoint, Supervisor, MODULE_COMPONENT, NATIV
 
 pub(crate) struct Proc {
     pub(crate) endpoint: Endpoint,
-    #[cfg(unix)]
     pub(crate) media: Option<Vec<std::path::PathBuf>>,
-    #[cfg(unix)]
     pub(crate) downloads: Option<Vec<std::path::PathBuf>>,
-    #[cfg(unix)]
     pub(crate) component: std::sync::Arc<super::component::Pool>,
-    #[cfg(unix)]
     pub(crate) _gateway: super::gateway::Running,
 }
 
@@ -43,14 +39,7 @@ impl Supervisor {
                 component.display()
             );
         }
-        #[cfg(unix)]
-        {
-            self.spawn_component(id)
-        }
-        #[cfg(not(unix))]
-        {
-            anyhow::bail!("'{id}' is a WebAssembly component, which this server runs only on Unix")
-        }
+        self.spawn_component(id)
     }
 
     /// Stop a module, letting its component run its own shutdown first. A no-op
@@ -60,7 +49,6 @@ impl Supervisor {
             return;
         };
         self.say(id, "INFO stopping the module");
-        #[cfg(unix)]
         p.component.shut_down();
         drop(p);
         self.say(id, "INFO module stopped");
@@ -71,7 +59,6 @@ impl Supervisor {
     pub fn stop_all(&self) {
         let procs: Vec<(String, Proc)> = self.procs.write().unwrap().drain().collect();
         for (id, p) in procs {
-            #[cfg(unix)]
             p.component.shut_down();
             drop(p);
             tracing::info!(module = %id, "stopped module");

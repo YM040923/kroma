@@ -37,15 +37,21 @@ ruzstd = "0.9"
 # Verify a downloaded .kmod against its catalog sha256 before installing.
 sha2 = { workspace = true }
 hex = { workspace = true }
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
+# The module runtime and what a component talks through. Cross-platform: the
+# component host (wasmtime) and these crates build on Windows too.
 kroma-egress = { workspace = true }
 kroma-wasm-host = { path = "../kroma-wasm-host" }
 kroma-media = { workspace = true }
 kroma-sqlite = { workspace = true }
 kroma-module-wire = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+# mDNS discovery of modules on the LAN; Unix only for now.
 mdns-sd = "0.21"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }
 
 [features]
 default = ["core"]
