@@ -148,7 +148,7 @@ pub fn ensure(data_dir: &Path) -> bool {
 }
 
 fn ffmpeg_available() -> bool {
-    Command::new("ffmpeg")
+    kroma_primitives::process::new("ffmpeg")
         .arg("-version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -192,7 +192,7 @@ fn partial(out: &Path) -> PathBuf {
 }
 
 fn run(args: &[OsString]) -> anyhow::Result<()> {
-    let status = Command::new("ffmpeg")
+    let status = kroma_primitives::process::new("ffmpeg")
         .args(args)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())

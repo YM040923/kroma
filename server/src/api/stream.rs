@@ -406,7 +406,13 @@ fn vtt_response(bytes: Vec<u8>) -> Response {
 /// single-track variant backs subtitle translation; playback extraction goes
 /// through [`subtitles::extract_batch_blocking`].
 pub(crate) async fn extract_webvtt(path: &str, index: usize) -> Option<Vec<u8>> {
-    let child = tokio::process::Command::new("ffmpeg")
+    let mut command = tokio::process::Command::new("ffmpeg");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(kroma_primitives::process::no_window_flag());
+    }
+    let child = command
         .args(["-v", "error", "-nostdin"])
         .args(input::file(path))
         .args(["-map", &format!("0:s:{index}"), "-f", "webvtt", "pipe:1"])

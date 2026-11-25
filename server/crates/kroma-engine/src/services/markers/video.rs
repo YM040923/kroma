@@ -136,7 +136,7 @@ pub fn credits_start_ms(path: &Path, duration_ms: u64, need: Footprint) -> Resul
 }
 
 fn scan_tail(path: &Path, window_start_s: f64, need: Footprint) -> Result<Vec<FrameStats>> {
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = kroma_primitives::process::new("ffmpeg");
     cmd.args(decode_args(path, window_start_s))
         .stdout(Stdio::piped())
         .stderr(Stdio::null());

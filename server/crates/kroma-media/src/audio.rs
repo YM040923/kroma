@@ -28,7 +28,7 @@ pub fn decode(
         return Err(problem);
     }
     let tmp = unique_tmp(out);
-    let mut pass = Command::new("ffmpeg");
+    let mut pass = kroma_primitives::process::new("ffmpeg");
     pass.args(kroma_primitives::pcm::decode_args(input, track, pcm, &tmp));
     let budget = timeout_for(&input.to_string_lossy()).max(SHORTEST_BUDGET);
     let written =
@@ -65,7 +65,7 @@ mod tests {
     fn tone(dir: &Path, seconds: u32) -> PathBuf {
         let clip = dir.join("tone.wav");
         let graph = format!("sine=frequency=440:duration={seconds}:sample_rate=44100");
-        let made = Command::new("ffmpeg")
+        let made = kroma_primitives::process::new("ffmpeg")
             .args(["-v", "error", "-nostdin", "-y"])
             .args(crate::input::generated(&graph))
             .arg(&clip)

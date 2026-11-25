@@ -156,7 +156,7 @@ pub fn fill_gaps(scratch: &Path, count: u32) {
         return;
     }
     let black = scratch.join("black.png");
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = kroma_primitives::process::new("ffmpeg");
     cmd.args(["-v", "error", "-nostdin", "-y"])
         .args(input::generated(&format!(
             "color=c=black:s={TILE_W}x{TILE_H}"
@@ -199,7 +199,7 @@ fn extract_one(
     let filter = format!(
         "scale={TILE_W}:{TILE_H}:force_original_aspect_ratio=increase,crop={TILE_W}:{TILE_H}"
     );
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = kroma_primitives::process::new("ffmpeg");
     cmd.args(["-v", "error", "-nostdin", "-threads", "1"]);
     cmd.args(decode.args());
     cmd.args(["-ss", &at_s.to_string()])

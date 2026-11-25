@@ -14,7 +14,7 @@ const JPEG_QUALITY: &str = "12";
 /// One image out of the `px_<NNNN>.png` tiles in `scratch`, laid out as the
 /// plan's grid. The format is whatever `out`'s extension names.
 pub fn montage(scratch: &Path, plan: &Plan, out: &Path) -> Result<(), String> {
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = kroma_primitives::process::new("ffmpeg");
     cmd.args([
         "-v",
         "error",
@@ -43,7 +43,7 @@ pub fn montage(scratch: &Path, plan: &Plan, out: &Path) -> Result<(), String> {
 /// `src` re-encoded as JPEG, for a box with no WebP encoder and for a caller
 /// that wants one sheet in one pass.
 pub fn encode_jpeg(src: &Path, out: &Path) -> Result<(), String> {
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = kroma_primitives::process::new("ffmpeg");
     cmd.args(["-y", "-v", "error", "-threads", "1"])
         .args(input::file(src))
         .args(["-c:v", "mjpeg", "-q:v", JPEG_QUALITY, "-huffman", "optimal"])
@@ -64,7 +64,7 @@ mod tests {
 
     fn ten_bit_clip(dir: &Path) -> Option<PathBuf> {
         let clip = dir.join("clip.mp4");
-        let made = Command::new("ffmpeg")
+        let made = kroma_primitives::process::new("ffmpeg")
             .args(["-v", "error", "-y"])
             .args(input::generated("testsrc=size=320x180:rate=10:duration=1"))
             .args(["-c:v", "libx264", "-pix_fmt", "yuv420p10le"])
@@ -75,7 +75,7 @@ mod tests {
     }
 
     fn brightest(image: &Path) -> u8 {
-        let read = Command::new("ffmpeg")
+        let read = kroma_primitives::process::new("ffmpeg")
             .args(["-v", "error"])
             .args(input::file(image))
             .args(["-f", "rawvideo", "-pix_fmt", "gray", "-"])
@@ -85,7 +85,7 @@ mod tests {
     }
 
     fn depth_of(image: &Path) -> String {
-        let read = Command::new("ffprobe")
+        let read = kroma_primitives::process::new("ffprobe")
             .args([
                 "-v",
                 "error",

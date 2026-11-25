@@ -9,7 +9,8 @@ mod restart;
 pub use channel::channel;
 pub use install::{install, install_automatically, recover, Installer, Operation, Target};
 pub use restart::{
-    restart, restart_requested, restartable, wait_for_restart, Refusal, RESTART_EXIT_CODE,
+    request_stop, restart, restart_requested, restartable, wait_for_restart, Refusal,
+    RESTART_EXIT_CODE,
 };
 
 use anyhow::{Context, Result};

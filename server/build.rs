@@ -31,6 +31,75 @@ fn main() {
     println!("cargo:rerun-if-env-changed=KROMA_VERSION");
     println!("cargo:rerun-if-env-changed=KROMA_BUILD");
     println!("cargo:rerun-if-changed=../.git/HEAD");
+
+    embed_windows_icon(&version);
+}
+
+/// Give the Windows binary its own icon and version strings, so the portable
+/// build shows KROMA in Explorer, the taskbar and Alt-Tab rather than a generic
+/// executable glyph. The `.ico` is the same one the desktop client ships.
+///
+/// `embed-resource` finds `rc.exe` (or falls back to a prebuilt parser), runs
+/// it and wires the `.res` into the link for every target layout. A machine
+/// with no resource toolchain still builds: it just gets an iconless binary.
+fn embed_windows_icon(version: &str) {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        return;
+    }
+    if !std::path::Path::new("resources/kroma.ico").is_file() {
+        println!("cargo:warning=resources/kroma.ico missing; the binary will have no icon");
+        return;
+    }
+    // Four 16-bit fields, comma separated, as VERSIONINFO wants them.
+    let mut parts: Vec<u16> = version
+        .split('.')
+        .take(4)
+        .map(|p| p.parse::<u16>().unwrap_or(0))
+        .collect();
+    while parts.len() < 4 {
+        parts.push(0);
+    }
+    let quadruple = format!("{},{},{},{}", parts[0], parts[1], parts[2], parts[3]);
+    std::fs::write(
+        "resources/kroma.rc",
+        format!(
+            "1 ICON \"kroma.ico\"
+             1 VERSIONINFO
+             FILEVERSION {q}
+             PRODUCTVERSION {q}
+             BEGIN
+             BLOCK \"StringFileInfo\"
+             BEGIN
+             BLOCK \"040904B0\"
+             BEGIN
+             VALUE \"FileDescription\", \"KROMA\"
+             VALUE \"FileVersion\", \"{v}\"
+             VALUE \"ProductName\", \"KROMA\"
+             VALUE \"ProductVersion\", \"{v}\"
+             VALUE \"OriginalFilename\", \"kroma-server.exe\"
+             END
+             END
+             BLOCK \"VarFileInfo\"
+             BEGIN
+             VALUE \"Translation\", 0x409, 1200
+             END
+             END
+",
+            q = quadruple,
+            v = version,
+        ),
+    )
+    .expect("write resources/kroma.rc");
+    // Paths in the .rc are relative to the manifest dir, which is where the
+    // resource compiler runs.
+    std::env::set_current_dir(
+        std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("resources"),
+    )
+    .expect("chdir to resources/");
+    embed_resource::compile("kroma.rc", embed_resource::NONE)
+        .manifest_optional()
+        .expect("compile resources/kroma.rc");
+    println!("cargo:rerun-if-changed=resources/kroma.ico");
 }
 
 fn from_env(key: &str) -> Option<String> {

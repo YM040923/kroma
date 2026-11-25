@@ -15,3 +15,5 @@ pub mod startup;
 pub mod state;
 pub mod tracing;
 pub mod transcriber;
+#[cfg(windows)]
+pub mod tray_windows;

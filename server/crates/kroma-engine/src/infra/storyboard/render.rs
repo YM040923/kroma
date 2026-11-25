@@ -149,7 +149,7 @@ mod tests {
         let scratch = kroma_testing::temp_dir("sb-render");
         let tmp = scratch.path();
         let clip = tmp.join("clip.mp4");
-        let ok = Command::new("ffmpeg")
+        let ok = kroma_primitives::process::new("ffmpeg")
             .args(["-y", "-loglevel", "error"])
             .args(input::generated("testsrc=size=640x360:rate=24:duration=30"))
             .args(["-c:v", "libx264", "-g", "48", "-pix_fmt", "yuv420p"])
@@ -181,7 +181,7 @@ mod tests {
 
         // The real sheet pixels match the declared geometry exactly (so the
         // client's background-position math never drifts).
-        let dims = Command::new("ffprobe")
+        let dims = kroma_primitives::process::new("ffprobe")
             .args([
                 "-v",
                 "error",

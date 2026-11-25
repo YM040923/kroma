@@ -9,7 +9,7 @@ use crate::response::Response;
 
 /// Whether the `curl` binary every [`crate::Fetch`] runs is installed and answers.
 pub fn curl_available() -> bool {
-    Command::new("curl")
+    kroma_primitives::process::new("curl")
         .arg("--version")
         .output()
         .is_ok_and(|output| output.status.success())
@@ -20,7 +20,7 @@ pub fn curl_available() -> bool {
 // password in a form field. `-q` must come first: it stops curl reading a
 // `~/.curlrc`, which any process running as this user could plant.
 fn curl_command() -> Command {
-    let mut cmd = Command::new("curl");
+    let mut cmd = kroma_primitives::process::new("curl");
     cmd.arg("-q").arg("--config").arg("-");
     cmd
 }

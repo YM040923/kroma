@@ -39,7 +39,7 @@ fn keyframe_cadence() -> String {
 /// What `ffmpeg <args>` printed, both streams together because which one carries
 /// the answer varies by build. Empty where ffmpeg could not be run at all.
 pub(super) fn ffmpeg_output(args: &[&str]) -> Vec<u8> {
-    std::process::Command::new("ffmpeg")
+    kroma_primitives::process::new("ffmpeg")
         .args(args)
         .output()
         .map(|o| {
@@ -73,7 +73,12 @@ pub fn spawn_stream(
 ) -> std::io::Result<Child> {
     let seeking = seeks(start_secs);
     let copying_video = matches!(mode.video, VideoMode::Copy);
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = tokio::process::Command::new("ffmpeg");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(kroma_primitives::process::no_window_flag());
+    }
     cmd.args(["-v", "error", "-nostdin"]);
     // `-threads` lands on the DECODER here (before `-i`): a remux never decodes
     // video, so a pool is pure overhead - but a transcode does, and one thread
