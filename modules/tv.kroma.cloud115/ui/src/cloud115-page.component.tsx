@@ -115,6 +115,7 @@ export function Cloud115Settings() {
   const [account, setAccount] = useState<CloudAccount | null>(null);
   const [baseUrl, setBaseUrl] = useState('');
   const [transitFolder, setTransitFolder] = useState('');
+  const [transitPickerOpen, setTransitPickerOpen] = useState(false);
   const [cookie, setCookie] = useState('');
   const [hasCookie, setHasCookie] = useState(false);
   const [libraries, setLibraries] = useState<CloudLibrary[]>([]);
@@ -920,18 +921,28 @@ export function Cloud115Settings() {
                         <Field.Hint>{t('cloud115.baseUrlHint')}</Field.Hint>
                       </Field.Root>
                     </Box>
-                    <Box flex minW={240}>
-                      <Field.Root
-                        label={t('cloud115.transitFolder')}
-                        value={transitFolder}
-                        onValueChange={(value) => {
-                          setDirty(true);
-                          setTransitFolder(value);
-                        }}
-                      >
-                        <Field.Input placeholder="/待整理" />
-                        <Field.Hint>{t('cloud115.transitFolderHint')}</Field.Hint>
-                      </Field.Root>
+                    <Box flex minW={240} gap={6}>
+                      <Text variant="meta" color="textDim">
+                        {t('cloud115.transitFolder')}
+                      </Text>
+                      <Row between gap={8} center>
+                        <Box flex minW={0} minH={40} px={12} py={10} bg="surface1" radius="md" border="border">
+                          <Text variant="body" lines={1}>
+                            {transitFolder || t('cloud115.transitFolderUnset')}
+                          </Text>
+                        </Box>
+                        <Button
+                          label={t('cloud115.chooseFolder')}
+                          icon="folder"
+                          variant="glass"
+                          size="sm"
+                          onPress={() => setTransitPickerOpen(true)}
+                          disabled={busy || !hasCookie}
+                        />
+                      </Row>
+                      <Text variant="meta" color="textDim">
+                        {t('cloud115.transitFolderHint')}
+                      </Text>
                     </Box>
                   </Box>
                   <Row wrap gap={8} center>
@@ -1823,6 +1834,18 @@ export function Cloud115Settings() {
           />
         ) : null}
       </Box>
+
+      {transitPickerOpen ? (
+        <FolderPicker
+          mode="remote"
+          onClose={() => setTransitPickerOpen(false)}
+          onPick={(path) => {
+            setTransitFolder(path);
+            setDirty(true);
+            setTransitPickerOpen(false);
+          }}
+        />
+      ) : null}
 
       {picker !== null ? (
         <FolderPicker

@@ -166,6 +166,14 @@ pub struct Stored {
 }
 
 fn path() -> PathBuf {
+    // WASI modules must use the guest path of their own preopened writable
+    // directory. `KROMA_DATA_DIR` is a host path (for example `C:\\Users\\...`)
+    // on Windows and is not a valid path inside the WASI guest.
+    if let Some(module_dir) = std::env::var_os("KROMA_MODULE_DATA_DIR") {
+        return PathBuf::from(module_dir).join(FILE);
+    }
+    // Kept for native development and older runtimes that do not provide the
+    // portable module-data mount.
     let root = std::env::var_os("KROMA_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);

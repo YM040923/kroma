@@ -219,6 +219,11 @@ impl Supervisor {
             .filter(|p| p.media.contains(&MediaTool::Decode))
             .map(|_| Arc::new(media::ModuleMedia::new(roots.clone())));
         let watch = Watch::over(id, self.watching.get().cloned());
+        let module_data_dir = if cfg!(windows) {
+            "/module".to_string()
+        } else {
+            own_dir.to_string_lossy().into_owned()
+        };
         let programs = Arc::new(
             programs::Programs::new(
                 id,
@@ -250,6 +255,10 @@ impl Supervisor {
                 "KROMA_DATA_DIR".to_string(),
                 self.cfg.data_dir.to_string_lossy().into_owned(),
             ),
+            // This is a guest path matching the module's own preopen. The
+            // server data-dir env above is a host path and cannot be used by a
+            // WASI guest on Windows.
+            ("KROMA_MODULE_DATA_DIR".to_string(), module_data_dir),
             ("TMPDIR".to_string(), "/tmp".to_string()),
         ];
         for name in LOG_FILTERS {

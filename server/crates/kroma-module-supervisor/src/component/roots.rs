@@ -73,9 +73,18 @@ pub(super) fn declares(manifest: &ModuleManifest, root: FsRoot) -> bool {
 fn held(dir: impl Into<PathBuf>, writable: bool) -> Preopen {
     let dir = dir.into();
     let guest = dir.to_string_lossy().into_owned();
+    held_at(dir, guest, writable)
+}
+
+/// Give the module its own writable folder at a stable WASI path. The host path
+/// is commonly `C:\\Users\\...` on Windows, which is not a valid absolute path
+/// inside a WASI guest; using `/module` lets the component persist its own
+/// config without ever seeing host path syntax.
+fn held_at(dir: impl Into<PathBuf>, guest: impl Into<String>, writable: bool) -> Preopen {
+    let dir = dir.into();
     Preopen {
         host: dir.canonicalize().unwrap_or(dir),
-        guest,
+        guest: guest.into(),
         writable,
     }
 }
@@ -108,6 +117,9 @@ impl Supervisor {
         });
 
         let own_writable = fs.write.contains(&FsRoot::Module) || manifest.storage.is_some();
+        #[cfg(windows)]
+        roots.push(held_at(self.own_dir(id), "/module", own_writable));
+        #[cfg(not(windows))]
         roots.push(held(self.own_dir(id), own_writable));
         if first_party {
             for name in manifest
