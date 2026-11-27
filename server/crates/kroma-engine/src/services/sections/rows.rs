@@ -16,6 +16,7 @@ const HERO_PICKS: usize = 3;
 const HERO_CAP: usize = 5;
 const HERO_FETCH: usize = 10;
 const SPOTLIGHT_FROM: usize = 24;
+const DISCOVERY_CAP: usize = 36;
 const FRESH_FOR_DAYS: i64 = 45;
 const DAY: i64 = 86_400;
 
@@ -33,10 +34,44 @@ const ACCLAIMED: f32 = 0.78;
 const SHORT_FILM_MS: i64 = 100 * 60_000;
 const NOT_A_SHORT_MS: i64 = 40 * 60_000;
 
+fn stage_ready(title: &Title) -> bool {
+    title.facts.has_backdrop && title.facts.has_overview
+}
+
 impl<'a> Board<'a> {
+    /// Alternates for the stage, not a draft: reserving these in `Page` would
+    /// take them out of every recommendation row before the viewer chose one.
+    pub(super) fn discovery_ids(
+        &self,
+        visible: impl Fn(&str, Option<&str>) -> bool,
+    ) -> Vec<String> {
+        // Board already excludes touched local IDs. Also exclude another cut
+        // of a touched title, keeping the movie and TV provider namespaces apart.
+        let mut offered: HashSet<(bool, u64)> = self
+            .viewer
+            .taste
+            .seen
+            .iter()
+            .chain(&self.ctx.in_progress)
+            .filter_map(|id| self.catalog.get(id))
+            .filter_map(|t| Some((t.facts.show, t.facts.tmdb_id?)))
+            .collect();
+        let ranked = self.ranked.iter().map(|s| s.title);
+        let ready = ranked.clone().filter(|t| stage_ready(t));
+        let fallback = ranked.filter(|t| !stage_ready(t));
+        // Apply the grant before claiming a title identity or a slot: the best
+        // copy might be in a hidden library, even when another copy is visible.
+        let picks = ready.chain(fallback).filter(|t| {
+            let f = &t.facts;
+            !f.loose_video
+                && visible(&f.library, f.certification.as_deref())
+                && f.tmdb_id.is_none_or(|id| offered.insert((f.show, id)))
+        });
+        Self::ids(picks, DISCOVERY_CAP)
+    }
+
     fn presentable(&self) -> Vec<Scored<'a>> {
-        let shown = |s: &&Scored| s.title.facts.has_backdrop && s.title.facts.has_overview;
-        let stage: Vec<Scored> = self.ranked.iter().filter(shown).copied().collect();
+        let stage: Vec<Scored> = self.ranked.iter().filter(|s| stage_ready(s.title)).copied().collect();
         if stage.is_empty() {
             self.ranked.clone()
         } else {

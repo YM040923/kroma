@@ -1,27 +1,20 @@
-//! The routes this module serves.
-//!
-//! `/play` is the one a player reaches: the `.strm` entries name it, and it
-//! answers with the drive's own signed link so the bytes never pass through this
-//! server. Everything else is the module's admin page, gated on the account's
-//! settings permission — the cookie is a credential and the sync writes into the
-//! library, so neither is open to a plain viewer.
-
+//! The stable STRM playback URL and the module's SettingsManage-only controls.
 use axum::extract::{Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-
 use kroma_module_sdk::domain::Permission;
 use kroma_module_sdk::host::{json_error, AuthUser, HostCtx};
+use serde::Deserialize;
+use serde_json::{json, Value};
 
-use crate::client;
-use crate::login;
-use crate::play::links;
-use crate::settings::{Config, Library, Options};
-use crate::transfer::{self, SelectedEntry, ShareView};
+use crate::{
+    client, login,
+    play::links,
+    settings::{Config, Library, Options},
+    store,
+};
 
 pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
     Router::new()
@@ -36,1115 +29,529 @@ pub fn routes<S: HostCtx + Clone + Send + Sync + 'static>() -> Router<S> {
         .route("/config/export", get(config_export::<S>))
         .route("/config/import", post(config_import::<S>))
         .route("/browse", get(browse::<S>))
-        .route("/browse-local", get(browse_local::<S>))
         .route("/sync", post(sync::<S>))
         .route("/login/start", post(login_start::<S>))
         .route("/login/state", get(login_state::<S>))
         .route("/login/cancel", post(login_cancel::<S>))
-        .route("/login/cookie", post(login_cookie::<S>))
         .route("/upload/rapid", post(crate::upload::rapid::<S>))
         .route("/upload/start", post(crate::upload::start::<S>))
         .route("/upload/part", post(crate::upload::part::<S>))
         .route("/upload/finish", post(crate::upload::finish::<S>))
-        .route("/transfer/preview", post(transfer_preview::<S>))
-        .route("/transfer/receive", post(transfer_receive::<S>))
         .route("/replace/preview", post(replace_preview::<S>))
         .route("/replace/run", post(replace_run::<S>))
 }
 
-// ---------------------------------------------------------------------------
-// QR sign-in
+fn require_settings<S: HostCtx>(
+    host: &S,
+    user: &kroma_module_sdk::domain::User,
+) -> Result<(), Response> {
+    host.require(user, Permission::SettingsManage)
+}
+fn not_authorized() -> Response {
+    json_error(StatusCode::CONFLICT, "请先填写 AppID，用 115 App 扫码授权")
+}
+fn drive_error(e: client::ApiError) -> Response {
+    let status = if e.rate_limited() {
+        StatusCode::TOO_MANY_REQUESTS
+    } else {
+        StatusCode::BAD_GATEWAY
+    };
+    json_error(status, &e.sync_reason())
+}
+fn internal(e: String) -> Response {
+    json_error(StatusCode::INTERNAL_SERVER_ERROR, &e)
+}
 
-#[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase", default)]
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LoginStartBody {
-    app: Option<String>,
+    app_id: String,
 }
-
-async fn login_start<S: HostCtx + Clone + Send + Sync + 'static>(
-    State(host): State<S>,
-    AuthUser(user): AuthUser,
-    body: Option<Json<LoginStartBody>>,
-) -> Result<Json<login::Started>, Response> {
-    require_settings(&host, &user)?;
-    let app = body
-        .and_then(|Json(body)| body.app)
-        .unwrap_or_else(|| "alipaymini".to_string());
-    login::begin(&app).map(Json).map_err(|error| {
-        json_error(StatusCode::BAD_GATEWAY, &error)
-    })
-}
-
 #[derive(Deserialize)]
 struct FlowQuery {
     flow: String,
 }
 
-async fn login_state<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn login_start<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
-    Query(query): Query<FlowQuery>,
+    Json(body): Json<LoginStartBody>,
+) -> Result<Json<login::Started>, Response> {
+    require_settings(&host, &user)?;
+    let id = body.app_id.trim();
+    if id.is_empty() || id.len() > 32 || !id.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(json_error(StatusCode::BAD_REQUEST, "AppID 必须是数字"));
+    }
+    login::begin(id)
+        .map(Json)
+        .map_err(|e| json_error(StatusCode::BAD_GATEWAY, &e))
+}
+async fn login_state<S: HostCtx>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+    Query(q): Query<FlowQuery>,
 ) -> Result<Json<login::State>, Response> {
     require_settings(&host, &user)?;
-    login::state(&query.flow)
+    login::state(&q.flow)
         .map(Json)
-        .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))
+        .map_err(|e| json_error(StatusCode::BAD_GATEWAY, &e))
 }
-
-#[derive(Deserialize)]
-struct CookieBody {
-    cookie: String,
-}
-
-async fn login_cookie<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn login_cancel<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
-    Json(body): Json<CookieBody>,
-) -> Result<Json<login::CookieImported>, Response> {
-    require_settings(&host, &user)?;
-    Ok(Json(login::import_cookie(&body.cookie)))
-}
-
-async fn login_cancel<S: HostCtx + Clone + Send + Sync + 'static>(
-    State(host): State<S>,
-    AuthUser(user): AuthUser,
-    body: Option<Json<FlowQuery>>,
+    Json(q): Json<FlowQuery>,
 ) -> Result<StatusCode, Response> {
     require_settings(&host, &user)?;
-    if let Some(Json(query)) = body {
-        login::cancel(&query.flow);
-    }
+    login::cancel(&q.flow);
     Ok(StatusCode::NO_CONTENT)
 }
 
-// ---------------------------------------------------------------------------
-// Playback
 #[derive(Deserialize)]
 struct PlayQuery {
     pc: String,
-    #[serde(default)]
     next: Option<String>,
 }
-
-async fn play<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn play<S: HostCtx>(
     State(_host): State<S>,
-    Query(query): Query<PlayQuery>,
+    Query(q): Query<PlayQuery>,
     headers: HeaderMap,
 ) -> Response {
     let config = Config::load();
-    if config.cookie.trim().is_empty() {
-        return json_error(StatusCode::SERVICE_UNAVAILABLE, "115 的 Cookie 还没配置");
+    if config.auth_id.is_empty() {
+        return not_authorized();
     }
-    // Playback shares the same daily ceiling as the mirror, so a player picks up
-    // a budget the operator changed without waiting for the next sync.
     crate::pacer::pacer().configure(&config.options).await;
-    // The drive signs a link to the agent that asks, so the player's own agent is
-    // the one to sign with. KROMA relays it to this route.
     let ua = headers
         .get(header::USER_AGENT)
-        .and_then(|value| value.to_str().ok())
-        .filter(|value| !value.trim().is_empty())
+        .and_then(|v| v.to_str().ok())
+        .filter(|s| !s.trim().is_empty())
         .unwrap_or(client::MODULE_UA);
-
     match links()
-        .resolve(&config.cookie, &query.pc, ua, config.options.link_ttl_secs)
+        .resolve_play(&config.auth_id, &q.pc, ua, config.options.link_ttl_secs)
         .await
     {
-        Ok(resolved) if resolved.link.needs_cookie => {
-            // An `f=3` link only works with the account's cookie attached to every
-            // byte request, which a redirect cannot carry and a player will not
-            // send. Saying so beats handing out a link that fails on the first
-            // read with a bare 403.
-            tracing::warn!(pick_code = %query.pc, "a 115 link needs the cookie on fetch; playback refuses it");
-            json_error(
-                StatusCode::BAD_GATEWAY,
-                "该文件（多见于 ISO/BDMV 原盘）的直链要求携带 Cookie，无法直接 302 播放",
-            )
-        }
+        Ok(resolved) if resolved.link.needs_cookie => json_error(
+            StatusCode::BAD_GATEWAY,
+            "115 未给出可供播放器直接访问的链接",
+        ),
         Ok(resolved) => {
-            let cached = resolved.cached;
-            let link = resolved.link;
-            if config.options.prefetch_next > 0 {
-                if let Some(next) = query.next.as_deref() {
-                    let codes: Vec<String> = next
-                        .split(',')
-                        .map(str::trim)
-                        .filter(|code| !code.is_empty())
-                        .take(usize::from(config.options.prefetch_next).min(3))
-                        .map(str::to_string)
-                        .collect();
-                    if !codes.is_empty() {
-                        let cookie = config.cookie.clone();
-                        let ua = ua.to_string();
-                        let ttl = config.options.link_ttl_secs;
-                        tokio::spawn(async move {
-                            for code in codes {
-                                let _ = links().resolve(&cookie, &code, &ua, ttl).await;
-                            }
-                        });
-                    }
-                }
+            let Ok(location) = HeaderValue::from_str(&resolved.link.url) else {
+                return json_error(StatusCode::BAD_GATEWAY, "115 返回了无效的下载地址");
+            };
+            if login::authorization_id() != config.auth_id {
+                return not_authorized();
             }
-            tracing::info!(
-                pick_code = %query.pc,
-                mode = "302",
-                cached,
-                url = %link.url,
-                "115 direct playback"
-            );
-            let url = link.url.clone();
-            let _ = crate::store::patch(|stored| {
-                stored.last_play_error.clear();
-                stored.last_play_at = crate::events::unix_now();
-                stored.last_play_mode = "302".into();
-                stored.last_play_url = url.clone();
-                stored.play_count = stored.play_count.saturating_add(1);
-                if !cached {
-                    stored.sign_count = stored.sign_count.saturating_add(1);
+            let codes: Vec<String> = q
+                .next
+                .as_deref()
+                .unwrap_or("")
+                .split(',')
+                .filter(|v| {
+                    !v.is_empty() && v.len() <= 64 && v.bytes().all(|b| b.is_ascii_alphanumeric())
+                })
+                .take(usize::from(config.options.prefetch_next.min(3)))
+                .map(str::to_owned)
+                .collect();
+            let limit = usize::from(config.options.prefetch_next.min(3));
+            if limit != 0 {
+                let ua = ua.to_string();
+                tokio::spawn(async move {
+                    let codes = if q.next.is_none() {
+                        crate::watch::following(&config, &q.pc, limit)
+                    } else {
+                        codes
+                    };
+                    for pc in codes {
+                        if links()
+                            .resolve(&config.auth_id, &pc, &ua, config.options.link_ttl_secs)
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                });
+            }
+            let mut r = StatusCode::FOUND.into_response();
+            let _ = store::patch(|s| {
+                s.last_play_error.clear();
+                s.last_play_at = crate::events::unix_now();
+                s.last_play_mode = "302".into();
+                s.play_count = s.play_count.saturating_add(1);
+                if !resolved.cached {
+                    s.sign_count = s.sign_count.saturating_add(1);
                 }
             });
-            redirect_to(&url)
+            r.headers_mut().insert(header::LOCATION, location);
+            r.headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            r
         }
-        Err(error) if error.cookie_expired() => {
-            remember_play_failure("115 登录已失效，请更新 Cookie");
-            json_error(StatusCode::BAD_GATEWAY, "115 登录已失效，请更新 Cookie")
-        }
-        Err(error) if error.rate_limited() => json_error(
-            StatusCode::TOO_MANY_REQUESTS,
-            "115 正在限流，稍后再试（模块已自动暂停所有调用）",
-        ),
-        Err(error) => {
-            tracing::warn!(pick_code = %query.pc, %error, "signing a 115 link failed");
-            remember_play_failure(&format!("签直链失败：{error}"));
-            json_error(StatusCode::BAD_GATEWAY, &error.to_string())
+        Err(e) => {
+            let _ = store::patch(|s| {
+                s.last_play_error = e.sync_reason();
+                s.last_play_at = crate::events::unix_now();
+            });
+            drive_error(e)
         }
     }
 }
-
-fn remember_play_failure(reason: &str) {
-    let reason = reason.chars().take(200).collect::<String>();
-    let _ = crate::store::patch(|stored| {
-        stored.last_play_error = reason;
-        stored.last_play_at = crate::events::unix_now();
-    });
-}
-
-fn redirect_to(target: &str) -> Response {
-    let Ok(location) = HeaderValue::from_str(target) else {
-        return json_error(StatusCode::BAD_GATEWAY, "直链无法作为跳转地址");
-    };
-    let mut response = (StatusCode::FOUND, ()).into_response();
-    let headers = response.headers_mut();
-    headers.insert(header::LOCATION, location);
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    response
-}
-
-// ---------------------------------------------------------------------------
-// Admin
-
-fn require_settings<S: HostCtx>(host: &S, user: &kroma_module_sdk::domain::User) -> Result<(), Response> {
-    host.require(user, Permission::SettingsManage)
-}
-
-/// How long the cached profile answers without asking the drive. Capacity is
-/// the only field that moves, and two paced calls on every page open is a high
-/// price for it.
-const ACCOUNT_TTL_SECS: i64 = 600;
 
 #[derive(Deserialize, Default)]
 struct AccountQuery {
-    #[serde(default)]
     refresh: Option<u8>,
 }
-
-async fn fetch_account(cookie: &str) -> Result<crate::store::AccountSnapshot, client::ApiError> {
-    let space = client::space(cookie, client::MODULE_UA).await?;
-    let nav = client::user_nav(cookie, client::MODULE_UA)
-        .await
-        .unwrap_or(Value::Null);
-    let text = |key: &str| {
-        nav.get(key)
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string()
-    };
-    let user_name = {
-        let name = text("user_name");
-        if name.is_empty() {
-            text("nickname")
-        } else {
-            name
-        }
-    };
-    let user_id = {
-        let id = text("user_id");
-        if id.is_empty() {
-            cookie
-                .split(';')
-                .find_map(|part| part.trim().strip_prefix("UID="))
-                .and_then(|value| value.split('_').next())
-                .unwrap_or("")
-                .to_string()
-        } else {
-            id
-        }
-    };
-    let avatar_url = ["user_face", "face", "avatar", "head_img"]
-        .iter()
-        .map(|key| text(key))
-        .find(|value| !value.is_empty())
-        .map(|value| {
-            let value = match value.find("?_t=") {
-                // A per-fetch cache-buster defeats the browser's own cache and
-                // leaves the avatar blank on every visit.
-                Some(at) => value[..at].to_string(),
-                None => value,
-            };
-            if value.starts_with("http") {
-                value
-            } else {
-                format!("https://www.115.com/{}", value.trim_start_matches('/'))
-            }
-        })
-        .unwrap_or_default();
-    let vip = match nav.get("vip") {
-        Some(Value::Bool(value)) => *value,
-        Some(Value::Number(value)) => value.as_i64().unwrap_or(0) != 0,
-        Some(Value::String(value)) => value == "1" || value.eq_ignore_ascii_case("true"),
-        _ => false,
-    };
-    Ok(crate::store::AccountSnapshot {
-        user_name,
-        user_id,
-        vip,
-        avatar_url,
-        total: space.total,
-        used: space.used,
-        remain: space.remain,
-        total_text: space.total_text,
-        used_text: space.used_text,
-        remain_text: space.remain_text,
-        fetched_at: crate::events::unix_now(),
-    })
-}
-
-fn account_view(snapshot: &crate::store::AccountSnapshot, alias: &str) -> serde_json::Value {
-    serde_json::json!({
-        "total": snapshot.total,
-        "used": snapshot.used,
-        "remain": snapshot.remain,
-        "totalText": snapshot.total_text,
-        "usedText": snapshot.used_text,
-        "remainText": snapshot.remain_text,
-        "userName": snapshot.user_name,
-        "userId": snapshot.user_id,
-        "vip": snapshot.vip,
-        "avatarUrl": snapshot.avatar_url,
-        "alias": alias,
-    })
-}
-
-async fn account<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn account<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
-    Query(query): Query<AccountQuery>,
-) -> Result<Json<serde_json::Value>, Response> {
+    Query(q): Query<AccountQuery>,
+) -> Result<Json<Value>, Response> {
     require_settings(&host, &user)?;
-    let config = Config::load();
-    if config.cookie.trim().is_empty() {
-        return Err(json_error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "115 的 Cookie 还没配置",
-        ));
+    let grant = login::authorization_id();
+    if grant.is_empty() {
+        return Err(not_authorized());
     }
-    let stored = crate::store::load();
-    let cached = stored.account;
-    if query.refresh.unwrap_or(0) == 0 && !cached.user_name.is_empty() {
-        if crate::events::unix_now().saturating_sub(cached.fetched_at) > ACCOUNT_TTL_SECS {
-            // Answer with what is known, then refresh for the next visit. A page
-            // open must not wait for the drive.
-            let cookie = config.cookie.clone();
-            tokio::spawn(async move {
-                if let Ok(fresh) = fetch_account(&cookie).await {
-                    let _ = crate::store::patch(|saved| saved.account = fresh);
-                }
-            });
+    let s = store::load();
+    let profile = if q.refresh.unwrap_or(0) == 0
+        && s.account_grant == grant
+        && !s.account.user_name.is_empty()
+        && crate::events::unix_now().saturating_sub(s.account.fetched_at) < 600
+    {
+        s.account
+    } else {
+        let fresh = client::account(&grant).await.map_err(drive_error)?;
+        if login::authorization_id() != grant {
+            return Err(not_authorized());
         }
-        return Ok(Json(account_view(&cached, &stored.alias)));
-    }
-    let fresh = match fetch_account(&config.cookie).await {
-        Ok(fresh) => fresh,
-        Err(error) if error.cookie_expired() => {
-            return Err(json_error(
-                StatusCode::BAD_GATEWAY,
-                "115 登录已失效，请更新 Cookie",
-            ))
-        }
-        Err(error) => return Err(json_error(StatusCode::BAD_GATEWAY, &error.to_string())),
+        store::patch(|s| {
+            s.account = fresh.clone();
+            s.account_grant = grant;
+        })
+        .map_err(internal)?;
+        fresh
     };
-    let _ = crate::store::patch(|saved| saved.account = fresh.clone());
-    Ok(Json(account_view(&fresh, &stored.alias)))
+    Ok(Json(
+        json!({"userId":profile.user_id,"userName":profile.user_name,"avatarUrl":profile.avatar_url,"vip":profile.vip,"total":profile.total,"used":profile.used,"remain":profile.remain,"totalText":profile.total_text,"usedText":profile.used_text,"remainText":profile.remain_text,"alias":s.alias}),
+    ))
 }
-
-#[derive(Deserialize, Default)]
+#[derive(Deserialize)]
 struct AliasBody {
-    #[serde(default)]
     alias: String,
 }
-
-async fn account_alias<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn account_alias<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
     Json(body): Json<AliasBody>,
-) -> Result<Json<serde_json::Value>, Response> {
+) -> Result<Json<Value>, Response> {
     require_settings(&host, &user)?;
-    let alias = body.alias.trim().chars().take(40).collect::<String>();
-    let stored = crate::store::patch(|stored| stored.alias = alias.clone())
-        .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, &error))?;
-    Ok(Json(serde_json::json!({ "alias": stored.alias })))
+    let s = store::patch(|s| s.alias = body.alias.trim().chars().take(40).collect())
+        .map_err(internal)?;
+    Ok(Json(json!({"alias":s.alias})))
 }
-
-async fn account_remove<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn account_remove<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
-) -> Result<Json<serde_json::Value>, Response> {
+) -> Result<Json<Value>, Response> {
     require_settings(&host, &user)?;
-    crate::store::patch(|stored| {
-        stored.cookie.clear();
-        stored.alias.clear();
-        stored.account = crate::store::AccountSnapshot::default();
-        stored.last_play_error.clear();
-        stored.last_play_at = 0;
-        stored.last_play_mode.clear();
-        stored.last_play_url.clear();
-        stored.play_count = 0;
-        stored.sign_count = 0;
+    login::disconnect().map_err(internal)?;
+    store::patch(|s| {
+        s.account = Default::default();
+        s.account_grant.clear();
+        s.alias.clear();
+        s.last_play_error.clear();
+        s.last_play_mode.clear();
+        s.last_play_at = 0;
+        s.play_count = 0;
+        s.sign_count = 0;
     })
-    .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, &error))?;
-    Ok(Json(serde_json::json!({
-        "removed": true,
-        "filesDeleted": false,
-    })))
+    .map_err(internal)?;
+    Ok(Json(json!({"removed":true,"filesDeleted":false})))
 }
 
 async fn watch_now<S: HostCtx + Clone + Send + Sync + 'static>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
-) -> Result<StatusCode, Response> {
+) -> Result<Json<Value>, Response> {
     require_settings(&host, &user)?;
+    let c = Config::load();
+    if c.auth_id.is_empty() {
+        return Err(not_authorized());
+    }
+    if !c.runnable()
+        || !c
+            .libraries
+            .iter()
+            .any(|l| l.fast_sync && !l.local.is_empty() && !l.remote.is_empty())
+    {
+        return Err(json_error(
+            StatusCode::CONFLICT,
+            "请先设置服务器地址，并为至少一个映射启用快速检查",
+        ));
+    }
     crate::watch::start_now(host);
-    Ok(StatusCode::ACCEPTED)
+    Ok(Json(json!({"started":true})))
 }
-
-async fn checkpoint_clear<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn checkpoint_clear<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
-) -> Result<Json<serde_json::Value>, Response> {
+) -> Result<Json<Value>, Response> {
     require_settings(&host, &user)?;
-    crate::store::patch(|stored| {
-        stored.incr = crate::store::IncrState::default();
-        stored.dirs.clear();
-    })
-    .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, &error))?;
-    Ok(Json(serde_json::json!({ "cleared": true })))
-}
-
-async fn config_export<S: HostCtx + Clone + Send + Sync + 'static>(
-    State(host): State<S>,
-    AuthUser(user): AuthUser,
-) -> Result<Json<serde_json::Value>, Response> {
-    require_settings(&host, &user)?;
-    let config = Config::load();
-    let alias = crate::store::load().alias;
-    // The cookie is a credential; the export omits it on purpose.
-    Ok(Json(serde_json::json!({
-        "format": "kroma-cloud115",
-        "version": 1,
-        "exportedAt": crate::store::now_ms(),
-        "baseUrl": config.base_url,
-        "sourceUrl": config.source_url,
-        "transitFolder": config.transit_folder,
-        "libraries": config.libraries,
-        "options": config.options,
-        "alias": alias,
-    })))
+    crate::watch::clear_checkpoint().map_err(|s| json_error(StatusCode::CONFLICT, &s))?;
+    Ok(Json(json!({"cleared":true})))
 }
 
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 struct ConfigBody {
     base_url: Option<String>,
-    source_url: Option<String>,
-    transit_folder: Option<String>,
     libraries: Option<Vec<Library>>,
     options: Option<Options>,
     alias: Option<String>,
 }
-
-async fn config_import<S: HostCtx + Clone + Send + Sync + 'static>(
-    State(host): State<S>,
-    AuthUser(user): AuthUser,
-    Json(body): Json<ConfigBody>,
-) -> Result<Json<Saved>, Response> {
-    require_settings(&host, &user)?;
-    if let Some(libraries) = body.libraries.as_ref() {
-        for library in libraries {
-            if library.remote.trim().is_empty() != library.local.trim().is_empty() {
-                return Err(json_error(
-                    StatusCode::BAD_REQUEST,
-                    "每个映射都要同时填网盘目录和本地子目录",
-                ));
-            }
-        }
-    }
-    let base = body
-        .base_url
-        .as_deref()
-        .map(|base| base.trim().trim_end_matches('/').to_string());
-    if let Some(base) = base.as_ref() {
-        if !base.is_empty() && !base.starts_with("http://") && !base.starts_with("https://") {
-            return Err(json_error(
-                StatusCode::BAD_REQUEST,
-                "服务器地址必须形如 http://192.168.1.10:4040",
-            ));
-        }
-    }
-    let source = body
-        .source_url
-        .as_deref()
-        .map(|source| source.trim().trim_end_matches('/').to_string());
-    if let Some(source) = source.as_ref() {
-        if !source.is_empty() && !source.starts_with("http://") && !source.starts_with("https://") {
-            return Err(json_error(
-                StatusCode::BAD_REQUEST,
-                "订阅源服务地址必须形如 http://172.17.0.1:8790",
-            ));
-        }
-    }
-    let alias = body
-        .alias
-        .map(|alias| alias.trim().chars().take(40).collect::<String>());
-    let transit = body
-        .transit_folder
-        .as_deref()
-        .map(|folder| folder.trim().trim_end_matches('/').to_string());
-    crate::store::patch(|stored| {
-        if let Some(base) = base {
-            stored.base_url = base;
-        }
-        if let Some(source) = source {
-            stored.source_url = source;
-        }
-        if let Some(transit) = transit {
-            stored.transit_folder = transit;
-        }
-        if let Some(libraries) = body.libraries {
-            stored.libraries = libraries;
-        }
-        if let Some(options) = body.options {
-            stored.options = options;
-        }
-        if let Some(alias) = alias {
-            stored.alias = alias;
-        }
-    })
-    .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, &error))?;
-    Ok(Json(Saved {
-        saved: true,
-        errors: Vec::new(),
-    }))
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct FolderView {
-    name: String,
-    kind: String,
-    folders: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SettingsView {
-    has_cookie: bool,
-    base_url: String,
-    /// The subscription source the provider point proxies to. Read back so an
-    /// operator can see what is configured; the cookie never is.
-    source_url: String,
-    /// Where acquisitions land before the organiser classifies them.
-    transit_folder: String,
-    libraries: Vec<Library>,
-    options: Options,
-    library_folders: Vec<FolderView>,
-    /// The absolute local directory each mapping resolves to, in the same order
-    /// as `libraries`. Empty where no library can take it — that is the answer
-    /// to "where is my folder".
-    resolved_local: Vec<String>,
-}
-
-async fn get_settings<S: HostCtx + Clone + Send + Sync + 'static>(
-    State(host): State<S>,
-    AuthUser(user): AuthUser,
-) -> Result<Json<SettingsView>, Response> {
-    require_settings(&host, &user)?;
-    let config = Config::load();
-    let folders = host.library_folders();
-    let resolved_local = config
-        .libraries
-        .iter()
-        .map(|library| {
-            crate::sync::resolve_local_path(&folders, &library.local)
-                .map(|path| path.display().to_string())
-                .unwrap_or_default()
-        })
-        .collect();
-    Ok(Json(SettingsView {
-        has_cookie: !config.cookie.is_empty(),
-        base_url: config.base_url,
-        source_url: config.source_url,
-        transit_folder: config.transit_folder,
-        libraries: config.libraries,
-        options: config.options,
-        library_folders: folders
-            .into_iter()
-            .map(|f| FolderView {
-                name: f.name,
-                kind: f.kind,
-                folders: f.folders,
-            })
-            .collect(),
-        resolved_local,
-    }))
-}
-
 #[derive(Deserialize, Default)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 struct SettingsBody {
-    /// A new cookie. Absent leaves the stored one alone; present and empty is the
-    /// same as absent, so a password manager that autofills nothing cannot erase
-    /// it.
-    cookie: Option<String>,
-    #[serde(default)]
-    clear_cookie: bool,
-    #[serde(default)]
     base_url: Option<String>,
-    /// Where the provider point reaches the subscription source (madreel-svc).
-    /// Empty clears it; absent leaves it alone.
-    #[serde(default)]
-    source_url: Option<String>,
-    /// Where acquisitions land before the organiser classifies them, for example
-    /// `/待整理`. Empty clears it; absent leaves it alone.
-    #[serde(default)]
-    transit_folder: Option<String>,
-    #[serde(default)]
     libraries: Option<Vec<Library>>,
-    #[serde(default)]
     options: Option<Options>,
 }
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Saved {
-    saved: bool,
-    /// Mappings whose local directory could not be resolved or created. The save
-    /// itself succeeded; these are what the operator has to fix next.
-    errors: Vec<String>,
+fn normalize_base(raw: Option<String>) -> Result<Option<String>, Response> {
+    let base = raw.map(|v| v.trim().trim_end_matches('/').to_owned());
+    if let Some(v) = &base {
+        if !v.is_empty()
+            && ((!v.starts_with("http://") && !v.starts_with("https://"))
+                || v.contains(['\r', '\n']))
+        {
+            return Err(json_error(
+                StatusCode::BAD_REQUEST,
+                "服务器地址必须形如 http://192.168.1.10:4041",
+            ));
+        }
+    }
+    Ok(base)
 }
-
-async fn put_settings<S: HostCtx + Clone + Send + Sync + 'static>(
+fn portable(mut l: Library) -> Library {
+    l.local.clear();
+    l.local_display.clear();
+    l
+}
+async fn config_export<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
-    Json(body): Json<SettingsBody>,
-) -> Result<Json<Saved>, Response> {
+) -> Result<Json<Value>, Response> {
     require_settings(&host, &user)?;
-
-    if let Some(libraries) = body.libraries.as_ref() {
-        for library in libraries {
-            if library.remote.trim().is_empty() != library.local.trim().is_empty() {
+    let s = store::load();
+    Ok(Json(
+        json!({"format":"kroma-cloud115","version":2,"exportedAt":store::now_ms(),"baseUrl":s.base_url,"libraries":s.libraries.into_iter().map(portable).collect::<Vec<_>>(),"options":s.options,"alias":s.alias}),
+    ))
+}
+async fn config_import<S: HostCtx>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+    Json(b): Json<ConfigBody>,
+) -> Result<Json<Value>, Response> {
+    require_settings(&host, &user)?;
+    let base = normalize_base(b.base_url)?;
+    let folders = b.libraries.is_some();
+    store::patch(|s| {
+        if let Some(v) = base {
+            s.base_url = v;
+        }
+        if let Some(v) = b.options {
+            s.options = v;
+        }
+        if let Some(v) = b.alias {
+            s.alias = v.trim().chars().take(40).collect();
+        }
+        if let Some(v) = b.libraries {
+            s.libraries = v.into_iter().map(portable).collect();
+        }
+    })
+    .map_err(internal)?;
+    let restart = folders
+        && host
+            .commit_selected_folders(crate::MODULE_ID, &[])
+            .map_err(|e| json_error(StatusCode::CONFLICT, &e))?;
+    Ok(Json(
+        json!({"saved":true,"errors":[],"restartRequired":restart}),
+    ))
+}
+async fn get_settings<S: HostCtx>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<Value>, Response> {
+    require_settings(&host, &user)?;
+    let c = Config::load();
+    let dirs = c
+        .libraries
+        .iter()
+        .map(|l| &l.local_display)
+        .collect::<Vec<_>>();
+    let folders = host
+        .library_folders()
+        .into_iter()
+        .map(|f| json!({"name":f.name,"kind":f.kind,"folders":f.folders}))
+        .collect::<Vec<_>>();
+    Ok(Json(
+        json!({"authorized":!c.auth_id.is_empty(),"appId":login::app_id(),"baseUrl":c.base_url,"libraries":c.libraries,"options":c.options,"libraryFolders":folders,"resolvedLocal":dirs}),
+    ))
+}
+async fn put_settings<S: HostCtx>(
+    State(host): State<S>,
+    AuthUser(user): AuthUser,
+    Json(b): Json<SettingsBody>,
+) -> Result<Json<Value>, Response> {
+    require_settings(&host, &user)?;
+    if let Some(rows) = &b.libraries {
+        for l in rows {
+            if l.remote.trim().is_empty() != l.local.trim().is_empty() {
                 return Err(json_error(
                     StatusCode::BAD_REQUEST,
-                    "每个映射都要同时填网盘目录和本地子目录",
+                    "每个映射都要同时选择网盘目录和本地目录",
+                ));
+            }
+            if !l.local.is_empty() && crate::sync::resolve_local_path(&[], &l.local).is_none() {
+                return Err(json_error(
+                    StatusCode::BAD_REQUEST,
+                    "请重新选择本地目录，旧路径没有授权给模块",
                 ));
             }
         }
     }
-    let base = body.base_url.as_deref().map(|base| base.trim().trim_end_matches('/').to_string());
-    if let Some(base) = base.as_ref() {
-        if !base.is_empty() && !base.starts_with("http://") && !base.starts_with("https://") {
-            return Err(json_error(
-                StatusCode::BAD_REQUEST,
-                "服务器地址必须形如 http://192.168.1.10:8096",
-            ));
-        }
-    }
-    let source = body
-        .source_url
-        .as_deref()
-        .map(|source| source.trim().trim_end_matches('/').to_string());
-    if let Some(source) = source.as_ref() {
-        if !source.is_empty() && !source.starts_with("http://") && !source.starts_with("https://") {
-            return Err(json_error(
-                StatusCode::BAD_REQUEST,
-                "订阅源服务地址必须形如 http://172.17.0.1:8790",
-            ));
-        }
-    }
-    let transit = body
-        .transit_folder
-        .as_deref()
-        .map(|folder| folder.trim().trim_end_matches('/').to_string());
-    if let Some(folder) = transit.as_ref() {
-        if folder.contains(['\r', '\n']) {
-            return Err(json_error(StatusCode::BAD_REQUEST, "转存文件夹不能包含换行"));
-        }
-        if folder.contains("..") {
-            return Err(json_error(
-                StatusCode::BAD_REQUEST,
-                "转存文件夹不能包含 ..",
-            ));
-        }
-    }
-    let cookie = body
-        .cookie
-        .as_deref()
-        .map(str::trim)
-        .filter(|cookie| !cookie.is_empty())
-        .map(str::to_string);
-    if let Some(cookie) = cookie.as_ref() {
-        if cookie.contains(['\r', '\n']) {
-            return Err(json_error(StatusCode::BAD_REQUEST, "Cookie 不能包含换行"));
-        }
-    }
-
-    let touched = body.clear_cookie
-        || cookie.is_some()
-        || base.is_some()
-        || source.is_some()
-        || transit.is_some()
-        || body.libraries.is_some()
-        || body.options.is_some();
+    let base = normalize_base(b.base_url)?;
+    let changed = b.libraries.is_some();
+    let touched = changed || base.is_some() || b.options.is_some();
     if !touched {
-        return Ok(Json(Saved {
-            saved: false,
-            errors: Vec::new(),
-        }));
+        return Ok(Json(
+            json!({"saved":false,"errors":[],"restartRequired":false}),
+        ));
     }
-
-    crate::store::patch(|stored| {
-        if body.clear_cookie {
-            stored.cookie.clear();
-            stored.account = crate::store::AccountSnapshot::default();
-        } else if let Some(cookie) = cookie {
-            stored.cookie = cookie;
-            stored.account = crate::store::AccountSnapshot::default();
+    let s = store::patch(|s| {
+        if let Some(v) = base {
+            s.base_url = v;
         }
-        if let Some(base) = base {
-            stored.base_url = base;
+        if let Some(v) = b.libraries {
+            s.libraries = v;
         }
-        if let Some(source) = source {
-            stored.source_url = source;
-        }
-        if let Some(transit) = transit {
-            stored.transit_folder = transit;
-        }
-        if let Some(libraries) = body.libraries {
-            stored.libraries = libraries;
-        }
-        if let Some(options) = body.options {
-            stored.options = options;
+        if let Some(v) = b.options {
+            s.options = v;
         }
     })
-    .map_err(|reason| json_error(StatusCode::INTERNAL_SERVER_ERROR, &reason))?;
-
-    // Make each mapping's local folder now, so it is visible in KROMA's own
-    // "add folder" picker before the first sync ever runs.
-    let config = Config::load();
-    let folders = host.library_folders();
-    let mut errors = Vec::new();
-    for mapping in &config.libraries {
-        if mapping.remote.trim().is_empty() || mapping.local.trim().is_empty() {
-            continue;
-        }
-        match crate::sync::resolve_local_path(&folders, &mapping.local) {
-            Some(path) => {
-                if let Err(error) = std::fs::create_dir_all(&path) {
-                    errors.push(format!("{}: 创建本地目录失败：{error}", path.display()));
-                }
-            }
-            None => errors.push(format!(
-                "{}: 本地目录无效（填存储里的绝对路径，如 /media/115/动画电影）",
-                mapping.remote
-            )),
-        }
-    }
-
-    Ok(Json(Saved {
-        saved: true,
-        errors,
-    }))
+    .map_err(internal)?;
+    let restart = if changed {
+        let selected = s
+            .libraries
+            .into_iter()
+            .map(|l| l.local)
+            .filter(|v| !v.is_empty())
+            .collect::<Vec<_>>();
+        host.commit_selected_folders(crate::MODULE_ID, &selected)
+            .map_err(|e| json_error(StatusCode::CONFLICT, &e))?
+    } else {
+        false
+    };
+    Ok(Json(
+        json!({"saved":true,"errors":[],"restartRequired":restart}),
+    ))
 }
 
-// ---------------------------------------------------------------------------
-// Browsing the storage side, for the mapping's local folder
-
-#[derive(Deserialize, Default)]
-struct LocalBrowseQuery {
-    #[serde(default)]
-    path: String,
-}
-
-async fn browse_local<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn status<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
-    Query(query): Query<LocalBrowseQuery>,
-) -> Result<Json<BrowseView>, Response> {
+) -> Result<Json<Value>, Response> {
     require_settings(&host, &user)?;
-    let raw = if query.path.trim().is_empty() {
-        "/media".to_string()
-    } else {
-        query.path.trim().to_string()
-    };
-    if raw.contains("..") {
-        return Err(json_error(StatusCode::BAD_REQUEST, "路径无效"));
-    }
-    let dir = std::path::PathBuf::from(&raw);
-    let listed = std::fs::read_dir(&dir)
-        .map_err(|error| json_error(StatusCode::BAD_REQUEST, &format!("无法读取 {}：{error}", dir.display())))?;
-    let mut entries = Vec::new();
-    for entry in listed.flatten() {
-        if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
-            entries.push(BrowseEntry {
-                name: entry.file_name().to_string_lossy().to_string(),
-                is_dir: true,
-                cid: None,
-                fid: None,
-                pick_code: String::new(),
-                size: 0,
-            });
-        }
-    }
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(Json(BrowseView {
-        total: entries.len() as i64,
-        cid: raw,
-        entries,
-    }))
+    let (running, report, history) = crate::sync::status();
+    let (link_count, soonest) = links().snapshot().await;
+    let paused = crate::pacer::pacer()
+        .paused_for()
+        .await
+        .map(|v| v.as_secs());
+    let s = store::load();
+    let fast = crate::watch::snapshot();
+    Ok(Json(
+        json!({"running":running,"report":report,"history":history,"authorized":!login::authorization_id().is_empty(),"baseUrl":s.base_url,"watchEnabled":s.options.watch_enabled,"watchIntervalSecs":s.options.watch_interval_secs,"fastSync":fast,"linkCache":link_count,"soonestLinkSecs":soonest,"pausedSecs":paused,"lastPlayAt":s.last_play_at,"lastPlayMode":s.last_play_mode,"lastPlayUrl":"","lastPlayError":s.last_play_error,"playCount":s.play_count,"signCount":s.sign_count,"alias":s.alias,"dailyCallBudget":s.options.daily_call_budget,"callsToday":crate::budget::calls_today(),"autoSyncHours":s.options.auto_sync_hours,"lastAutoSyncAt":s.last_auto_sync_at}),
+    ))
 }
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct StatusView {
-    running: bool,
-    report: crate::sync::Report,
-    link_cache: usize,
-    soonest_link_secs: Option<u64>,
-    paused_secs: Option<u64>,
-    cookie_set: bool,
-    base_url: String,
-    watch_enabled: bool,
-    watch_interval_secs: u64,
-    last_poll_at: i64,
-    last_events: u64,
-    gate_ok: Option<bool>,
-    indexed_dirs: usize,
-    last_play_error: String,
-    last_play_at: i64,
-    last_play_mode: String,
-    last_play_url: String,
-    play_count: u64,
-    sign_count: u64,
-    history: Vec<crate::store::HistoryEntry>,
-    transfers: Vec<crate::store::TransferEntry>,
-    alias: String,
-    daily_call_budget: u32,
-    calls_today: u64,
-    auto_sync_hours: u8,
-    last_auto_sync_at: i64,
-}
-
-async fn status<S: HostCtx + Clone + Send + Sync + 'static>(State(_host): State<S>) -> Json<StatusView> {
-    let (running, report) = crate::sync::status();
-    let (cached, soonest) = links().snapshot().await;
-    let stored = crate::store::load();
-    let config = Config::load();
-    let incr = stored.incr.clone();
-    Json(StatusView {
-        running,
-        report,
-        link_cache: cached,
-        soonest_link_secs: soonest,
-        paused_secs: crate::pacer::pacer()
-            .paused_for()
-            .await
-            .map(|d| d.as_secs()),
-        cookie_set: !config.cookie.is_empty(),
-        base_url: config.base_url,
-        watch_enabled: config.options.watch_enabled,
-        watch_interval_secs: config.options.watch_interval_secs,
-        last_poll_at: incr.last_poll_at,
-        last_events: incr.last_events,
-        gate_ok: incr.gate_ok,
-        indexed_dirs: stored.dirs.len(),
-        last_play_error: stored.last_play_error,
-        last_play_at: stored.last_play_at,
-        last_play_mode: stored.last_play_mode,
-        last_play_url: stored.last_play_url,
-        play_count: stored.play_count,
-        sign_count: stored.sign_count,
-        history: stored.history,
-        transfers: stored.transfers,
-        alias: stored.alias,
-        daily_call_budget: config.options.daily_call_budget,
-        calls_today: crate::budget::calls_today(),
-        auto_sync_hours: config.options.auto_sync_hours,
-        last_auto_sync_at: stored.last_auto_sync_at,
-    })
-}
-
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 struct SyncBody {
-    /// `window.location.origin` from the page that started the run.
     base_url: Option<String>,
-}#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Started {
-    started: bool,
 }
-
 async fn sync<S: HostCtx + Clone + Send + Sync + 'static>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
     body: Option<Json<SyncBody>>,
-) -> Result<Json<Started>, Response> {
+) -> Result<Json<Value>, Response> {
     require_settings(&host, &user)?;
-    let base = body.and_then(|Json(body)| body.base_url);
-    match crate::sync::start(host.clone(), base, true) {
-        Ok(()) => Ok(Json(Started { started: true })),
-        Err(reason) => Err(json_error(StatusCode::CONFLICT, &reason)),
-    }
+    let base = normalize_base(body.and_then(|b| b.0.base_url))?;
+    crate::sync::start(host, base, true).map_err(|e| json_error(StatusCode::CONFLICT, &e))?;
+    Ok(Json(json!({"started":true})))
 }
-
-// ---------------------------------------------------------------------------
-// Share transfer
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TransferPreviewBody {
-    text: String,
-}
-
-async fn transfer_preview<S: HostCtx + Clone + Send + Sync + 'static>(
-    State(host): State<S>,
-    AuthUser(user): AuthUser,
-    Json(body): Json<TransferPreviewBody>,
-) -> Result<Json<Vec<ShareView>>, Response> {
-    require_settings(&host, &user)?;
-    let config = Config::load();
-    if config.cookie.is_empty() {
-        return Err(json_error(StatusCode::CONFLICT, "请先登录 115 账号"));
-    }
-    transfer::preview(&config.cookie, client::MODULE_UA, &body.text)
-        .await
-        .map(Json)
-        .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TransferReceiveBody {
-    code: String,
-    #[serde(default)]
-    password: String,
-    #[serde(default)]
-    title: String,
-    #[serde(default)]
-    cid: String,
-    entries: Vec<SelectedEntry>,
-}
-
-fn record_transfer(entry: crate::store::TransferEntry) {
-    let _ = crate::store::patch(|stored| {
-        stored.transfers.push(entry);
-        let overflow = stored.transfers.len().saturating_sub(50);
-        if overflow > 0 {
-            stored.transfers.drain(0..overflow);
-        }
-    });
-}
-
-async fn transfer_receive<S: HostCtx + Clone + Send + Sync + 'static>(
-    State(host): State<S>,
-    AuthUser(user): AuthUser,
-    Json(body): Json<TransferReceiveBody>,
-) -> Result<Json<transfer::ReceiveReport>, Response> {
-    require_settings(&host, &user)?;
-    let config = Config::load();
-    if config.cookie.is_empty() {
-        return Err(json_error(StatusCode::CONFLICT, "请先登录 115 账号"));
-    }
-    let cid = if body.cid.trim().is_empty() {
-        "0"
-    } else {
-        body.cid.trim()
-    };
-    match transfer::receive(
-        &config.cookie,
-        client::MODULE_UA,
-        &body.code,
-        &body.password,
-        cid,
-        &body.entries,
-    )
-    .await
-    {
-        Ok(report) => {
-            record_transfer(crate::store::TransferEntry {
-                at: crate::store::now_ms(),
-                code: body.code,
-                title: body.title,
-                files: report.files as u64,
-                ok: true,
-                message: report.message.clone(),
-            });
-            Ok(Json(report))
-        }
-        Err(error) => {
-            record_transfer(crate::store::TransferEntry {
-                at: crate::store::now_ms(),
-                code: body.code,
-                title: body.title,
-                files: 0,
-                ok: false,
-                message: error.clone(),
-            });
-            Err(json_error(StatusCode::BAD_GATEWAY, &error))
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Rewriting the base address inside generated STRM files
-
-async fn replace_preview<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn replace_preview<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
 ) -> Result<Json<crate::replace::ReplaceReport>, Response> {
     require_settings(&host, &user)?;
     Ok(Json(crate::replace::preview(&Config::load())))
 }
-
-async fn replace_run<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn replace_run<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
 ) -> Result<Json<crate::replace::ReplaceReport>, Response> {
     require_settings(&host, &user)?;
     crate::replace::run(&Config::load())
         .map(Json)
-        .map_err(|error| json_error(StatusCode::CONFLICT, &error))
+        .map_err(|e| json_error(StatusCode::CONFLICT, &e))
 }
-
-// ---------------------------------------------------------------------------
-// Browsing the drive, for the admin page's file panel
-
 #[derive(Deserialize, Default)]
+#[serde(default)]
 struct BrowseQuery {
-    /// A folder id; absent is the drive's root.
-    #[serde(default)]
     cid: String,
+    offset: u32,
 }
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BrowseEntry {
-    name: String,
-    is_dir: bool,
-    cid: Option<String>,
-    fid: Option<String>,
-    pick_code: String,
-    size: i64,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BrowseView {
-    cid: String,
-    total: i64,
-    entries: Vec<BrowseEntry>,
-}
-
-async fn browse<S: HostCtx + Clone + Send + Sync + 'static>(
+async fn browse<S: HostCtx>(
     State(host): State<S>,
     AuthUser(user): AuthUser,
-    Query(query): Query<BrowseQuery>,
-) -> Result<Json<BrowseView>, Response> {
+    Query(q): Query<BrowseQuery>,
+) -> Result<Json<Value>, Response> {
     require_settings(&host, &user)?;
-    let config = Config::load();
-    if config.cookie.trim().is_empty() {
-        return Err(json_error(StatusCode::SERVICE_UNAVAILABLE, "115 的 Cookie 还没配置"));
+    let c = Config::load();
+    if c.auth_id.is_empty() {
+        return Err(not_authorized());
     }
-    let cid = match query.cid.trim() {
-        "" => "0".to_string(),
-        value if value.chars().all(|c| c.is_ascii_digit()) => value.to_string(),
+    let cid = match q.cid.trim() {
+        "" => "0",
+        s if s.len() <= 24 && s.bytes().all(|b| b.is_ascii_digit()) => s,
         _ => return Err(json_error(StatusCode::BAD_REQUEST, "目录号无效")),
     };
-    match client::list(
-        &config.cookie,
+    let p = client::list(
+        &c.auth_id,
         client::MODULE_UA,
-        &cid,
-        0,
-        // One page is what a browser pane shows; the mirror is what walks it all.
-        config.options.page_size.min(1000),
+        cid,
+        q.offset,
+        c.options.page_size.min(1150),
     )
     .await
-    {
-        Ok(page) => Ok(Json(BrowseView {
-            cid,
-            total: page.total,
-            entries: page
-                .entries
-                .into_iter()
-                .map(|entry| BrowseEntry {
-                    is_dir: entry.is_dir(),
-                    cid: entry.folder_id(),
-                    fid: entry.file_id(),
-                    pick_code: entry.pick_code,
-                    size: entry.size,
-                    name: entry.name,
-                })
-                .collect(),
-        })),
-        Err(error) if error.cookie_expired() => {
-            Err(json_error(StatusCode::BAD_GATEWAY, "115 登录已失效，请更新 Cookie"))
-        }
-        Err(error) if error.rate_limited() => Err(json_error(
-            StatusCode::TOO_MANY_REQUESTS,
-            "115 正在限流，稍后再试（模块已自动暂停所有调用）",
-        )),
-        Err(error) => Err(json_error(StatusCode::BAD_GATEWAY, &error.to_string())),
-    }
+    .map_err(drive_error)?;
+    let rows=p.entries.into_iter().map(|e|json!({"isDir":e.is_dir(),"cid":e.folder_id(),"fid":e.file_id(),"pickCode":e.pick_code,"size":e.size,"name":e.name})).collect::<Vec<_>>();
+    Ok(Json(json!({"cid":cid,"total":p.total,"entries":rows})))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn a_body_that_only_touches_the_cookie_leaves_the_rest_alone() {
-        let body: SettingsBody = serde_json::from_str(r#"{"cookie":"UID=1; CID=2"}"#).unwrap();
-        assert_eq!(body.cookie.as_deref(), Some("UID=1; CID=2"));
-        assert!(body.libraries.is_none() && body.options.is_none());
+    fn settings_refuse_legacy_credentials() {
+        assert!(serde_json::from_str::<SettingsBody>(r#"{"cookie":"not-a-secret"}"#).is_err());
+        assert!(serde_json::from_str::<SettingsBody>(r#"{"accessToken":"not-a-secret"}"#).is_err());
     }
-
     #[test]
-    fn a_blank_local_side_of_a_mapping_is_refused_by_the_handler_contract() {
-        let library = Library {
-            remote: "/电影".into(),
-            local: String::new(),
-        };
-        // Mirrors the check in `put_settings`: one side named is a typo, not a
-        // mapping.
-        assert!(library.remote.trim().is_empty() != library.local.trim().is_empty());
+    fn portable_mapping_keeps_quick_check_but_never_transfers_authority() {
+        let l: Library = serde_json::from_value(
+            json!({"remote":"/日漫","local":"/selected/x","localDisplay":"E:\\test"}),
+        )
+        .unwrap();
+        let p = portable(l);
+        assert!(p.local.is_empty() && p.local_display.is_empty() && p.fast_sync);
     }
 }

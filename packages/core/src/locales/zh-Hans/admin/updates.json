@@ -67,5 +67,7 @@
   "admin.updatesSubtitle": "全新的版本，熟悉的媒体库。按你的节奏更新。",
   "admin.updatesSynologyHint": "KROMA 套件可自行更新。请先从套件中心或 kroma.tv 安装一次最新套件以启用此功能。",
   "admin.updatesTitle": "服务器更新",
+  "admin.updatesWindowsServer": "KROMA Windows 版",
+  "admin.updatesWindowsPackageHint": "请使用本项目提供的 Windows 更新包手动更新。",
   "admin.updatesWaitingIdle": "等待播放结束"
 }

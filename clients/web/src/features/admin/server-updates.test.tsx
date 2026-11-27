@@ -44,7 +44,7 @@ vi.mock('#web/features/admin/server-restart-dialog.component', () => ({
   ),
 }));
 vi.mock('#web/shared/ui/route-link.component', () => ({
-  RouteLink: () => <a href="/admin/backup">Backup</a>,
+  RouteLink: ({ to }: { to: string }) => <a href={to}>Backup</a>,
 }));
 const inputHost = createInputTestHost();
 afterEach(cleanup);
@@ -106,6 +106,20 @@ it('requires a restart confirmation before requesting the exact reviewed build',
       build: 3600000,
     }),
   );
+});
+
+it('shows only the installed Windows build and backup, even with a cached upstream release', () => {
+  patchData({ updateSource: 'windows-package', channel: undefined, version: '0.1.42', build: 0,
+    latest: { version: '0.1.38', build: 3480473, url: 'https://github.com/kromatv/kroma/releases/tag/v0.1.38' } });
+  show();
+  expect(screen.getByText('KROMA for Windows')).toBeTruthy();
+  expect(screen.getByText('v0.1.42')).toBeTruthy();
+  expect(screen.getByRole('link', { name: /backup/i }).getAttribute('href')).toBe('/admin/backup');
+  for (const text of ['v0.1.38', 'Stable', 'Canary']) expect(screen.queryByText(text)).toBeNull();
+  expect(screen.queryByRole('button', { name: /check for updates|update server|release notes/i })).toBeNull();
+  expect(screen.queryByRole('switch')).toBeNull();
+  expect(mocks.check).not.toHaveBeenCalled();
+  expect(mocks.install).not.toHaveBeenCalled();
 });
 
 it('disables installation while the host updater is offline', () => {

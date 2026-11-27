@@ -314,6 +314,8 @@ fn the_host_network_a_listener_a_root_a_program_a_media_tool_and_a_variable_each
         json!({ "net": { "listen": [{ "purpose": "a", "port": 1 }] } }),
         json!({ "fs": { "read": ["media"] } }),
         json!({ "fs": { "write": ["media"] } }),
+        json!({ "fs": { "read": ["selected"] } }),
+        json!({ "fs": { "write": ["selected"] } }),
         json!({ "run": ["ffmpeg"] }),
         json!({ "media": ["decode"] }),
         json!({ "env": ["X"] }),

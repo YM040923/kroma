@@ -113,19 +113,22 @@ function Group({ label, children }: Readonly<SideNavGroupProps>) {
 
 interface SideNavItemProps {
   to: string;
+  params?: { id: string };
+  label?: string;
   exact?: boolean;
   icon: IconName;
   disabled?: boolean;
   children: ReactNode;
 }
 
-function Item({ to, exact = false, icon, disabled = false, children }: Readonly<SideNavItemProps>) {
+function Item({ to, params, label, exact = false, icon, disabled = false, children }: Readonly<SideNavItemProps>) {
   const matchRoute = useMatchRoute();
   const compact = useContext(CompactContext);
-  const current = matchRoute({ to, fuzzy: !exact }) !== false;
+  const current = matchRoute({ to, params, fuzzy: !exact }) !== false;
   return (
     <Focusable
       sv={sideNavRow}
+      label={label}
       vars={{ current }}
       current={current ? 'page' : undefined}
       disabled={disabled}
@@ -133,7 +136,7 @@ function Item({ to, exact = false, icon, disabled = false, children }: Readonly<
       asChild
     >
       {({ slots }) => (
-        <RouteLink to={to}>
+        <RouteLink to={to} params={params}>
           <RowContext.Provider value={slots}>
             <Icon
               name={icon}

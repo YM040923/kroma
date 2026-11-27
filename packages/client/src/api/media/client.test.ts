@@ -72,6 +72,7 @@ describe('the media endpoints', () => {
       method: 'GET',
       path: '/home?view=card&layouts=hero%2Cranked',
     },
+    { name: 'home discovery', call: (c) => c.media.homeDiscovery(), method: 'GET', path: '/home/discovery' },
     { name: 'featured', call: (c) => c.media.featured(), method: 'GET', path: '/home/featured' },
     {
       name: 'aiSuggest',

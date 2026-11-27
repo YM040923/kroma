@@ -56,7 +56,7 @@ function Header({ children, style }: Readonly<DrawerBandProps>) {
 }
 
 /** The scrolling middle, and the only part of the sheet that scrolls. */
-function Panel({ children, style }: Readonly<DrawerBandProps>) {
+function Panel({ children, style, showsVerticalScrollIndicator }: Readonly<DrawerBandProps & { showsVerticalScrollIndicator?: boolean }>) {
   const scope = useStyleScope();
 
   const s = useStyles(sDefinition);
@@ -64,6 +64,7 @@ function Panel({ children, style }: Readonly<DrawerBandProps>) {
   const { pad } = useShell();
   return (
     <ScrollView
+      showsVerticalScrollIndicator={showsVerticalScrollIndicator}
       style={[s.panel, style]}
       // Grows to the sheet's height so a short body can still pin something to
       // its bottom edge with `mt="auto"`, as the navigation sheets do.

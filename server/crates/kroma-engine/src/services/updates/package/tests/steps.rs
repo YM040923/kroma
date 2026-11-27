@@ -75,9 +75,11 @@ fn a_package_the_host_does_not_serve_fails_the_download() {
 fn only_the_official_releases_host_a_package_from_the_official_feed() {
     let release = format!("{OFFICIAL_DOWNLOADS}v0.1.39/kroma-0.1.39.3592000-x86_64.spk");
 
-    let elsewhere = official(None, "https://example.com/kroma.spk");
-    let published = official(None, &release);
-    let own_feed = official(Some("http://127.0.0.1:9"), "http://127.0.0.1:9/kroma.spk");
+    use crate::config::ServerUpdates;
+    let elsewhere = official(&ServerUpdates::ProjectFeed, "https://example.com/kroma.spk");
+    let published = official(&ServerUpdates::ProjectFeed, &release);
+    let own_feed = official(&ServerUpdates::CustomFeed("http://127.0.0.1:9".into()), "http://127.0.0.1:9/kroma.spk");
+    assert!(official(&ServerUpdates::WindowsPackage, &release).is_err());
 
     assert!(elsewhere.unwrap_err().to_string().contains("official"));
     assert!(published.is_ok());

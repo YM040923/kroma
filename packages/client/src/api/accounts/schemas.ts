@@ -278,6 +278,20 @@ export const InviteCheck = z.object({
 });
 export type InviteCheck = z.infer<typeof InviteCheck>;
 
+const LayoutComponentIds = z
+  .array(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/))
+  .max(1024)
+  .refine((ids) => new Set(ids).size === ids.length, 'Duplicate layout component id');
+
+/** The signed-in account's home overrides. Two empty lists restore the original
+ * layout; a hidden component can keep its position in `order`. */
+export const HomeLayout = z.strictObject({ order: LayoutComponentIds, hidden: LayoutComponentIds });
+export type HomeLayout = z.infer<typeof HomeLayout>;
+
+/** Display-only overrides for the signed-in account, independent of the home layout. */
+export const SidebarLayout = z.strictObject({ hidden: LayoutComponentIds });
+export type SidebarLayout = z.infer<typeof SidebarLayout>;
+
 /** A patch of the signed-in account's own profile. Omitted keys are left
  * unchanged; a `null` clears the field (only the language prefs are clearable
  * server-side, username and email must be non-empty). */

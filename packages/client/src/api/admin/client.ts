@@ -11,6 +11,7 @@ import { SettingsView } from './settings';
 import { Activity, HistoryStats, MostWatched, PlaybackSession, PlaysPage, TopUser } from './stats';
 import { UpdateStatus, type UpdateTarget } from './updates';
 import { AdminOverview, type AdminUserPatch, AdminUsers } from './users';
+import { ModuleFolderPickResult, ModuleRestartResult } from '../modules/store';
 
 const Sessions = z.object({ sessions: z.array(PlaybackSession) });
 const Freed = z.object({ freedBytes: z.number() });
@@ -45,6 +46,16 @@ export default function adminApi(ctx: RequestContext) {
      * it again. Refused where `UpdateStatus.restartable` is false, and while an
      * update is being applied. */
     restartServer: () => ctx.post('/admin/server/restart'),
+
+    /** Pick a local folder for a module (localhost Windows only). */
+    pickModuleFolder: (id: string) =>
+      ctx.post('/admin/modules/:id/pick-folder', ModuleFolderPickResult, {
+        params: { id },
+        canonical: true,
+      }),
+    /** Restart one module after its selected-folder grants change. */
+    restartModule: (id: string) =>
+      ctx.post('/admin/modules/:id/restart', ModuleRestartResult, { params: { id } }),
 
     /** Live scan / enrichment status snapshot. */
     status: () => ctx.get('/status', Activity),

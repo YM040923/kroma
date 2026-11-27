@@ -33,7 +33,7 @@ fn test_config(data_dir: PathBuf) -> Config {
         port: 0,
         data_dir,
         tmdb_language: "en-US".into(),
-        releases_url: Some("http://127.0.0.1:1".into()),
+        server_updates: crate::config::ServerUpdates::CustomFeed("http://127.0.0.1:1".into()),
         ..Default::default()
     }
 }
@@ -474,13 +474,13 @@ fn write_json_reply(stream: &mut std::net::TcpStream, status: u16, reply: &serde
 pub(crate) fn test_state_with_releases(releases_url: &str) -> SharedState {
     let url = releases_url.to_string();
     build_state_with(Point::absent("embedder"), None, Vec::new(), move |config| {
-        config.releases_url = Some(url);
+        config.server_updates = crate::config::ServerUpdates::CustomFeed(url);
     })
 }
 
 pub(crate) fn test_state_with_updater(releases_url: &str) -> SharedState {
     build_state_with(Point::absent("embedder"), None, Vec::new(), |config| {
-        config.releases_url = Some(releases_url.to_owned());
+        config.server_updates = crate::config::ServerUpdates::CustomFeed(releases_url.to_owned());
         config.update_dir = Some(config.data_dir.join("update-bridge"));
         config.install = crate::config::Install::Docker;
     })
@@ -490,7 +490,7 @@ pub(crate) fn test_state_with_updater(releases_url: &str) -> SharedState {
 /// its own payload with the builds the feed at `releases_url` publishes.
 pub(crate) fn test_state_as_package(releases_url: &str) -> SharedState {
     build_state_with(Point::absent("embedder"), None, Vec::new(), |config| {
-        config.releases_url = Some(releases_url.to_owned());
+        config.server_updates = crate::config::ServerUpdates::CustomFeed(releases_url.to_owned());
         let releases = config.data_dir.join("releases");
         std::fs::create_dir_all(&releases).unwrap();
         config.self_update_dir = Some(releases);

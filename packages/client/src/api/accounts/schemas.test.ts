@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { hasPermission, InviteCheck, PairingStatus, ResetCreated, User } from './schemas';
+import {
+  hasPermission,
+  HomeLayout,
+  InviteCheck,
+  PairingStatus,
+  ResetCreated,
+  SidebarLayout,
+  User,
+} from './schemas';
 
 const user = {
   id: 'u1',
@@ -36,6 +44,42 @@ describe('the account schema', () => {
   it('refuses a body that is not an account at all', () => {
     expect(() => User.parse({ ...user, id: 42 })).toThrow();
   });
+});
+
+describe('the account home layout', () => {
+  it('keeps the order and accepts a hidden component with or without an explicit position', () => {
+    const layout = { order: ['genre:28', 'hero'], hidden: ['hero', 'for-you'] };
+    expect(HomeLayout.parse(layout)).toEqual(layout);
+    expect(HomeLayout.parse({ order: [], hidden: [] })).toEqual({ order: [], hidden: [] });
+  });
+
+  it.each(['order', 'hidden'])('bounds and validates every id in %s', (field) => {
+    const ids = Array.from({ length: 1024 }, (_, n) => `widget.${n}`);
+    const parses = (list: string[]) =>
+      HomeLayout.safeParse({ order: [], hidden: [], [field]: list }).success;
+    expect(parses(ids)).toBe(true);
+    expect(parses(['a'.repeat(64)])).toBe(true);
+    for (const bad of [[...ids, 'other'], ['a'.repeat(65)], [''], ['#row'], ['a/b'], ['a', 'a']]) {
+      expect(parses(bad)).toBe(false);
+    }
+  });
+
+  it('requires both lists and does not accept an account selector', () => {
+    expect(HomeLayout.safeParse({ order: [] }).success).toBe(false);
+    expect(HomeLayout.safeParse({ order: [], hidden: [], userId: 'other' }).success).toBe(false);
+  });
+});
+
+it('accepts bounded sidebar ids, not home fields or an account selector', () => {
+  const hidden = Array.from({ length: 1024 }, (_, n) => `library:${n}`);
+  expect(SidebarLayout.parse({ hidden })).toEqual({ hidden });
+  expect(SidebarLayout.parse({ hidden: [] })).toEqual({ hidden: [] });
+  for (const invalid of [
+    {}, { hidden, order: [] }, { hidden, userId: 'other' }, { hidden: [...hidden, 'extra'] },
+    { hidden: ['x', 'x'] }, { hidden: ['library/1'] }, { hidden: ['a'.repeat(65)] },
+  ]) {
+    expect(SidebarLayout.safeParse(invalid).success).toBe(false);
+  }
 });
 
 describe('the pairing status', () => {

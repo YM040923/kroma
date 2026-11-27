@@ -127,7 +127,7 @@ function AdminNav({ compact = false }: Readonly<{ compact?: boolean }>) {
           {section.items.map((item) => (
             <SideNav.Item key={item.to} to={item.to} exact={item.exact} icon={item.icon}>
               <SideNav.Label>{t(item.labelKey)}</SideNav.Label>
-              {item.to === '/admin/updates' && updates?.available ? (
+              {item.to === '/admin/updates' && updates?.available && updates.updateSource !== 'windows-package' ? (
                 <SideNav.Trailing>
                   <Badge tone="4K">{t('admin.updatesNew')}</Badge>
                 </SideNav.Trailing>
@@ -217,7 +217,7 @@ export function AdminSidebar() {
           {compact ? <Logo markOnly size={26} /> : <AdminBrand />}
         </SideNav.Header>
         {compact ? <AdminHomeMark /> : <AdminServerLink />}
-        <ScrollView style={SIDE_NAV_FRAME}>
+        <ScrollView style={SIDE_NAV_FRAME} showsVerticalScrollIndicator={false}>
           <AdminNav compact={compact} />
         </ScrollView>
       </SideNavCompactProvider>
@@ -271,7 +271,7 @@ export function AdminMobileTopbar() {
             <Drawer.Close glyph={20} />
           </Row>
         </Drawer.Header>
-        <Drawer.Panel>
+        <Drawer.Panel showsVerticalScrollIndicator={false}>
           <AdminServerLink />
           <AdminNav />
         </Drawer.Panel>

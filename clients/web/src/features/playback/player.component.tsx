@@ -68,7 +68,8 @@ export function Player({
   const flags = useMemo(() => ({ ...WEB_FLAGS, cast: cast.available }), [cast.available]);
 
   const position = useMemo(() => ({ getPosition: pb.getPosition }), [pb.getPosition]);
-  const resumeAt = useResumeProgress(videoRef, item, position);
+  useResumeProgress(videoRef, item, position);
+  const { resumeAt } = pb;
   const [terminated, setTerminated] = useState<string | null>(null);
 
   usePlaybackSession({

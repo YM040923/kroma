@@ -22,6 +22,7 @@ pub enum Refusal {
 #[derive(Default)]
 struct Restart {
     requested: AtomicBool,
+    stopping: AtomicBool,
     signal: Notify,
 }
 
@@ -31,8 +32,17 @@ impl Restart {
         self.signal.notify_one();
     }
 
+    fn request_stop(&self) {
+        self.stopping.store(true, Ordering::SeqCst);
+        self.request();
+    }
+
     fn requested(&self) -> bool {
         self.requested.load(Ordering::SeqCst)
+    }
+
+    fn stopping(&self) -> bool {
+        self.stopping.load(Ordering::SeqCst)
     }
 
     async fn wait(&self) {
@@ -51,9 +61,19 @@ pub(super) fn request() {
     process().request();
 }
 
-/// Whether this server was asked to stop so it starts again.
+/// Asks the server to stop as gracefully as a Ctrl+C: the same signal a
+/// requested restart uses, minus the intent to come back. The tray's "Stop"
+/// calls this so modules still run their own shutdown hooks.
+pub fn request_stop() {
+    tracing::info!("asked to stop");
+    process().request_stop();
+}
+
+/// Whether this server was asked to stop so it starts again. A plain stop (the
+/// tray's "Stop", a Ctrl+C) also wakes [`wait_for_restart`] but leaves this
+/// false, so the caller exits 0 rather than asking a service script to respawn.
 pub fn restart_requested() -> bool {
-    process().requested()
+    process().requested() && !process().stopping()
 }
 
 /// Resolves once this server is asked to stop so it starts again.

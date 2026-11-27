@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   commands: [] as readonly CommandDef[],
   moduleNav: [] as ModuleNav[],
   installed: [] as object[],
-  updates: undefined as { restartable: boolean } | undefined,
+  updates: undefined as { restartable: boolean; updateSource?: 'windows-package' } | undefined,
   query: '',
   user: { permissions: [] as string[] } as { permissions: string[] } | null,
   client: {} as object,
@@ -76,7 +76,7 @@ const action = (commands: readonly CommandDef[], label: string) =>
 beforeEach(() => {
   mocks.moduleNav = [];
   mocks.installed = [];
-  mocks.updates = undefined;
+  mocks.updates = { restartable: false };
   mocks.query = '';
   mocks.client = {};
   vi.clearAllMocks();
@@ -375,6 +375,14 @@ describe('the console’s actions', () => {
     expect(action(offeredTo('library.manage'), 'commands.scanLibraries')?.done).toBe(
       'commands.scanStarted',
     );
+  });
+
+  it('offers no online check for a Windows package or while the source is unknown', () => {
+    mocks.updates = undefined;
+    expect(action(offeredTo('settings.manage'), 'admin.updatesCheck')).toBeUndefined();
+    mocks.updates = { restartable: false, updateSource: 'windows-package' };
+    expect(action(offeredTo('settings.manage'), 'admin.updatesCheck')).toBeUndefined();
+    expect(pageAt(mocks.commands, '/admin/updates')).toBeTruthy();
   });
 
   it('reports an update it found', async () => {

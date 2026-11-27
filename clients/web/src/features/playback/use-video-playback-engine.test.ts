@@ -32,10 +32,7 @@ vi.mock('#web/shared/lib/api', () => ({ kromaClient: kromaClientStub }));
 vi.mock('#web/shared/lib/web-runtime', async (importOriginal) => {
   const original = await importOriginal<typeof import('#web/shared/lib/web-runtime')>();
   const { createWebTestRuntime } = await import('#web/shared/lib/web-runtime.fixture');
-  const { QueryClient } =
-    await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
-  const cache = new QueryClient();
-  const runtime = createWebTestRuntime(kromaClientStub(), () => cache);
+  const runtime = createWebTestRuntime(kromaClientStub(), () => H.cache);
   return { ...original, useWebRuntime: () => runtime, useKromaClient: () => runtime.client };
 });
 
@@ -170,6 +167,18 @@ describe('useVideoPlayback engine override', () => {
 });
 
 describe('useVideoPlayback direct-play safety net', () => {
+  it('reports a STRM video error without attaching an HLS master', async () => {
+    const { result } = render(movie({ container: 'strm' }));
+    await settle();
+    const video = document.createElement('video');
+    result.current.videoRef.current = video;
+    act(() => result.current.setAudio(1));
+    act(() => { video.dispatchEvent(new Event('error')); });
+    expect(result.current.failure).toBe('broken');
+    expect(result.current.mode).toBe('direct');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('re-anchors on the HLS master at the position a media error killed', async () => {
     const { result } = render();
     await settle();

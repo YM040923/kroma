@@ -14,7 +14,6 @@
 #![allow(clippy::result_large_err)]
 
 pub mod client;
-pub mod crypto;
 pub mod budget;
 pub mod events;
 pub mod login;
@@ -28,7 +27,6 @@ pub mod routes;
 pub mod settings;
 pub mod store;
 pub mod sync;
-pub mod transfer;
 pub mod upload;
 pub mod watch;
 

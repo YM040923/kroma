@@ -18,6 +18,12 @@ describe('UpdateStatus', () => {
     ).toBe('0.1.41');
   });
 
+  it('preserves the Windows package policy from the server response', () => {
+    const manual = { version: '0.1.42', build: 0, auto: false, latest: null, available: false, updateSource: 'windows-package' };
+    expect(UpdateStatus.parse(manual).updateSource).toBe('windows-package');
+    expect(UpdateStatus.safeParse({ ...manual, channel: 'Stable' }).success).toBe(false);
+  });
+
   it('refuses a notes link that is not https', () => {
     expect(UpdateStatus.safeParse(status('javascript:alert(1)')).success).toBe(false);
   });

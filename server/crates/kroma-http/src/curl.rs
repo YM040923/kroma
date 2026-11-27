@@ -9,7 +9,7 @@ use crate::response::Response;
 
 /// Whether the `curl` binary every [`crate::Fetch`] runs is installed and answers.
 pub fn curl_available() -> bool {
-    Command::new("curl")
+    kroma_primitives::process::new("curl")
         .arg("--version")
         .output()
         .is_ok_and(|output| output.status.success())
@@ -20,14 +20,18 @@ pub fn curl_available() -> bool {
 // password in a form field. `-q` must come first: it stops curl reading a
 // `~/.curlrc`, which any process running as this user could plant.
 fn curl_command() -> Command {
-    let mut cmd = Command::new("curl");
+    let mut cmd = kroma_primitives::process::new("curl");
     cmd.arg("-q").arg("--config").arg("-");
     cmd
 }
 
 // Writing the config on this thread is safe because curl reads it whole before
 // making the request, so it never deadlocks on a full stdout pipe.
-pub(crate) fn run(mut config: String) -> Result<Response> {
+pub(crate) fn run(config: String) -> Result<Response> {
+    run_to(config, std::process::Stdio::piped())
+}
+
+pub(crate) fn run_to(mut config: String, output: std::process::Stdio) -> Result<Response> {
     use std::io::Write;
 
     // A guard, not a path: every `?` below returns before the read, and a dump
@@ -41,7 +45,7 @@ pub(crate) fn run(mut config: String) -> Result<Response> {
 
     let mut child = curl_command()
         .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
+        .stdout(output)
         .stderr(std::process::Stdio::piped())
         .spawn()
         .context("spawn curl")?;

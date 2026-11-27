@@ -1,6 +1,6 @@
 [package]
 name = "kroma-server"
-version = "0.1.39"
+version = "0.1.43"
 edition.workspace = true
 rust-version.workspace = true
 description = "KROMA a self-hosted, direct-play media streaming server"
@@ -10,6 +10,12 @@ license.workspace = true
 # webauthn-rs.
 [package.metadata.cargo-machete]
 ignored = ["openssl"]
+
+[build-dependencies]
+# Compiles resources/kroma.rc (icon + version strings) into the Windows binary.
+# It finds rc.exe, passes the right flags and wires the .res into the link for
+# every target layout — the parts a hand-rolled build script gets wrong.
+embed-resource = "3"
 
 [[bin]]
 name = "kroma-server"
@@ -187,6 +193,9 @@ kroma-module-host = { workspace = true }
 # `crate::model` wire types come through `kroma-engine`.
 kroma-config = { workspace = true }
 kroma-db = { workspace = true }
+# `process::new`: spawns console tools (ffmpeg/ffprobe) with no window, since
+# this Windows build is a GUI-subsystem app with no console of its own.
+kroma-primitives = { workspace = true }
 # `/api/acquisition` plans against the shared ledger types (`MediaUnitRef`,
 # `AcquisitionPolicy`, `Candidate`, …) and the provider-neutral plan; the engine
 # re-exports both crates privately, so the binary names them here. Both are
@@ -265,7 +274,7 @@ jpeg-encoder = { workspace = true }
 
 # The `v5` uuid feature is the deterministic per-account WebAuthn user handle;
 # the crate itself is always present.
-uuid = { workspace = true, features = ["v5"] }
+uuid = { workspace = true, features = ["v4", "v5"] }
 
 # WebAuthn / passkeys relying-party (api/passkeys), Unix only. `webauthn-rs`
 # pulls vendored OpenSSL, which needs perl + NASM to compile — neither is on a
@@ -276,6 +285,21 @@ uuid = { workspace = true, features = ["v5"] }
 webauthn-rs = { workspace = true, features = ["conditional-ui"] }
 webauthn-rs-proto = { workspace = true }
 openssl = { version = "0.10", features = ["vendored"] }
+
+# The tray a portable Windows build lives in: double-click the exe and it runs
+# with no console window, an icon in the notification area, and a menu to open
+# the browser or stop. Shell_NotifyIcon and the popup menu, nothing heavier.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Graphics_Gdi",
+] }
+windows = { version = "0.62", features = ["Win32_System_Com", "Win32_UI_Shell"] }
 
 # Integration tests for the HTTP API layer (src/api/*): drive the real axum
 # router in-process with `tower::ServiceExt::oneshot`.

@@ -72,6 +72,13 @@ pub async fn download_item(
         (Some(_), None) => false,
     };
     let mut cmd = tokio::process::Command::new("ffmpeg");
+    // A GUI-subsystem server owns no console; without this the transcode child
+    // would pop a fresh black window for every request.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(kroma_primitives::process::no_window_flag());
+    }
     cmd.args(["-v", "error", "-nostdin"])
         .args(input::file(&abs))
         .args(["-map", "0:v:0"]);

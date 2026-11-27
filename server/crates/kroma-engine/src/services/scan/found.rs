@@ -48,14 +48,7 @@ impl<'a> LibraryWalk<'a> {
                 _ => LibraryKind::Movies,
             }
         };
-        let kind = match self.def.kind.as_str() {
-            "movies" => LibraryKind::Movies,
-            "shows" => LibraryKind::Shows,
-            "mixed" => LibraryKind::Mixed,
-            "photos" | "photo" => LibraryKind::Photos,
-            "other" => LibraryKind::Other,
-            _ => detected,
-        };
+        let kind = self.def.catalog_kind(detected);
         Library {
             id: self.def.id.clone(),
             name: self.def.name.clone(),

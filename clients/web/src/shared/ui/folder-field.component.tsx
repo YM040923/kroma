@@ -132,7 +132,12 @@ export function FolderListEditor({ folders, onChange }: Readonly<FolderListProps
         <AddFolderRow label={t('admin.addFolder')} onPress={() => setAt(folders.length)} />
       </ListRow.Group>
       {at !== null ? (
-        <FolderPicker value={folders[at] ?? ''} onChange={commit} onCancel={() => setAt(null)} />
+        <FolderPicker
+          key={at}
+          value={folders[at] ?? ''}
+          onChange={commit}
+          onCancel={() => setAt(null)}
+        />
       ) : null}
     </Box>
   );

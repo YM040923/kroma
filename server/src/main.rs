@@ -8,6 +8,12 @@
 //! background work, serve. Everything it builds lives under `boot/`, and none of
 //! it names a module.
 
+// A release Windows build is a GUI app: no console window flashes up when the
+// owner double-clicks the exe, and the tray icon is the way back to it. Debug
+// builds keep their console so `cargo run` still prints. Logs always go to
+// `<data>/logs` regardless, so nothing is lost without a console.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 // Request guards use the axum `Response` as their Err type so handlers can `?`.
 #![allow(clippy::result_large_err)]
 // The hot-patch loop stands in for boot::serve, so the HTTPS and TLS path that
@@ -56,6 +62,20 @@ async fn main() -> anyhow::Result<()> {
     kroma_http::egress::require_gate();
     #[cfg(target_os = "linux")]
     boot::allocator::spawn_collector();
+    // A portable build keeps ffmpeg/ffprobe beside the exe. Launched by a double
+    // click it inherits whatever PATH the shell had, so put its own `bin` first
+    // before anything looks for those tools.
+    if let Some(home) = Config::portable_home() {
+        let bin = home.join("bin");
+        if bin.is_dir() {
+            let mut path = bin.into_os_string();
+            if let Some(existing) = std::env::var_os("PATH") {
+                path.push(if cfg!(windows) { ";" } else { ":" });
+                path.push(existing);
+            }
+            std::env::set_var("PATH", path);
+        }
+    }
     let config = Config::from_env();
     // Held for the whole process so buffered log lines flush to disk.
     let log_guard = boot::tracing::init_tracing(&config.logs_dir());
@@ -74,6 +94,11 @@ async fn main() -> anyhow::Result<()> {
     services::updates::recover(&state)?;
     plan.applied(&state);
 
+    // A portable build lives in the tray: double-clicking the exe starts the
+    // server with no console window, and the icon is the way back to it.
+    #[cfg(windows)]
+    let tray = start_tray(addr.port());
+
     boot::background::spawn(&state).await;
     plan.deferred(&state);
 
@@ -81,9 +106,28 @@ async fn main() -> anyhow::Result<()> {
     let served = boot::hot::run(state, supervisor, addr).await;
     #[cfg(not(feature = "hotpatch"))]
     let served = boot::serve::run(state, supervisor, addr).await;
+    #[cfg(windows)]
+    drop(tray);
     if served.is_ok() && services::updates::restart_requested() {
         drop(log_guard);
         std::process::exit(services::updates::RESTART_EXIT_CODE);
     }
     served
+}
+
+/// Starts the notification-area icon and drives what it asks for on the
+/// server's own runtime. `None` in a headless context (a service, a session
+/// without a shell), where the server simply runs as it always did.
+#[cfg(windows)]
+fn start_tray(port: u16) -> Option<boot::tray_windows::TrayHandle> {
+    boot::tray_windows::start(
+        move || {
+            tracing::info!(port, "tray: opening the browser");
+            boot::tray_windows::open_in_browser(&format!("http://localhost:{port}/"));
+        },
+        || {
+            tracing::info!("tray: stop requested");
+            services::updates::request_stop();
+        },
+    )
 }

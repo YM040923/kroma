@@ -32,10 +32,7 @@ vi.mock('#web/shared/lib/api', () => ({ kromaClient: kromaClientStub }));
 vi.mock('#web/shared/lib/web-runtime', async (importOriginal) => {
   const original = await importOriginal<typeof import('#web/shared/lib/web-runtime')>();
   const { createWebTestRuntime } = await import('#web/shared/lib/web-runtime.fixture');
-  const { QueryClient } =
-    await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');
-  const cache = new QueryClient();
-  const runtime = createWebTestRuntime(kromaClientStub(), () => cache);
+  const runtime = createWebTestRuntime(kromaClientStub(), () => H.cache);
   return { ...original, useWebRuntime: () => runtime, useKromaClient: () => runtime.client };
 });
 
@@ -120,18 +117,14 @@ describe('useVideoPlayback resume', () => {
     expect(result.current.anchor).toBe(40);
   });
 
-  it('starts over below the floor and past the 95% credits mark', async () => {
+  it.each([10_000, 99_000])('starts over outside the resume window at %i ms', async (positionMs) => {
     H.user = { id: 'u1' };
-    H.itemProgress.mockResolvedValue({ positionMs: 10_000, durationMs: 100_000 });
-    const early = render();
+    H.itemProgress.mockResolvedValue({ positionMs, durationMs: 100_000 });
+    const { result } = render();
     await settle();
-    expect(early.result.current.anchor).toBe(0);
-    early.unmount();
-
-    H.itemProgress.mockResolvedValue({ positionMs: 99_000, durationMs: 100_000 });
-    const late = render();
-    await settle();
-    expect(late.result.current.anchor).toBe(0);
+    expect(H.itemProgress).toHaveBeenCalledWith('m1');
+    expect(result.current.anchor).toBe(0);
+    expect(result.current.resumeAt).toBeNull();
   });
 
   it('resumes a progress row whose duration nobody knows', async () => {

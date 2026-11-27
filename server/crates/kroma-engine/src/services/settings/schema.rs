@@ -143,10 +143,11 @@ pub fn groups(
     // Select `options` are persisted *values*, so they are deliberately not
     // translated: only labels, hints, group titles and descriptions are.
     let t = |key: &str| i18n::t(locale, key, &[]);
-    let group = |title: &str, desc: Option<&str>, rows: Vec<SettingRow>| SettingGroup {
-        title: t(title),
-        desc: desc.map(t),
-        rows,
+    let group = |title: &str, desc: Option<&str>, mut rows: Vec<SettingRow>| {
+        if config.server_updates.feed().is_none() {
+            rows.retain(|r| !crate::services::updates::feed_setting(&r.key));
+        }
+        SettingGroup { title: t(title), desc: desc.map(t), rows }
     };
     // Only settings the server actually enforces are surfaced, never a stored-but-
     // unused control shown with a "preference saved only" badge.

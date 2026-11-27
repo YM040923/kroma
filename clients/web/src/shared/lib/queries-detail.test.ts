@@ -117,23 +117,20 @@ describe('the optional lookups', () => {
   });
 });
 
-describe('the watch payload', () => {
-  it('carries the item mapped, plus the episode autoplay will roll to', async () => {
+describe('the watch queries', () => {
+  it('reads the raw detail without waiting for upcoming episodes', async () => {
     c.media.item.mockResolvedValue({ id: 'e1' });
     c.playback.following.mockResolvedValue([{ id: 'e2' }, { id: 'e3' }]);
 
-    const out = await run(catalogQueries.watch(ItemId.parse('e1')));
-    expect(out.item).toEqual({ id: 'e1', mapped: 'movie' });
-    expect(out.next).toEqual({ id: 'e2' });
-    expect(out.following).toHaveLength(2);
+    const out = await run(catalogQueries.item(ItemId.parse('e1')));
+    expect(out).toEqual({ id: 'e1' });
+    expect(c.playback.following).not.toHaveBeenCalled();
+    expect(await run(catalogQueries.following(ItemId.parse('e1')))).toHaveLength(2);
   });
 
-  it('has no next episode at the end of a show', async () => {
-    c.media.item.mockResolvedValue({ id: 'e9' });
-    c.playback.following.mockResolvedValue([]);
-
-    const out = await run(catalogQueries.watch(ItemId.parse('e9')));
-    expect(out.next).toBeNull();
-    expect(out.following).toEqual([]);
+  it('keys resume positions by viewer as well as item', () => {
+    const first = catalogQueries.resumeProgress(ItemId.parse('e1'), 'u1');
+    const second = catalogQueries.resumeProgress(ItemId.parse('e1'), 'u2');
+    expect(first.queryKey).not.toEqual(second.queryKey);
   });
 });

@@ -41,7 +41,7 @@ const LOUDNORM: &str = "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json";
 /// on the process-wide ffmpeg budget.
 pub fn measure(path: &Path, audio_rel: u32, channels: Option<u32>) -> Result<LoudnessResult> {
     let with_center = channels.is_some_and(|c| c >= 5);
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = kroma_primitives::process::new("ffmpeg");
     // `loudnorm` prints its measurement JSON on stderr at the `info` log level.
     cmd.args(["-hide_banner", "-v", "info", "-nostdin", "-threads", "1"]);
     cmd.args(input::file(path));

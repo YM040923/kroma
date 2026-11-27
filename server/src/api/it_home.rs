@@ -71,6 +71,24 @@ async fn the_card_home_lists_the_same_titles_without_files_or_credits() {
 }
 
 #[tokio::test]
+async fn discovery_is_private_and_applies_the_current_library_grant() {
+    let t = test_app();
+    let path = "/api/home/discovery";
+    let (id, viewer) = seed_session(&t.state, "discover@test.dev", "discover", &[Permission::Playback]);
+    assert_eq!(get(&t.app, path, None).await.0, StatusCode::UNAUTHORIZED);
+    let (status, full) = get(&t.app, path, Some(&viewer)).await;
+    assert_eq!(status, StatusCode::OK);
+    let cards = full["items"].as_array().unwrap();
+    assert!(!cards.is_empty());
+    assert!(cards.len() <= 36);
+    assert!(cards.iter().all(|e| e["item"].get("files").is_none()));
+    grant_libraries(&t.state, &id, &[]);
+    let (status, empty) = get(&t.app, path, Some(&viewer)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(empty["items"], json!([]));
+}
+
+#[tokio::test]
 async fn an_unknown_home_view_is_refused() {
     let t = test_app();
 

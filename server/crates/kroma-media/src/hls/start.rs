@@ -77,7 +77,13 @@ pub async fn keyframe_before(input: &Path, anchor: f64) -> f64 {
     if !seeks(anchor) {
         return 0.0;
     }
-    let out = Command::new("ffprobe")
+    let mut probe = Command::new("ffprobe");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        probe.creation_flags(kroma_primitives::process::no_window_flag());
+    }
+    let out = probe
         .args([
             "-v",
             "error",
@@ -114,7 +120,15 @@ pub async fn keyframe_before(input: &Path, anchor: f64) -> f64 {
 pub async fn first_frame(playlist: &Path) -> Option<f64> {
     let out = tokio::time::timeout(
         FIRST_FRAME_WAIT,
-        Command::new("ffprobe")
+        {
+            let mut probe = Command::new("ffprobe");
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                probe.creation_flags(kroma_primitives::process::no_window_flag());
+            }
+            probe
+        }
             .args(["-v", "error", "-live_start_index", "0"])
             .args(["-select_streams", "v:0", "-show_entries", "packet=pts_time"])
             .args(["-read_intervals", "%+#1"])
@@ -143,7 +157,7 @@ mod tests {
 
     fn clip_clocked_from(dir: &Path, secs: f64) -> Option<PathBuf> {
         let path = dir.join("clip.mp4");
-        std::process::Command::new("ffmpeg")
+        kroma_primitives::process::new("ffmpeg")
             .args(["-v", "error"])
             .args(input::generated("testsrc=duration=20:size=64x48:rate=25"))
             .args(["-c:v", "libx264", "-g", "50", "-y"])

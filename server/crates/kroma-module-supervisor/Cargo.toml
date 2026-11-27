@@ -26,6 +26,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
+# Keep component downloads relative to a pinned directory, including at publication.
+cap-tempfile = "4.0.3"
 rand = "0.10"
 # Unpacking installed .kmod bundles (a tar of module.json + module.wasm + fe/ + icon).
 tar = "0.4"

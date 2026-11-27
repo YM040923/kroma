@@ -5,7 +5,7 @@ import { useWebRuntime } from '#web/shared/lib/web-runtime';
 
 import { SideNav } from '#web/shared/ui/side-nav.component';
 
-export function WhatsNewLink() {
+export function WhatsNewLink({ groupLabel }: Readonly<{ groupLabel?: string }> = {}) {
   const webRuntime = useWebRuntime();
 
   const t = useT();
@@ -16,7 +16,7 @@ export function WhatsNewLink() {
   if (!data?.unseen) {
     return null;
   }
-  return (
+  const link = (
     <SideNav.Item to="/whats-new" icon="sparkles">
       <SideNav.Label>{t('releases.title')}</SideNav.Label>
       <SideNav.Trailing>
@@ -24,4 +24,5 @@ export function WhatsNewLink() {
       </SideNav.Trailing>
     </SideNav.Item>
   );
+  return groupLabel ? <SideNav.Group label={groupLabel}>{link}</SideNav.Group> : link;
 }

@@ -16,7 +16,7 @@ use super::ProbeResult;
 const REASON_CHARS: usize = 200;
 
 pub fn ffprobe_available() -> bool {
-    Command::new("ffprobe")
+    kroma_primitives::process::new("ffprobe")
         .arg("-version")
         .output()
         .map(|o| o.status.success())
@@ -36,7 +36,7 @@ pub(super) const DURATION_ARGS: [&str; 6] = [
 /// so it is cheap enough to call on demand. `None` when ffprobe is missing or the
 /// file has no readable duration.
 pub fn probe_duration_ms(path: &Path) -> Option<u64> {
-    let out = Command::new("ffprobe")
+    let out = kroma_primitives::process::new("ffprobe")
         .args(DURATION_ARGS)
         .args(input::file(path))
         .output()
@@ -81,7 +81,7 @@ enum Outcome {
 // the default log, and a wholesale degradation still shows up as `probed` ≪
 // `total` in the phase-2 summary.
 fn run_ffprobe(path: &Path) -> Outcome {
-    let output = match Command::new("ffprobe")
+    let output = match kroma_primitives::process::new("ffprobe")
         .args([
             "-v",
             "error",

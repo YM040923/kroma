@@ -24,9 +24,8 @@ use std::time::Duration;
 
 use axum::extract::State;
 use axum::Json;
-use kroma_module_sdk::host::{port_reply, run_blocking, HostCtx, LibraryFolders};
+use kroma_module_sdk::host::{port_reply, run_blocking, HostCtx};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::client;
 use crate::settings::{Config, Library};
@@ -227,10 +226,8 @@ pub(super) async fn upload<S: HostCtx + Clone + Send + Sync + 'static>(
     State(host): State<S>,
     Json(body): Json<UploadBody>,
 ) -> Json<Result<Started, String>> {
-    // Path resolution touches the filesystem and the host's library list, so it
-    // runs where `port_reply` would run it; the answer is the same envelope.
-    let prepare_host = host.clone();
-    let prepared = run_blocking(move || prepare(&prepare_host, &body)).await;
+    // Path resolution touches the filesystem, so it runs off the async workers.
+    let prepared = run_blocking(move || prepare(&body)).await;
     match prepared {
         Ok(Ok(prepared)) => {
             let job_id = prepared.id.clone();
@@ -263,21 +260,20 @@ pub struct StatusBody {
 }
 
 /// Resolve everything that can fail before a job exists: the path against the
-/// library roots, and the drive folder against the library mappings.
-fn prepare<S: HostCtx>(host: &S, body: &UploadBody) -> Result<Prepared, String> {
+/// selected folder grants, and the drive folder against the mappings.
+fn prepare(body: &UploadBody) -> Result<Prepared, String> {
     let raw = body.path.trim();
     if raw.is_empty() {
         return Err("缺少要上传的文件路径".into());
     }
     let config = Config::load();
-    if config.cookie.trim().is_empty() {
-        return Err("115 的 Cookie 还没配置".into());
+    if config.auth_id.trim().is_empty() {
+        return Err("115 尚未授权".into());
     }
-    let folders = host.library_folders();
-    let roots: Vec<PathBuf> = folders
+    let roots: Vec<PathBuf> = config
+        .libraries
         .iter()
-        .flat_map(|folder| folder.folders.iter())
-        .map(PathBuf::from)
+        .filter_map(|library| crate::sync::resolve_local_path(&[], &library.local))
         .collect();
     let path = crate::upload::allowed_path(raw, &roots)?;
 
@@ -290,9 +286,7 @@ fn prepare<S: HostCtx>(host: &S, body: &UploadBody) -> Result<Prepared, String> 
     // so uploading straight into a mirrored library folder would put the file
     // where the mirror never looks and the organiser never sees.
     let transit = config.transit_folder.trim();
-    let remote = if !cid.is_empty() {
-        body.remote.trim().to_string()
-    } else if !body.remote.trim().is_empty() {
+    let remote = if !cid.is_empty() || !body.remote.trim().is_empty() {
         body.remote.trim().to_string()
     } else if !transit.is_empty() {
         let mut remote = transit.trim_end_matches('/').to_string();
@@ -301,7 +295,7 @@ fn prepare<S: HostCtx>(host: &S, body: &UploadBody) -> Result<Prepared, String> 
         }
         remote
     } else {
-        remote_for_file(&config.libraries, &folders, &path).ok_or_else(|| {
+        remote_for_file(&config.libraries, &path).ok_or_else(|| {
             "这个本地路径不在任何已配置的目录映射里，请给出 remote 或 cid".to_string()
         })?
     };
@@ -327,11 +321,7 @@ fn prepare<S: HostCtx>(host: &S, body: &UploadBody) -> Result<Prepared, String> 
 /// The drive folder a local file belongs in, from the library mappings: the
 /// longest local root that contains it wins, and the drive side keeps the
 /// folders below that root. `None` when no mapping covers the file.
-pub(crate) fn remote_for_file(
-    libraries: &[Library],
-    folders: &[LibraryFolders],
-    file: &Path,
-) -> Option<String> {
+pub(crate) fn remote_for_file(libraries: &[Library], file: &Path) -> Option<String> {
     let mut best: Option<(usize, String)> = None;
     for library in libraries {
         let remote_root = library.remote.trim();
@@ -339,7 +329,7 @@ pub(crate) fn remote_for_file(
         if remote_root.is_empty() || local.is_empty() {
             continue;
         }
-        let Some(root) = crate::sync::resolve_local_path(folders, local) else {
+        let Some(root) = crate::sync::resolve_local_path(&[], local) else {
             continue;
         };
         // `file` is already canonical; matching the stored root as it is keeps a
@@ -409,18 +399,9 @@ async fn run<S: HostCtx + Clone + Send + Sync + 'static>(job: Prepared, host: S)
     }
     update_job(&id, |entry| entry.size_bytes = size);
 
-    let Some(userid) = crate::upload::cookie_uid(&config.cookie) else {
-        return fail(&id, "Cookie 里缺少 UID");
-    };
-    let userkey = match client::upload_key(&config.cookie, client::UPLOAD_UA).await {
-        Ok(key) => key,
-        Err(error) => return fail(&id, format!("拿不到上传密钥：{error}")),
-    };
     let target = format!("U_1_{cid}");
     let answer = match crate::upload::init_with_challenge(
         &config,
-        &userkey,
-        &userid,
         &target,
         &job.file_name,
         &job.path,
@@ -433,49 +414,23 @@ async fn run<S: HostCtx + Clone + Send + Sync + 'static>(job: Prepared, host: S)
         Err(error) => return fail(&id, format!("上传初始化失败：{error}")),
     };
 
-    let status = crate::upload::status_of(&answer);
-    let init_pickcode = answer
-        .get("pickcode")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-
-    if status == 2 {
-        // 秒传: the drive already holds these exact bytes. Nothing is sent, but
-        // "the drive says so" is not the same as "the folder lists it".
-        return finish(&job, &config, &cid, size, &init_pickcode, &host).await;
-    }
-    if status != 1 {
-        return fail(&id, format!("115 没有接受这次上传（状态 {status}）"));
-    }
-
-    let bucket = answer
-        .get("bucket")
-        .and_then(Value::as_str)
-        .unwrap_or(crate::oss::DEFAULT_BUCKET)
-        .to_string();
-    let Some(object) = answer.get("object").and_then(Value::as_str) else {
-        return fail(&id, "115 没有给出上传对象");
-    };
-    let object = object.to_string();
-    let callback = answer
-        .get("callback")
-        .and_then(|callback| callback.get("callback"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let callback_var = answer
-        .get("callback")
-        .and_then(|callback| callback.get("callback_var"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let (Some(callback), Some(callback_var)) = (callback, callback_var) else {
-        return fail(&id, "115 没有给出上传回调参数");
+    let (init_pickcode, bucket, object, callback, callback_var) = match answer {
+        crate::upload::Init::Hit(code) => {
+            return finish(&job, &config, &cid, size, &code, &host).await
+        }
+        crate::upload::Init::Multipart {
+            pickcode,
+            bucket,
+            object,
+            callback,
+            callback_var,
+        } => (pickcode, bucket, object, callback, callback_var),
     };
 
     let part_size = crate::upload::part_size_for(size);
     let parts = crate::upload::part_count(size, part_size);
     update_job(&id, |entry| entry.parts = parts);
-    let upload_id = match crate::oss::start(&bucket, &object) {
+    let upload_id = match crate::oss::start(&config.auth_id, &bucket, &object).await {
         Ok(upload_id) => upload_id,
         Err(error) => return fail(&id, error),
     };
@@ -488,20 +443,32 @@ async fn run<S: HostCtx + Clone + Send + Sync + 'static>(job: Prepared, host: S)
             Ok(data) => data,
             Err(error) => return fail(&id, format!("读取分片失败：{error}")),
         };
-        match crate::oss::put_part(&bucket, &object, &upload_id, index as u32 + 1, &data) {
+        match crate::oss::put_part(
+            &config.auth_id,
+            &bucket,
+            &object,
+            &upload_id,
+            index as u32 + 1,
+            &data,
+        )
+        .await
+        {
             Ok(etag) => etags.push(etag),
             Err(error) => return fail(&id, error),
         }
         update_job(&id, |entry| entry.uploaded = (index + 1) as u64);
     }
     if let Err(error) = crate::oss::complete(
+        &config.auth_id,
         &bucket,
         &object,
         &upload_id,
         &etags,
         &callback,
         &callback_var,
-    ) {
+    )
+    .await
+    {
         return fail(&id, error);
     }
     finish(&job, &config, &cid, size, &init_pickcode, &host).await;
@@ -520,15 +487,12 @@ async fn finish<S: HostCtx>(
 ) {
     let id = job.id.as_str();
     update_job(id, |entry| entry.state = UploadState::Verifying);
-    let verified = match verify_remote(&config.cookie, cid, &job.file_name, size).await {
-        Ok(pickcode) => pickcode,
-        Err(error) => return fail(id, error),
-    };
-    let pickcode = if verified.is_empty() {
-        known_pickcode.to_string()
-    } else {
-        verified
-    };
+    let verified =
+        match verify_remote(&config.auth_id, cid, &job.file_name, size, known_pickcode).await {
+            Ok(pickcode) => pickcode,
+            Err(error) => return fail(id, error),
+        };
+    let pickcode = verified;
     let mut warning = String::new();
     let mut local_deleted = false;
     let mut strm_ready = false;
@@ -612,7 +576,7 @@ fn write_staged_strm(
 
 fn fail(id: &str, error: impl Into<String>) {
     let error = error.into();
-    tracing::warn!(job = id, %error, "a 115 provider upload failed");
+    tracing::warn!(job = id, "a 115 provider upload failed");
     update_job(id, |entry| {
         entry.state = UploadState::Failed;
         entry.error = error;
@@ -623,13 +587,19 @@ fn fail(id: &str, error: impl Into<String>) {
 /// drive's callback can lag the merge by a moment. Any listing failure is fatal
 /// for the verification: a folder nobody could read is not a folder that holds
 /// the file.
-async fn verify_remote(cookie: &str, cid: &str, name: &str, size: u64) -> Result<String, String> {
+async fn verify_remote(
+    grant: &str,
+    cid: &str,
+    name: &str,
+    size: u64,
+    known_pickcode: &str,
+) -> Result<String, String> {
     let mut last = String::new();
     for attempt in 0..VERIFY_ATTEMPTS {
         if attempt > 0 {
             tokio::time::sleep(VERIFY_WAIT).await;
         }
-        match find_remote(cookie, cid, name, size).await {
+        match find_remote(grant, cid, name, size, known_pickcode).await {
             Ok(Some(pickcode)) => return Ok(pickcode),
             Ok(None) => last = format!("目录里还没有 {name}"),
             Err(error) => last = error,
@@ -640,14 +610,15 @@ async fn verify_remote(cookie: &str, cid: &str, name: &str, size: u64) -> Result
 
 /// One read-only pass over the folder: same name and same size, never a folder.
 async fn find_remote(
-    cookie: &str,
+    grant: &str,
     cid: &str,
     name: &str,
     size: u64,
+    known_pickcode: &str,
 ) -> Result<Option<String>, String> {
     let mut offset = 0u32;
     for _ in 0..VERIFY_PAGES {
-        let page = client::list(cookie, client::MODULE_UA, cid, offset, VERIFY_PAGE_SIZE)
+        let page = client::list(grant, client::MODULE_UA, cid, offset, VERIFY_PAGE_SIZE)
             .await
             .map_err(|error| format!("列目录失败：{error}"))?;
         let read = page.entries.len();
@@ -656,7 +627,10 @@ async fn find_remote(
                 continue;
             }
             // -1 is what the drive answers for a size it did not spell out.
-            if size == 0 || entry.size <= 0 || entry.size as u64 == size {
+            if entry.size >= 0
+                && entry.size as u64 == size
+                && entry.pick_code.eq_ignore_ascii_case(known_pickcode)
+            {
                 return Ok(Some(entry.pick_code.clone()));
             }
         }
@@ -684,28 +658,28 @@ mod tests {
         Library {
             remote: remote.into(),
             local: local.into(),
+            ..Library::default()
         }
     }
 
     #[test]
     fn a_file_below_a_mapping_keeps_its_folders_on_the_drive_side() {
-        let libraries = vec![library("/电影", "/media/115/电影")];
+        let libraries = vec![library("/电影", "/selected/test-folder")];
         let remote = remote_for_file(
             &libraries,
-            &[],
-            Path::new("/media/115/电影/2024/Batman.Begins.mkv"),
+            Path::new("/selected/test-folder/2024/Batman.Begins.mkv"),
         );
         assert_eq!(remote.as_deref(), Some("/电影/2024"));
     }
 
     #[test]
     fn a_file_in_the_library_root_maps_to_the_root_itself() {
-        let libraries = vec![library("/电影", "/media/115/电影")];
-        let remote = remote_for_file(&libraries, &[], Path::new("/media/115/电影/a.mkv"));
+        let libraries = vec![library("/电影", "/selected/test-folder")];
+        let remote = remote_for_file(&libraries, Path::new("/selected/test-folder/a.mkv"));
         assert_eq!(remote.as_deref(), Some("/电影"));
 
-        let trailing = vec![library("/电影/", "/media/115/电影")];
-        let remote = remote_for_file(&trailing, &[], Path::new("/media/115/电影/a.mkv"));
+        let trailing = vec![library("/电影/", "/selected/test-folder")];
+        let remote = remote_for_file(&trailing, Path::new("/selected/test-folder/a.mkv"));
         assert_eq!(
             remote.as_deref(),
             Some("/电影"),
@@ -714,50 +688,44 @@ mod tests {
     }
 
     #[test]
-    fn the_longest_matching_mapping_wins() {
+    fn a_file_below_one_of_multiple_selected_mappings_uses_that_mapping() {
         let libraries = vec![
-            library("/电影", "/media/115"),
-            library("/动画", "/media/115/动画"),
+            library("/电影", "/selected/movie-folder"),
+            library("/动画", "/selected/anime-folder"),
         ];
-        let remote = remote_for_file(&libraries, &[], Path::new("/media/115/动画/吉卜力/a.mkv"));
+        let remote = remote_for_file(&libraries, Path::new("/selected/anime-folder/吉卜力/a.mkv"));
         assert_eq!(
             remote.as_deref(),
             Some("/动画/吉卜力"),
-            "the deeper local root is the mapping that covers the file"
+            "the selected folder containing the file supplies its remote mapping"
         );
     }
 
     #[test]
     fn a_path_no_mapping_covers_has_no_remote_folder() {
-        let libraries = vec![library("/电影", "/media/115/电影")];
+        let libraries = vec![library("/电影", "/selected/test-folder")];
         assert_eq!(
-            remote_for_file(&libraries, &[], Path::new("/media/other/a.mkv")),
+            remote_for_file(&libraries, Path::new("/selected/other/a.mkv")),
             None
         );
         assert_eq!(
-            remote_for_file(&[], &[], Path::new("/media/115/电影/a.mkv")),
+            remote_for_file(&[], Path::new("/selected/test-folder/a.mkv")),
             None,
             "no mapping at all maps nothing"
         );
         let half = vec![library("/电影", "")];
         assert_eq!(
-            remote_for_file(&half, &[], Path::new("/media/115/电影/a.mkv")),
+            remote_for_file(&half, Path::new("/selected/test-folder/a.mkv")),
             None,
             "a mapping with one side named is not a mapping"
         );
     }
 
     #[test]
-    fn a_relative_mapping_is_anchored_at_the_first_library_folder() {
-        let folders = vec![LibraryFolders {
-            id: "1".into(),
-            kind: "movies".into(),
-            name: "Media".into(),
-            folders: vec!["/media".into()],
-        }];
+    fn a_relative_mapping_is_not_an_authorized_folder() {
         let libraries = vec![library("/电影", "115/电影")];
-        let remote = remote_for_file(&libraries, &folders, Path::new("/media/115/电影/a.mkv"));
-        assert_eq!(remote.as_deref(), Some("/电影"));
+        let remote = remote_for_file(&libraries, Path::new("/selected/test-folder/a.mkv"));
+        assert_eq!(remote, None);
     }
 
     fn job_with(state: UploadState) -> Job {

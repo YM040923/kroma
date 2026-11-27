@@ -28,6 +28,18 @@ describe('the admin console endpoints', () => {
       method: 'POST',
       path: '/admin/server/restart',
     },
+    {
+      name: 'pickModuleFolder',
+      call: (c) => c.admin.pickModuleFolder('tv.kroma.cloud115'),
+      method: 'POST',
+      path: '/admin/modules/tv.kroma.cloud115/pick-folder',
+    },
+    {
+      name: 'restartModule',
+      call: (c) => c.admin.restartModule('tv.kroma.cloud115'),
+      method: 'POST',
+      path: '/admin/modules/tv.kroma.cloud115/restart',
+    },
     { name: 'status', call: (c) => c.admin.status(), method: 'GET', path: '/status' },
     { name: 'sessions', call: (c) => c.admin.sessions(), method: 'GET', path: '/admin/sessions' },
     {

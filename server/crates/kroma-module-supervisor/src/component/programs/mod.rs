@@ -192,7 +192,7 @@ impl Processes for Programs {
             .helpers
             .contains_key(&asked.program)
             .then(|| self.reap_stale(&asked.program));
-        let mut command = Command::new(&binary);
+        let mut command = kroma_primitives::process::new(&binary);
         command
             .env_clear()
             .envs(crate::program_env::inherited(std::env::vars_os()))

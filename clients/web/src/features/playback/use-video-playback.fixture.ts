@@ -1,3 +1,4 @@
+import { QueryClient } from '@tanstack/react-query';
 import { act, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import type { MovieView } from '#web/shared/lib/api';
@@ -7,6 +8,7 @@ const itemProgress = vi.fn();
 /** The engine/session surface the `useVideoPlayback` suites stub out. A test
  * assigns to a field before rendering; `installHarness` resets them all. */
 export const H = {
+  cache: new QueryClient(),
   decision: { kind: 'direct' } as { kind: string; aacMaster?: boolean },
   tracks: [] as { index: number; default?: boolean; language?: string | null }[],
   user: null as { id: string; audioLanguage?: string | null } | null,
@@ -23,6 +25,7 @@ export const H = {
 
 export function kromaClientStub() {
   return {
+    playback: H.client.playback,
     media: { hlsMasterUrl: (_id: string, _aac: boolean, anchor: number) => `hls://${anchor}` },
     refreshSession: H.refreshSession,
   };
@@ -103,6 +106,7 @@ export function installHarness(): void {
   });
   afterEach(() => {
     cleanup();
+    H.cache.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

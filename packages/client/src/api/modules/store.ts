@@ -238,6 +238,17 @@ export const ModuleRestartResult = z.object({
 });
 export type ModuleRestartResult = z.infer<typeof ModuleRestartResult>;
 
+/** Native folder selection is available only on the local Windows server. */
+export const ModuleFolderPickResult = z.discriminatedUnion('selected', [
+  z.object({ selected: z.literal(false) }),
+  z.object({
+    selected: z.literal(true),
+    guestPath: z.string().min(1),
+    displayPath: z.string().min(1),
+  }),
+]);
+export type ModuleFolderPickResult = z.infer<typeof ModuleFolderPickResult>;
+
 /** The structured `409 Conflict` body of `DELETE /api/admin/store/{id}`: who
  * still depends on the module, so the UI can offer an informed force. */
 export const StoreUninstallConflict = z.object({

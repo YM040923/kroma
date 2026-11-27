@@ -51,6 +51,7 @@ import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as SSlugRouteImport } from './routes/s.$slug'
 import { Route as AppGenresIndexRouteImport } from './routes/_app.genres.index'
 import { Route as AppGenresIdRouteImport } from './routes/_app.genres.$id'
+import { Route as AppLibrariesIdRouteImport } from './routes/_app.libraries.$id'
 import { Route as AppMoviesIndexRouteImport } from './routes/_app.movies.index'
 import { Route as AppMoviesIdRouteImport } from './routes/_app.movies.$id'
 import { Route as AppPeoplePersonRouteImport } from './routes/_app.people.$person'
@@ -273,6 +274,11 @@ const AppGenresIdRoute = AppGenresIdRouteImport.update({
   path: '/genres/$id',
   getParentRoute: () => AppRoute,
 } as any)
+const AppLibrariesIdRoute = AppLibrariesIdRouteImport.update({
+  id: '/libraries/$id',
+  path: '/libraries/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppMoviesIndexRoute = AppMoviesIndexRouteImport.update({
   id: '/movies/',
   path: '/movies/',
@@ -380,6 +386,7 @@ export interface FileRoutesByFullPath {
   '/s/$slug': typeof SSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/genres/$id': typeof AppGenresIdRoute
+  '/libraries/$id': typeof AppLibrariesIdRoute
   '/movies/$id': typeof AppMoviesIdRoute
   '/people/$person': typeof AppPeoplePersonRoute
   '/shows/$id': typeof AppShowsIdRoute
@@ -434,6 +441,7 @@ export interface FileRoutesByTo {
   '/s/$slug': typeof SSlugRoute
   '/admin': typeof AdminIndexRoute
   '/genres/$id': typeof AppGenresIdRoute
+  '/libraries/$id': typeof AppLibrariesIdRoute
   '/movies/$id': typeof AppMoviesIdRoute
   '/people/$person': typeof AppPeoplePersonRoute
   '/shows/$id': typeof AppShowsIdRoute
@@ -492,6 +500,7 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/admin/': typeof AdminIndexRoute
   '/_app/genres/$id': typeof AppGenresIdRoute
+  '/_app/libraries/$id': typeof AppLibrariesIdRoute
   '/_app/movies/$id': typeof AppMoviesIdRoute
   '/_app/people/$person': typeof AppPeoplePersonRoute
   '/_app/shows/$id': typeof AppShowsIdRoute
@@ -549,6 +558,7 @@ export interface FileRouteTypes {
     | '/s/$slug'
     | '/admin/'
     | '/genres/$id'
+    | '/libraries/$id'
     | '/movies/$id'
     | '/people/$person'
     | '/shows/$id'
@@ -603,6 +613,7 @@ export interface FileRouteTypes {
     | '/s/$slug'
     | '/admin'
     | '/genres/$id'
+    | '/libraries/$id'
     | '/movies/$id'
     | '/people/$person'
     | '/shows/$id'
@@ -660,6 +671,7 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/admin/'
     | '/_app/genres/$id'
+    | '/_app/libraries/$id'
     | '/_app/movies/$id'
     | '/_app/people/$person'
     | '/_app/shows/$id'
@@ -984,6 +996,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppGenresIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/libraries/$id': {
+      id: '/_app/libraries/$id'
+      path: '/libraries/$id'
+      fullPath: '/libraries/$id'
+      preLoaderRoute: typeof AppLibrariesIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/movies/': {
       id: '/_app/movies/'
       path: '/movies'
@@ -1106,6 +1125,7 @@ interface AppRouteChildren {
   AppWhatsNewRoute: typeof AppWhatsNewRoute
   AppIndexRoute: typeof AppIndexRoute
   AppGenresIdRoute: typeof AppGenresIdRoute
+  AppLibrariesIdRoute: typeof AppLibrariesIdRoute
   AppMoviesIdRoute: typeof AppMoviesIdRoute
   AppPeoplePersonRoute: typeof AppPeoplePersonRoute
   AppShowsIdRoute: typeof AppShowsIdRoute
@@ -1130,6 +1150,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppWhatsNewRoute: AppWhatsNewRoute,
   AppIndexRoute: AppIndexRoute,
   AppGenresIdRoute: AppGenresIdRoute,
+  AppLibrariesIdRoute: AppLibrariesIdRoute,
   AppMoviesIdRoute: AppMoviesIdRoute,
   AppPeoplePersonRoute: AppPeoplePersonRoute,
   AppShowsIdRoute: AppShowsIdRoute,

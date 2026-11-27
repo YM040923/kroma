@@ -56,6 +56,20 @@ impl Fetch {
         crate::curl::run(config)
     }
 
+    /// Stream through the gateway to an already-authorized handle, never reopening it by name.
+    pub fn carry_download_to_file(
+        &self,
+        gateway: &crate::egress::Gateway,
+        username: &str,
+        url: &str,
+        file: std::fs::File,
+    ) -> Result<Response> {
+        let mut config = self.base_config();
+        config.push_str(&super::render::gateway_lines(gateway, username));
+        config.push_str(&option_line("url", url));
+        crate::curl::run_to(config, file.into())
+    }
+
     pub fn get(&self, url: &str) -> Result<Response> {
         let mut config = self.base_config();
         if !self.query.is_empty() {

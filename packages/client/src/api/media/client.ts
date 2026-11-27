@@ -162,6 +162,8 @@ export default function mediaApi(ctx: RequestContext) {
         concurrency: 'share',
       }),
 
+    homeDiscovery: async () => (await ctx.get('/home/discovery', CardSection.pick({ items: true }), { concurrency: 'share' })).items,
+
     /** Today's "En vedette" hero for the caller (Bearer): one movie or show
      * picked server-side with a deterministic daily rotation. `null` only when
      * the catalogue is empty; clients keep a local fallback for that case. */

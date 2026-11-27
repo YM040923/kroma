@@ -1,7 +1,8 @@
 import { apiErrorBody } from '@kromatv/client';
 import type { UpdateTarget, UpdateStatus, UpdateOperation } from '@kromatv/client/admin';
 import { useT } from '@kromatv/ui';
-import { Box, Button, Callout, Dialog, EmptyState, Text } from '@kromatv/ui/kit';
+import { Box, Button, Callout, Dialog, EmptyState, Row, Surface, Text } from '@kromatv/ui/kit';
+import { RouteLink } from '#web/shared/ui/route-link.component';
 import { useState } from 'react';
 import {
   UpdateHero,
@@ -51,21 +52,50 @@ function UpdatesContent({ restartAsked = false, onRestartClosed }: Readonly<Rest
     }
   }
 
+  if (data?.updateSource === 'windows-package') {
+    return (
+      <>
+        <PageHeader.Root>
+          <PageHeader.Title>{t('admin.updatesTitle')}</PageHeader.Title>
+          <PageHeader.Subtitle>{t('admin.updatesWindowsPackageHint')}</PageHeader.Subtitle>
+          {data.restartable ? (
+            <PageHeader.Actions>
+              <RestartAction offered asked={restartAsked} disabled={false} onClosed={onRestartClosed} />
+            </PageHeader.Actions>
+          ) : null}
+        </PageHeader.Root>
+        <Surface elevated border="border" radius="xl" pad="lg" mt={24} gap={12}>
+          <Text variant="cardTitle">{t('admin.updatesWindowsServer')}</Text>
+          <Text variant="meta" color="textMuted">{t('admin.updatesInstalled')}</Text>
+          <Text variant="h2">v{data.version}</Text>
+          {data.build > 0 ? <Text variant="meta" color="textDim">{t('admin.updatesBuild', { build: String(data.build) })}</Text> : null}
+          <Row>
+            <Button variant="outline" icon="archive" label={t('admin.updateBackup')} asChild>
+              <RouteLink to="/admin/backup" />
+            </Button>
+          </Row>
+        </Surface>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader.Root>
         <PageHeader.Title>{t('admin.updatesTitle')}</PageHeader.Title>
         <PageHeader.Subtitle>{t('admin.updatesSubtitle')}</PageHeader.Subtitle>
         <PageHeader.Actions>
-          <Button
-            variant="outline"
-            size="sm"
-            icon="refresh"
-            label={t('admin.updatesCheck')}
-            loading={busy}
-            disabled={busy || active}
-            onPress={() => void action(() => client.admin.checkUpdates())}
-          />
+          {data ? (
+            <Button
+              variant="outline"
+              size="sm"
+              icon="refresh"
+              label={t('admin.updatesCheck')}
+              loading={busy}
+              disabled={busy || active}
+              onPress={() => void action(() => client.admin.checkUpdates())}
+            />
+          ) : null}
           <RestartAction
             offered={!!data?.restartable && !active}
             asked={restartAsked}

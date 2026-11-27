@@ -109,10 +109,12 @@ const fn str_eq(a: &str, b: &str) -> bool {
 
 /// Register every built-in job on the manager (roster order = listing order).
 /// Called once at startup.
-pub fn register_all(m: &mut JobManager) {
-    // Force the compile-time duplicate-key/id check to be evaluated.
+pub fn register_all(m: &mut JobManager, server_updates: &crate::config::ServerUpdates) {
     let () = NO_DUPLICATE_KEYS;
     for b in JOBS {
+        if server_updates.feed().is_none() && (b.key == update_check::SPEC.key || b.key == update_install::SPEC.key) {
+            continue;
+        }
         m.register(b);
     }
 }

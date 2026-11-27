@@ -83,7 +83,7 @@ pub fn sized_rendition(data_dir: &Path, name: &str, width: u32) -> Option<(PathB
     }
 
     let tmp = unique_tmp(&webp_out);
-    let cwebp = Command::new("cwebp")
+    let cwebp = kroma_primitives::process::new("cwebp")
         .args(["-quiet", "-q", "82", "-resize", &width.to_string(), "0"])
         .arg(&src)
         .arg("-o")
@@ -116,7 +116,7 @@ fn ffmpeg_rendition(src: &Path, out: &Path, vf: &str, extra: &[&str]) -> Option<
         return Some(out.to_path_buf());
     }
     let tmp = unique_tmp(out);
-    let ok = Command::new("ffmpeg")
+    let ok = kroma_primitives::process::new("ffmpeg")
         .args(["-y", "-loglevel", "error", "-threads", "1"])
         .args(input::file(src))
         .args(["-vf", vf, "-frames:v", "1"])

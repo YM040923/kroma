@@ -57,4 +57,6 @@ pub(super) const STEPS: &[Step] = &[
     sql_step!("0028_media_share"),
     sql_step!("0029_acquisition_ledger"),
     sql_step!("0030_acquisition_center"),
+    sql_step!("0031_home_layout"),
+    sql_step!("0032_sidebar_layout"),
 ];

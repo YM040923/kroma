@@ -193,6 +193,18 @@ describe('the event stream', () => {
     expect(H.client.getQueryData(key)).toBe(before);
   });
 
+  it.each(['library.updated', 'scan.completed'])('refreshes cached library navigation on %s without touching the inbox', async (type) => {
+    const shelf = ['libraries', 'viewer', BASE_URL, 'viewer-a'];
+    const contents = [...shelf, 'contents', 'lib', 'shows'];
+    H.client.setQueryData(shelf, []);
+    H.client.setQueryData(contents, []);
+    render(() => useNotificationStream());
+    await push({ type, unread: 0 });
+    expect(H.client.getQueryState(shelf)?.isInvalidated).toBe(true);
+    expect(H.client.getQueryState(contents)?.isInvalidated).toBe(true);
+    expect(H.client.getQueryData(userQueries.notifications().queryKey)).toBeUndefined();
+  });
+
   it('does not invent an inbox for a user who has never loaded one', async () => {
     render(() => useNotificationStream());
     await push({ type: 'notification.created', unread: 4 });

@@ -36,6 +36,7 @@
   "content.heroPrevious": "Titre précédent",
   "content.heroResume": "Reprendre le diaporama",
   "content.heroShow": "Afficher {title}",
+  "content.heroShuffle": "Autre sélection",
   "content.hideMissingEpisodes": "Masquer les {count} épisodes manquants",
   "content.hideMissingEpisodes_one": "Masquer l'épisode manquant",
   "content.homeEmpty": "Votre bibliothèque est vide.",

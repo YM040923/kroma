@@ -131,6 +131,7 @@ pub struct FsPermissions {
 pub enum FsRoot {
     Module,
     Media,
+    Selected,
     Downloads,
     Temp,
 }

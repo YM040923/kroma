@@ -501,6 +501,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "kroma-primitives",
  "serde",
  "serde_json",
  "tempfile",

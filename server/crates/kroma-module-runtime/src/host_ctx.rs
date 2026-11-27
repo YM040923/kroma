@@ -89,6 +89,23 @@ impl HostCtx for RemoteHost {
         );
     }
 
+    fn commit_selected_folders(&self, module_id: &str, folders: &[String]) -> Result<bool, String> {
+        let response = self
+            .callback()
+            .post_json(
+                &self.host_url("selected-folders"),
+                &serde_json::json!({ "moduleId": module_id, "folders": folders }),
+            )
+            .map_err(|error| error.to_string())?
+            .ensure_ok()
+            .map_err(|error| error.to_string())?;
+        response
+            .json::<serde_json::Value>()
+            .ok()
+            .and_then(|value| value.get("changed").and_then(serde_json::Value::as_bool))
+            .ok_or_else(|| "host did not return selected-folder status".to_string())
+    }
+
     fn publish(&self, event: Event) {
         let _ = self.callback().post_json(
             &self.host_url("events"),

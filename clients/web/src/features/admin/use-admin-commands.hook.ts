@@ -141,7 +141,7 @@ export function useAdminCommands(): void {
             done: t('commands.scanStarted'),
             run: scanLibraries,
           },
-          {
+          !!updates && updates.updateSource !== 'windows-package' && {
             label: t('admin.updatesCheck'),
             group: t('admin.groupMaintenance'),
             icon: 'refresh',

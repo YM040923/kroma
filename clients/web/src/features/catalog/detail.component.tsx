@@ -6,29 +6,23 @@ import {
   Badge,
   Box,
   Button,
-  classes,
-  color,
+  ExpandableText,
   Ground,
   type HostElement,
   IconButton,
-  ExpandableText,
   styles,
   Text,
-  useBreakpoint,
-  useStyleScope,
   useStyles,
-  useThemeVersion,
 } from '@kromatv/ui/kit';
 import { type ReactNode, useSyncExternalStore } from 'react';
 import {
-  DirectorsLine,
   HeroFields,
   ListButton,
   ReportButton,
   WatchedButton,
 } from '#web/features/catalog/detail-hero-parts.component';
 import { HeroBackdrop } from '#web/features/catalog/hero-backdrop.component';
-import { wash } from '#web/shared/lib/art-styles';
+import layout from '#web/features/catalog/hero-layout.module.css';
 import type { QualityTone } from '#web/shared/lib/quality-badges';
 import { Image } from '#web/shared/ui';
 import { CastButton } from '#web/shared/ui/cast-button.component';
@@ -44,40 +38,15 @@ export {
 export type { QualityTone } from '#web/shared/lib/quality-badges';
 export { qualityBadges } from '#web/shared/lib/quality-badges';
 
-// The text column is an element rather than a <Box>, and a flex column at
-// that: a plain block leaves react-native-web's <Text> at its own `display:
-// inline`, and three of them in a row then run together as one paragraph with
-// their margins dropped, which is what put the director, the tagline and the
-// overview on the same line.
 const sDefinition = styles({
-  frame: { position: 'relative', minHeight: '62vh' },
-  gutter: { paddingLeft: 'var(--gutter-web)', paddingRight: 'var(--gutter-web)' },
-  text: {
-    display: 'flex',
-    flexDirection: 'column',
-    flex: true,
-    maxWidth: 680,
-    textShadow: `0 1px 3px ${color('black/50')}, 0 2px 16px ${color('black/55')}`,
-  },
-  title: {
-    textShadow: [
-      `0 0 2px ${color('black/55')}`,
-      `0 2px 8px ${color('black/55')}`,
-      `0 8px 30px ${color('black/60')}`,
-    ].join(', '),
-  },
   noCaps: { textTransform: 'none' },
-  italic: { fontStyle: 'italic' },
-  overview: { marginBottom: 22 },
+  tagline: { fontWeight: '600' },
+  overview: { fontSize: 'clamp(14px, 1.35cqw, 17px)', lineHeight: '1.7em', maxWidth: '48em' },
 });
 
 const subscribeNever = () => () => {};
-
 const CORNER_LEFT = { base: 16, md: 32 } as const;
-const CORNER_TOP = { base: 16, md: 26 } as const;
-const HERO_GAP = { base: 24, md: 40 } as const;
-const HERO_PAD_TOP = { base: 72, md: 90 } as const;
-const POSTER_W = { base: 192, lg: 240 } as const;
+const CORNER_TOP = { base: 16, md: 20 } as const;
 
 export interface DetailHeroProps {
   art: { id: string; backdrop: string | null; poster: string };
@@ -108,57 +77,23 @@ export interface DetailHeroProps {
   onReport?: () => void;
 }
 
-/** Full-bleed cinematic detail hero shared by the movie and series fiches
- * (matches the web DETAIL section of KROMA.dc.html). */
+/** A finite scene, followed by a normal-flow fiche shared by movies and series. */
 export function DetailHero({
-  art,
-  overline,
-  title,
-  rating,
-  meta,
-  badges,
-  audioFlag,
-  directors,
-  tagline,
-  overview,
-  audio,
-  subtitles,
-  playLabel,
-  primaryAction,
-  back,
-  onPlay,
-  castItemId,
-  watched,
-  onToggleWatched,
-  inList,
-  onToggleList,
-  playable,
-  themeUrl,
-  adminAction,
-  trailerAction,
-  onReport,
+  art, overline, title, rating, meta, badges, audioFlag, directors, tagline, overview,
+  audio, subtitles, playLabel, primaryAction, back, onPlay, castItemId, watched,
+  onToggleWatched, inList, onToggleList, playable, themeUrl, adminAction, trailerAction, onReport,
 }: Readonly<DetailHeroProps>) {
-  const scope = useStyleScope();
-  useThemeVersion();
-
   const s = useStyles(sDefinition);
-
   const t = useT();
   const [c1, c2] = posterColors(art.id);
   const heroGradient = `linear-gradient(135deg, ${c1}, ${c2})`;
   const theme = useThemeAudio(themeUrl);
-  // A side column would crush the text into a sliver on a phone, so it is not
-  // rendered there rather than hidden with its artwork still fetched.
-  const wide = useBreakpoint() !== 'base';
 
-  // Direct-play depends on the runtime's codecs (navigator/MediaSource), so it
-  // must stay client-only, or SSR would compute a mismatched hydration value.
+  // Codec support belongs to the viewer's browser, not the SSR environment.
   const unsupported = useSyncExternalStore(
     subscribeNever,
     () => {
-      if (!playable) {
-        return null;
-      }
+      if (!playable) return null;
       const v = canDirectPlay(playable);
       return v.canDirectPlay ? null : t(v.messageKey, v.messageVars);
     },
@@ -166,92 +101,37 @@ export function DetailHero({
   );
 
   return (
-    <div className={classes(s.frame)}>
-      <HeroBackdrop backdrop={art.backdrop} gradient={heroGradient} />
+    <div className={layout.detail}>
+      <header className={`${layout.mast} ${layout.dmast}`}>
+        <HeroBackdrop backdrop={art.backdrop} gradient={heroGradient} />
+        <Box absolute z={3} left={CORNER_LEFT} top={CORNER_TOP}>
+          <Ground tone="dark">
+            <BackButton diameter={42} label={t('common.back')} asChild>{back}</BackButton>
+          </Ground>
+        </Box>
+        <ThemeToggle theme={theme} />
+        <div className={layout.detailTitle}>
+          <Text variant="overline" style={s.noCaps}>{overline}</Text>
+          <h1 className={layout.title}>{title}</h1>
+        </div>
+      </header>
 
-      <Box absolute z={3} left={CORNER_LEFT} top={CORNER_TOP}>
-        <Ground tone="dark">
-          <BackButton diameter={42} label={t('common.back')} asChild>
-            {back}
-          </BackButton>
-        </Ground>
-      </Box>
-
-      <ThemeToggle theme={theme} />
-
-      <div className={classes(s.gutter)}>
-        <Box row wrap align="flex-end" gap={HERO_GAP} pb={36} pt={HERO_PAD_TOP}>
-          {wide ? (
-            <Box
-              w={POSTER_W}
-              aspect={2 / 3}
-              shrink={0}
-              overflow="hidden"
-              radius="xl"
-              style={wash(c1, c2, undefined, scope)}
-            >
-              <Image src={art.poster} fit="cover" fill />
-            </Box>
-          ) : null}
-
-          <div className={classes(s.text)}>
-            <Text variant="overline" color="accent" mb={12} style={s.noCaps}>
-              {overline}
-            </Text>
-            <h1 className={classes(s.title)}>
-              <Text variant="h1" mb={16}>
-                {title}
-              </Text>
-            </h1>
-
-            <Box row wrap align="center" gap={10} mb={18}>
-              {rating ? (
-                <>
-                  <Text variant="label" color="accent">{`${rating.toFixed(1)}★`}</Text>
-                  <Text variant="meta" color="white/40">
-                    ·
-                  </Text>
-                </>
-              ) : null}
-              <Text variant="meta" color="white/72">
-                {meta}
-              </Text>
-              {badges.map((b) => (
-                <Badge key={b} tone={b}>
-                  {b}
-                </Badge>
-              ))}
+      <div className={layout.detailBody}>
+        <div className={layout.poster}>
+          <Image src={art.poster} background={heroGradient} fit="cover" fill />
+        </div>
+        <div className={layout.info}>
+          <div className={layout.lead}>
+            <Box row wrap align="center" gap={8}>
+              {rating ? <Text variant="label" color="accentText">{`${rating.toFixed(1)}★`}</Text> : null}
+              <Text variant="meta" color="textMuted">{meta}</Text>
+              {badges.map((b) => <Badge key={b} tone={b}>{b}</Badge>)}
               {audioFlag ? <Badge tone="warning">{audioFlag}</Badge> : null}
             </Box>
-
-            <DirectorsLine directors={directors} />
-
-            {tagline ? (
-              <Text variant="meta" color="white/50" mb={12} style={s.italic}>
-                {tagline}
-              </Text>
-            ) : null}
-            {overview ? (
-              <ExpandableText
-                variant="body"
-                color="white/82"
-                lines={4}
-                moreLabel={t('person.readMore')}
-                style={s.overview}
-              >
-                {overview}
-              </ExpandableText>
-            ) : null}
-
-            <Box row wrap align="center" gap={14} mb={26}>
-              {primaryAction ??
-                (onPlay ? (
-                  <Button
-                    icon="player-play-filled"
-                    label={playLabel ?? t('content.play')}
-                    onPress={onPlay}
-                  />
-                ) : null)}
+            <Box row wrap align="center" gap={8} mt={12} mb={16}>
+              {primaryAction ?? (onPlay ? (
+                <Button icon="player-play-filled" label={playLabel ?? t('content.play')} onPress={onPlay} />
+              ) : null)}
               {trailerAction}
               {castItemId ? <CastButton itemId={castItemId} /> : null}
               <WatchedButton watched={watched} onToggle={onToggleWatched} />
@@ -259,15 +139,18 @@ export function DetailHero({
               <ReportButton onReport={onReport} />
               {adminAction}
             </Box>
-
-            <HeroFields audio={audio} subtitles={subtitles} />
-            {unsupported ? (
-              <Text variant="meta" color="textMuted" mt={14}>
-                {unsupported}
-              </Text>
-            ) : null}
           </div>
-        </Box>
+          <div className={layout.readout}>
+            {tagline ? <Text variant="meta" mb={6} style={s.tagline}>{tagline}</Text> : null}
+            {overview ? (
+              <ExpandableText variant="body" color="textMuted" lines={4} moreLabel={t('person.readMore')} style={s.overview}>
+                {overview}
+              </ExpandableText>
+            ) : null}
+            <HeroFields directors={directors} audio={audio} subtitles={subtitles} />
+            {unsupported ? <Text variant="meta" color="textMuted" mt={10}>{unsupported}</Text> : null}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -275,9 +158,7 @@ export function DetailHero({
 
 function ThemeToggle({ theme }: Readonly<{ theme: ReturnType<typeof useThemeAudio> }>) {
   const t = useT();
-  if (!theme.active) {
-    return null;
-  }
+  if (!theme.active) return null;
   return (
     <Box absolute z={3} right={CORNER_LEFT} top={CORNER_TOP}>
       <Ground tone="dark">

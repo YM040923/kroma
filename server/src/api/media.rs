@@ -81,10 +81,22 @@ pub async fn list_libraries(
     State(state): State<SharedState>,
     AuthUser(user): AuthUser,
 ) -> Result<Response, Response> {
-    let mut libs = query(&state.db, move |pool| db::list_libraries(&pool)).await?;
-    if !user.sees_every_library() {
-        libs.retain(|lib| user.sees_library(&lib.id));
-    }
+    let indexed = query(&state.db, move |pool| db::list_libraries(&pool)).await?;
+    // The owner can rename or remove a library without another successful scan.
+    let mut libs = if let Ok(Some(defs)) = crate::services::settings::stored_library_defs(&state.settings) {
+        let mut by_id: std::collections::HashMap<_, _> = indexed.into_iter().map(|lib| (lib.id.clone(), lib)).collect();
+        defs.into_iter().map(|def| {
+            let (detected, path, item_count) = by_id.remove(&def.id)
+                .map(|lib| (lib.kind, lib.path, lib.item_count))
+                .unwrap_or((crate::model::LibraryKind::Movies, String::new(), 0));
+            let kind = def.catalog_kind(detected);
+            crate::model::Library { id: def.id, name: def.name, kind, path, item_count }
+        }).collect()
+    } else {
+        indexed
+    };
+    libs.retain(|lib| user.sees_library(&lib.id));
+    libs.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
     Ok(Json(libs).into_response())
 }
 

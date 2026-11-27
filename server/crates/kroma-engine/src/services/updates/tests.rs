@@ -179,7 +179,7 @@ fn a_result_for_another_channel_is_not_shown() {
 
     let shown = status(&state);
 
-    assert_eq!(shown.channel, Channel::Stable);
+    assert_eq!(shown.channel, Some(Channel::Stable));
     assert_eq!(shown.latest, None);
     assert_eq!(shown.checked_at, None);
 }
@@ -253,7 +253,7 @@ fn a_check_on_canary_reads_the_rolling_release() {
 
     let shown = check(&state).unwrap();
 
-    assert_eq!(shown.channel, Channel::Canary);
+    assert_eq!(shown.channel, Some(Channel::Canary));
     assert_eq!(shown.latest.and_then(|l| l.build), Some(3_600_001));
 }
 

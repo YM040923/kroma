@@ -159,7 +159,7 @@ fn usable(accel: HwAccel) -> Result<(), String> {
     if matches!(accel, HwAccel::Qsv | HwAccel::Vaapi) {
         openable(node)?;
     }
-    let mut cmd = std::process::Command::new("ffmpeg");
+    let mut cmd = kroma_primitives::process::new("ffmpeg");
     cmd.args(["-v", "error", "-nostdin"]);
     match accel {
         HwAccel::Vaapi => {

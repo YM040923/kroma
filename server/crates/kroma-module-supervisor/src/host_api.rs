@@ -44,6 +44,7 @@ where
         .route("/_host/job", post(job::trigger_job::<S>))
         .route("/_host/enabled", get(module_enabled::<S>))
         .route("/_host/libraries", get(library_folders::<S>))
+        .route("/_host/selected-folders", post(commit_selected_folders::<S>))
         .route("/_host/metadata-language", get(metadata_language::<S>))
         .route("/_host/metadata-search", get(metadata_search::<S>))
         .route("/_host/metadata-episodes", get(metadata_episodes::<S>))
@@ -197,6 +198,28 @@ async fn module_enabled<S: HostCtx>(
 
 async fn library_folders<S: HostCtx>(State(host): State<S>) -> Json<Value> {
     Json(json!(host.library_folders()))
+}
+
+#[derive(serde::Deserialize)]
+struct SelectedFoldersBody {
+    folders: Vec<String>,
+}
+
+async fn commit_selected_folders<S: HostCtx>(
+    State(host): State<S>,
+    Extension(caller): Extension<Caller>,
+    Json(body): Json<SelectedFoldersBody>,
+) -> Response {
+    let Some(module_id) = caller.module() else {
+        return kroma_module_host::json_error(StatusCode::FORBIDDEN, "unnamed modules cannot change folder grants");
+    };
+    if module_id != "tv.kroma.cloud115" {
+        return kroma_module_host::json_error(StatusCode::FORBIDDEN, "this module cannot change folder grants");
+    }
+    match host.commit_selected_folders(module_id, &body.folders) {
+        Ok(changed) => Json(json!({ "changed": changed })).into_response(),
+        Err(error) => kroma_module_host::json_error(StatusCode::BAD_REQUEST, &error),
+    }
 }
 
 #[derive(serde::Deserialize)]

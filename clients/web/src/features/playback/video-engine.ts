@@ -73,6 +73,7 @@ export interface VideoPlayback {
   audioTracks: AudioTrack[];
   audioIndex: number;
   setAudio: (index: number) => void;
+  resumeAt: number | null;
   anchor: number;
   baseSec: number;
   aac: boolean;

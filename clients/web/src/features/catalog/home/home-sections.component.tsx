@@ -1,11 +1,9 @@
-import { useSuspenseQuery } from '@tanstack/react-query';
 import { SectionPoster } from '#web/features/catalog/cards.component';
 import { entryId, type HomeSection } from '#web/features/catalog/home/entries';
 import { RankedRail } from '#web/features/catalog/home/ranked-rail.component';
 import { SectionHeading } from '#web/features/catalog/home/section-heading.component';
 import { Spotlight } from '#web/features/catalog/home/spotlight.component';
 import { WideRail } from '#web/features/catalog/home/wide-rail.component';
-import { useWebRuntime } from '#web/shared/lib/web-runtime';
 import { PosterRail, RailSkeleton } from '#web/shared/ui';
 
 /** The two rails held while the server's sections are on their way. */
@@ -47,17 +45,5 @@ export function HomeSectionView({ section }: Readonly<{ section: HomeSection }>)
       <SectionHeading title={section.title} reason={section.reason} />
       <SectionRow section={section} />
     </section>
-  );
-}
-
-/** Every section the server sent but the hero, in its order. */
-export function HomeSections() {
-  const { data: sections } = useSuspenseQuery(useWebRuntime().queries.userQueries.home());
-  return (
-    <>
-      {sections.map((section) => (
-        <HomeSectionView key={section.id} section={section} />
-      ))}
-    </>
   );
 }

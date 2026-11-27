@@ -270,7 +270,7 @@
     },
     "users": {
       "broke": 20,
-      "changed": 27
+      "changed": 32
     },
     "wanted": {
       "broke": 1,
@@ -289,5 +289,5 @@
       "changed": 1
     }
   },
-  "version": 30
+  "version": 32
 }

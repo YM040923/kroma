@@ -1,166 +1,77 @@
 import { metaLine, posterColors, synopsisLead } from '@kromatv/core';
 import { useT } from '@kromatv/ui';
-import {
-  Badge,
-  Box,
-  Button,
-  classes,
-  Row,
-  Skeleton,
-  styles,
-  Text,
-  useStyles,
-} from '@kromatv/ui/kit';
+import { Badge, Box, Button, Row, Skeleton, Text } from '@kromatv/ui/kit';
+import { HeroArt, HeroIntro } from '#web/features/catalog/hero-art.component';
+import layout from '#web/features/catalog/hero-layout.module.css';
 import type { MovieCardView } from '#web/shared/lib/api';
 import type { HeroEntry } from '#web/shared/lib/queries';
-import { Image } from '#web/shared/ui';
 import { RouteLink } from '#web/shared/ui/route-link.component';
 
 type HeroBadge = '4K' | 'HDR' | 'H.265';
 
 function heroBadges(v: MovieCardView['video']): HeroBadge[] {
-  if (!v) {
-    return [];
-  }
+  if (!v) return [];
   const out: HeroBadge[] = [];
-  if ((v.width ?? 0) >= 3840) {
-    out.push('4K');
-  }
-  if (v.hdr) {
-    out.push('HDR');
-  }
-  if (v.codec === 'hevc') {
-    out.push('H.265');
-  }
+  if ((v.width ?? 0) >= 3840) out.push('4K');
+  if (v.hdr) out.push('HDR');
+  if (v.codec === 'hevc') out.push('H.265');
   return out;
 }
 
-// Bled to the content edges (cancels the page gutter) and faded into the rails
-// below. The gutter is a fluid CSS custom property, which no style number can
-// carry, so the frame stays a plain element.
-const sDefinition = styles({
-  hero: {
-    position: 'relative',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-    marginLeft: 'calc(var(--gutter-web) * -1)',
-    marginRight: 'calc(var(--gutter-web) * -1)',
-    mt: -36,
-    mb: 32,
-    minHeight: 'clamp(200px, 52vw, 460px)',
-    paddingLeft: 'var(--gutter-web)',
-    paddingRight: 'var(--gutter-web)',
-    paddingTop: 'clamp(40px, 5vw, 64px)',
-    pb: 40,
-  },
-  breathe: {
-    fill: true,
-    pointerEvents: 'none',
-    animationKeyframes: 'kroma-breathe',
-    animationDuration: '7s',
-    animationTimingFunction: 'var(--ease-out)',
-    animationIterationCount: 'infinite',
-    backgroundImage:
-      'radial-gradient(58% 68% at 72% 32%, color-mix(in srgb, var(--kroma-accent-wash) 16%, transparent), transparent 62%)',
-  },
-  scrim: {
-    backgroundImage: [
-      'linear-gradient(90deg, color-mix(in srgb, var(--kroma-bg) 78%, transparent) 0%,',
-      'color-mix(in srgb, var(--kroma-bg) 24%, transparent) 32%, transparent 56%),',
-      'linear-gradient(0deg, color-mix(in srgb, var(--kroma-bg) 42%, transparent) 0%, transparent 34%)',
-    ].join(' '),
-  },
-});
-
-/** Full-bleed featured banner TMDB backdrop as cinematic art, bled to the
- * content edges (cancels the page gutter) and faded into the rails below. */
+/** The fallback pick uses the same canvas as the carousel, without a pager. */
 export function Hero({ entry }: Readonly<{ entry: HeroEntry }>) {
-  const s = useStyles(sDefinition);
-
   const t = useT();
   const media = entry.type === 'movie' ? entry.movie : entry.show;
-  const colors = posterColors(media.id);
-  const gradient = `linear-gradient(158deg, ${colors[0]}, ${colors[1]})`;
+  const gradient = `linear-gradient(158deg, ${posterColors(media.id).join(', ')})`;
   const meta = media.metadata;
   const synopsis = synopsisLead(meta?.overview, 240);
   const badges = heroBadges(media.video);
-  const line =
-    entry.type === 'movie'
-      ? metaLine(entry.movie)
-      : [entry.show.year, t('content.seasonCount', { count: entry.show.seasonCount })]
-          .filter(Boolean)
-          .join(' · ');
+  const line = entry.type === 'movie'
+    ? metaLine(entry.movie)
+    : [entry.show.year, t('content.seasonCount', { count: entry.show.seasonCount })]
+        .filter(Boolean).join(' · ');
 
   return (
-    <div className={classes(s.hero)}>
-      <Image
-        src={media.backdrop}
-        fit="cover"
-        position="center 18%"
-        background={gradient}
-        fill
-        priority
-      />
-      <Box style={s.breathe} />
-      <Box fill pointerEvents="none" style={s.scrim} />
-
-      <Box maxW={680}>
-        <Text variant="overline" color="accent" mb={14}>
-          {t('content.featured')}
-        </Text>
-        <Text variant="hero" mb={14}>
-          {media.title}
-        </Text>
-        <Row wrap gap={12} mb={16}>
-          {meta?.rating ? (
-            <Text variant="meta" color="accent">{`${meta.rating.toFixed(1)}★`}</Text>
-          ) : null}
-          <Text variant="meta" color="textMuted">
-            {line}
-          </Text>
-          {badges.map((b) => (
-            <Badge key={b} tone={b}>
-              {b}
-            </Badge>
-          ))}
-        </Row>
-        {synopsis ? (
-          <Text variant="body" maxW={540} mb={20}>
-            {synopsis}
-          </Text>
-        ) : null}
-        <Row wrap gap={14}>
-          {entry.type === 'movie' ? (
-            <>
-              <Button label={t('content.play')} asChild>
+    <section className={layout.bleed} aria-label={t('content.featured')}>
+      <div className={`${layout.mast} ${layout.home}`}>
+        <HeroArt src={media.backdrop} background={gradient} />
+        <div className={layout.homeCopy}>
+          <Text variant="overline">{t('content.featured')}</Text>
+          <h1 className={layout.title}>{media.title}</h1>
+          <Row wrap gap={8} mb={10}>
+            {meta?.rating ? <Text variant="meta" color="accentText">{`${meta.rating.toFixed(1)}★`}</Text> : null}
+            <Text variant="meta" color="textMuted">{line}</Text>
+            {badges.map((b) => <Badge key={b} tone={b}>{b}</Badge>)}
+          </Row>
+          {synopsis ? <HeroIntro>{synopsis}</HeroIntro> : null}
+          <Row wrap gap={8}>
+            {entry.type === 'movie' ? (
+              <Button size="sm" icon="player-play-filled" label={t('content.play')} asChild>
                 <RouteLink to="/watch/$id" params={{ id: media.id }} />
               </Button>
-              <Button variant="glass" label={t('content.moreInfo')} asChild>
+            ) : null}
+            <Button size="sm" variant={entry.type === 'movie' ? 'glass' : undefined} icon="info-circle" label={t('content.moreInfo')} asChild>
+              {entry.type === 'movie' ? (
                 <RouteLink to="/movies/$id" params={{ id: media.id }} />
-              </Button>
-            </>
-          ) : (
-            <Button label={t('content.moreInfo')} asChild>
-              <RouteLink to="/shows/$id" params={{ id: media.id }} />
+              ) : (
+                <RouteLink to="/shows/$id" params={{ id: media.id }} />
+              )}
             </Button>
-          )}
-        </Row>
-      </Box>
-    </div>
+          </Row>
+        </div>
+      </div>
+    </section>
   );
 }
 
-/** The banner's frame, held while the featured pick is on its way. */
 export function HeroSkeleton() {
-  const s = useStyles(sDefinition);
-
   return (
-    <div className={classes(s.hero)} aria-hidden>
-      <Box fill>
-        <Skeleton h="100%" w="100%" radius={0} />
-      </Box>
+    <div className={layout.bleed} aria-hidden>
+      <div className={`${layout.mast} ${layout.home}`}>
+        <Box fill>
+          <Skeleton h="100%" w="100%" radius={0} />
+        </Box>
+      </div>
     </div>
   );
 }

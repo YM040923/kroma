@@ -11,7 +11,7 @@ export function UpdateCallout() {
   const { client } = useAuth();
   const { data } = usePoll(['admin', 'updates'], () => client.admin.updates(), UPDATES_POLL_MS);
   const latest = data?.latest;
-  if (!data?.available || !latest) {
+  if (!data?.available || data.updateSource === 'windows-package' || !latest) {
     return null;
   }
   const title =

@@ -78,7 +78,7 @@ fn test_config(data_dir: PathBuf) -> Config {
         data_dir,
         tmdb_language: "en-US".into(),
         mail_relay_url: Some("http://127.0.0.1:1".into()),
-        releases_url: Some("http://127.0.0.1:1".into()),
+        server_updates: crate::config::ServerUpdates::CustomFeed("http://127.0.0.1:1".into()),
         ..Default::default()
     }
 }
@@ -101,6 +101,13 @@ pub fn test_app() -> TestApp {
     build_app(None, &[], None)
 }
 
+pub fn test_app_windows_package() -> TestApp {
+    build_app_with(None, &[], |config| {
+        config.server_updates = crate::config::ServerUpdates::WindowsPackage;
+        config.update_dir = Some(config.data_dir.join("updater"));
+    })
+}
+
 /// Like [`test_app`] but speaking to a mail relay at `relay_url`, a stub a
 /// test runs on a local port, rather than the closed port the default aims at.
 pub fn test_app_with_mail_relay(relay_url: &str) -> TestApp {
@@ -111,7 +118,7 @@ pub fn test_app_with_mail_relay(relay_url: &str) -> TestApp {
 /// runs on a local port.
 pub fn test_app_with_releases(releases_url: &str) -> TestApp {
     build_app_with(None, &[], |config| {
-        config.releases_url = Some(releases_url.to_string());
+        config.server_updates = crate::config::ServerUpdates::CustomFeed(releases_url.to_string());
     })
 }
 

@@ -61,9 +61,9 @@ const Listen = z
   .strict();
 
 const FsRoot = z
-  .enum(['module', 'media', 'downloads', 'temp'])
+  .enum(['module', 'media', 'selected', 'downloads', 'temp'])
   .describe(
-    "A named place, never a raw path: the module's own data, the library (read-only), the download folder, scratch space.",
+    "A named place, never a raw path: the module's own data, library roots, one administrator-selected folder for this module, download folders, or scratch space.",
   );
 
 /** The `permissions` block of a `module.json`. What it does not declare is denied. */

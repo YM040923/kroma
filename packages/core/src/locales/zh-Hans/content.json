@@ -36,6 +36,7 @@
   "content.heroPrevious": "上一个片目",
   "content.heroResume": "继续轮播",
   "content.heroShow": "显示 {title}",
+  "content.heroShuffle": "换一批",
   "content.hideMissingEpisodes": "收起缺失的 {count} 集",
   "content.homeEmpty": "你的媒体库是空的。",
   "content.homeEmptyHint": "添加到媒体库的电影和剧集会显示在这里。",

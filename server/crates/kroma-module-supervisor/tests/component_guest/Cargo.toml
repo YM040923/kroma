@@ -10,9 +10,13 @@ license = "AGPL-3.0-or-later"
 name = "module"
 path = "src/bin/module.rs"
 
+[features]
+default = ["storage"]
+storage = ["kroma-module-runtime/storage", "kroma-module-sdk/storage"]
+
 [dependencies]
-kroma-module-runtime = { path = "../../../kroma-module-runtime", features = ["storage"] }
-kroma-module-sdk = { path = "../../../kroma-module-sdk", features = ["storage"] }
+kroma-module-runtime = { path = "../../../kroma-module-runtime" }
+kroma-module-sdk = { path = "../../../kroma-module-sdk" }
 anyhow = "1"
 axum = { version = "0.8", default-features = false, features = ["json", "macros", "query", "form", "matched-path"] }
 tokio = { version = "1", default-features = false, features = ["sync", "macros", "rt", "time", "io-util"] }

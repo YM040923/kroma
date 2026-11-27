@@ -15,7 +15,7 @@ pub(crate) fn encode_webp_capped(src: &Path, out: &Path, max_width: u32) -> bool
     // `is_some_and`, not `is_none_or`: an unreadable width must mean "do not
     // resize", never "resize anyway" (which would upscale).
     let too_wide = probe_width(src).is_some_and(|w| w > max_width);
-    let mut cwebp = Command::new("cwebp");
+    let mut cwebp = kroma_primitives::process::new("cwebp");
     cwebp.args(["-quiet", "-q", WEBP_QUALITY, "-m", WEBP_EFFORT]);
     if too_wide {
         cwebp.args(["-resize", &max_width.to_string(), "0"]);
@@ -35,7 +35,7 @@ pub(crate) fn encode_webp_capped(src: &Path, out: &Path, max_width: u32) -> bool
 }
 
 pub(super) fn probe_width(src: &Path) -> Option<u32> {
-    let out = Command::new("ffprobe")
+    let out = kroma_primitives::process::new("ffprobe")
         .args([
             "-v",
             "error",
@@ -64,7 +64,7 @@ pub(super) fn encode_webp(src: &Path, out: &Path) -> bool {
 /// Prefers `cwebp`; falls back to ffmpeg's libwebp encoder. Shared with the
 /// storyboard sheet, which wants a lower quality than posters.
 pub(crate) fn encode_webp_quality(src: &Path, out: &Path, quality: &str) -> bool {
-    let cwebp = Command::new("cwebp")
+    let cwebp = kroma_primitives::process::new("cwebp")
         .args(["-quiet", "-q", quality, "-m", WEBP_EFFORT])
         .arg(src)
         .arg("-o")
@@ -78,7 +78,7 @@ pub(crate) fn encode_webp_quality(src: &Path, out: &Path, quality: &str) -> bool
 }
 
 fn ffmpeg_webp(src: &Path, out: &Path, quality: &str, vf: Option<&str>) -> bool {
-    let mut ffmpeg = Command::new("ffmpeg");
+    let mut ffmpeg = kroma_primitives::process::new("ffmpeg");
     ffmpeg
         .args(["-y", "-loglevel", "error", "-threads", "1"])
         .args(input::file(src));
@@ -103,7 +103,7 @@ mod tests {
         let src = dir.path().join("src.png");
         let low = dir.path().join("low.webp");
         let high = dir.path().join("high.webp");
-        let drawn = Command::new("ffmpeg")
+        let drawn = kroma_primitives::process::new("ffmpeg")
             .args(["-y", "-loglevel", "error"])
             .args(input::generated("testsrc2=size=320x180:rate=1"))
             .args(["-frames:v", "1"])

@@ -8,6 +8,7 @@ import {
   type AccountPatch,
   AuthConfig,
   AuthResult,
+  HomeLayout,
   Invite,
   InviteCheck,
   InviteCreated,
@@ -16,6 +17,7 @@ import {
   ResetCheck,
   SessionInfo,
   SessionResult,
+  SidebarLayout,
   User,
 } from './schemas';
 
@@ -74,6 +76,19 @@ export default function accountsApi(ctx: RequestContext) {
 
     /** The currently-authenticated user (requires a token). */
     me: () => ctx.get('/auth/me', Me),
+
+    /** The home component order and visibility saved for this account. */
+    homeLayout: () => ctx.get('/auth/me/home-layout', HomeLayout),
+
+    /** Replace both lists together. Send two empty arrays to restore the original home. */
+    setHomeLayout: (layout: HomeLayout) =>
+      ctx.put('/auth/me/home-layout', HomeLayout, { body: layout }),
+
+    sidebarLayout: () => ctx.get('/auth/me/sidebar-layout', SidebarLayout),
+
+    /** Replace sidebar visibility only. An empty list restores all default buttons. */
+    setSidebarLayout: (layout: SidebarLayout) =>
+      ctx.put('/auth/me/sidebar-layout', SidebarLayout, { body: layout }),
 
     /** Update the signed-in account's own profile. Sends only the keys present. */
     update: (patch: AccountPatch) => ctx.patch('/auth/me', Me, { body: patch }),

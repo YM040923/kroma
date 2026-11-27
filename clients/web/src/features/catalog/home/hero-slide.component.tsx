@@ -3,7 +3,6 @@ import { qualityBadge, qualityBadgeForVideo, synopsisLead } from '@kromatv/core'
 import { useT } from '@kromatv/ui';
 import {
   Badge,
-  Box,
   Button,
   IconButton,
   qualityTone,
@@ -19,6 +18,8 @@ import {
   entryTitle,
   type HomeEntry,
 } from '#web/features/catalog/home/entries';
+import { HeroIntro } from '#web/features/catalog/hero-art.component';
+import layout from '#web/features/catalog/hero-layout.module.css';
 import { entryLink } from '#web/features/catalog/home/entry-link';
 import { useMyList } from '#web/shared/lib/mylist';
 import { RouteLink } from '#web/shared/ui/route-link.component';
@@ -26,18 +27,14 @@ import { RouteLink } from '#web/shared/ui/route-link.component';
 const SYNOPSIS_BUDGET = 240;
 
 const sDefinition = styles({
-  copy: {
-    maxW: 640,
-    animationKeyframes: 'fade-in',
-    animationDuration: '600ms',
-    animationTimingFunction: 'var(--ease-out)',
-  },
+  number: { fontVariantNumeric: 'tabular-nums' },
 });
 
 export interface HeroSlideProps {
   entry: HomeEntry;
   note: string;
-  position: string;
+  current: number;
+  total: number;
 }
 
 function SlideFacts({ entry }: Readonly<{ entry: HomeEntry }>) {
@@ -47,8 +44,8 @@ function SlideFacts({ entry }: Readonly<{ entry: HomeEntry }>) {
     entry.type === 'show' ? qualityBadgeForVideo(entry.show.video) : qualityBadge(entry.item);
 
   return (
-    <Row wrap gap={12} mb={14}>
-      {rating ? <Text variant="meta" color="accent">{`${rating.toFixed(1)}★`}</Text> : null}
+    <Row wrap gap={8} mb={10}>
+      {rating ? <Text variant="meta" color="accentText">{`${rating.toFixed(1)}★`}</Text> : null}
       <Text variant="meta" color="textMuted">
         {entryFacts(t, entry).join(' · ')}
       </Text>
@@ -64,6 +61,7 @@ function SlideSave({ id }: Readonly<{ id: SubjectId }>) {
 
   return (
     <IconButton
+      diameter={37}
       variant="glass"
       icon={saved ? 'bookmark-filled' : 'bookmark'}
       label={t(saved ? 'content.removeFromList' : 'content.addToList')}
@@ -78,13 +76,14 @@ function SlideActions({ entry }: Readonly<{ entry: HomeEntry }>) {
   const t = useT();
 
   return (
-    <Row wrap gap={12}>
+    <Row wrap gap={8}>
       {entry.type === 'movie' ? (
-        <Button icon="player-play-filled" label={t('content.play')} asChild>
+        <Button size="sm" icon="player-play-filled" label={t('content.play')} asChild>
           <RouteLink to="/watch/$id" params={{ id: entry.item.id }} />
         </Button>
       ) : null}
       <Button
+        size="sm"
         variant={entry.type === 'movie' ? 'glass' : undefined}
         icon="info-circle"
         label={t('content.moreInfo')}
@@ -98,25 +97,25 @@ function SlideActions({ entry }: Readonly<{ entry: HomeEntry }>) {
 }
 
 /** What one hero title says about itself, and the ways into it. */
-export function HeroSlide({ entry, note, position }: Readonly<HeroSlideProps>) {
+export function HeroSlide({ entry, note, current, total }: Readonly<HeroSlideProps>) {
   const s = useStyles(sDefinition);
+  const t = useT();
   const synopsis = synopsisLead(entryMetadata(entry)?.overview, SYNOPSIS_BUDGET);
 
   return (
-    <Box style={s.copy} accessibilityLabel={position} aria-roledescription="slide">
-      <Text variant="overline" color="accent" mb={12}>
-        {note}
-      </Text>
-      <Text variant="hero" accessibilityRole="header" lines={2} mb={14}>
-        {entryTitle(entry)}
-      </Text>
+    <div className={layout.homeCopy} role="group" aria-label={t('content.heroPosition', { current, total })} aria-roledescription="slide">
+      <Row wrap gap={10}>
+        <Text variant="overline">{note}</Text>
+        {total > 1 ? (
+          <Text variant="overline" aria-hidden style={s.number}>
+            {`${String(current).padStart(2, '0')} / ${String(total).padStart(2, '0')}`}
+          </Text>
+        ) : null}
+      </Row>
+      <h1 className={layout.title}>{entryTitle(entry)}</h1>
       <SlideFacts entry={entry} />
-      {synopsis ? (
-        <Text variant="body" maxW={560} mb={22} color="text/82">
-          {synopsis}
-        </Text>
-      ) : null}
+      {synopsis ? <HeroIntro>{synopsis}</HeroIntro> : null}
       <SlideActions entry={entry} />
-    </Box>
+    </div>
   );
 }

@@ -11,7 +11,9 @@ use crate::Pool;
 pub struct TitleFacts {
     pub id: String,
     pub show: bool,
+    pub loose_video: bool,
     pub library: String,
+    pub certification: Option<String>,
     pub tmdb_id: Option<u64>,
     pub year: Option<u32>,
     pub runtime_ms: Option<i64>,
@@ -40,6 +42,7 @@ struct Slim {
     genres: Vec<String>,
     tmdb_genre_ids: Vec<u32>,
     rating: Option<f32>,
+    certification: Option<String>,
     backdrop_url: Option<String>,
     overview: Option<String>,
     cast: Vec<Named>,
@@ -60,12 +63,12 @@ struct Crew {
 }
 
 const MOVIES: &str = "SELECT id, year, duration_ms, \
-       CAST(strftime('%s', added_at) AS INTEGER), library, metadata, 0 \
+       CAST(strftime('%s', added_at) AS INTEGER), library, metadata, 0, kind = 'video' \
      FROM items WHERE kind IN ('movie','video')";
 
 const SHOWS: &str = "SELECT s.id, s.year, NULL, \
        CAST(strftime('%s', s.added_at) AS INTEGER), s.library, s.metadata, \
-       (SELECT COUNT(*) FROM items i WHERE i.show_id = s.id) \
+       (SELECT COUNT(*) FROM items i WHERE i.show_id = s.id), 0 \
      FROM shows s";
 
 /// Every movie and loose video, then every show. Never an episode.
@@ -89,6 +92,7 @@ pub fn title_facts(pool: &Pool) -> Result<Vec<TitleFacts>> {
                     added_at: r.get::<_, Option<i64>>(3)?.unwrap_or(0),
                     library: r.get(4)?,
                     episodes: r.get(6)?,
+                    loose_video: r.get(7)?,
                 },
                 slim,
             ))
@@ -108,6 +112,7 @@ struct Row {
     added_at: i64,
     library: String,
     episodes: u32,
+    loose_video: bool,
 }
 
 fn facts(row: Row, slim: Slim) -> TitleFacts {
@@ -115,7 +120,9 @@ fn facts(row: Row, slim: Slim) -> TitleFacts {
     TitleFacts {
         id: row.id,
         show: row.show,
+        loose_video: row.loose_video,
         library: row.library,
+        certification: slim.certification,
         tmdb_id: (slim.tmdb_id != 0).then_some(slim.tmdb_id),
         year: row.year,
         runtime_ms: row.runtime_ms,

@@ -82,6 +82,30 @@ async fn a_granted_account_browses_only_the_libraries_it_was_given() {
 }
 
 #[tokio::test]
+async fn library_navigation_uses_the_saved_names_and_grants_without_waiting_for_a_scan() {
+    use crate::services::settings::{set_library_defs, LibraryDef};
+    let t = test_app();
+    let (movies, _) = demo_library_ids();
+    let (viewer_id, token) = seed_session(&t.state, "nav@test.dev", "viewer", &[Permission::Playback]);
+    grant_libraries(&t.state, &viewer_id, std::slice::from_ref(&movies));
+    let existing = LibraryDef { id: movies.clone(), name: "Renamed".into(), kind: "movies".into(), folders: vec![], auto_scan: true };
+    let added = LibraryDef { id: "new".into(), name: "New library".into(), kind: "shows".into(), ..existing.clone() };
+    set_library_defs(&t.state.settings, &t.state.db, &[existing, added]);
+    let (_, member) = get(&t.app, "/api/libraries", Some(&token)).await;
+    assert_eq!(member.as_array().unwrap().len(), 1);
+    assert_eq!(member[0]["id"], movies);
+    assert_eq!(member[0]["name"], "Renamed");
+    assert!(member[0]["itemCount"].as_u64().unwrap() > 0);
+    let (_, owner) = get(&t.app, "/api/libraries", Some(&t.token)).await;
+    assert_eq!(owner.as_array().unwrap().len(), 2);
+    let new = owner.as_array().unwrap().iter().find(|row| row["id"] == "new").unwrap();
+    assert_eq!(new["kind"], "shows");
+    assert_eq!(new["itemCount"], 0);
+    set_library_defs(&t.state.settings, &t.state.db, &[]);
+    assert_eq!(get(&t.app, "/api/libraries", Some(&t.token)).await.1, json!([]));
+}
+
+#[tokio::test]
 async fn naming_an_ungranted_library_outright_lists_nothing_rather_than_everything() {
     let h = household_where_the_viewer_only_sees_films();
     let (_movies_lib, shows_lib) = demo_library_ids();

@@ -7,7 +7,9 @@ use std::sync::Arc;
 use kroma_http::egress::{Gateway, BLOCKED};
 use kroma_http::{Fetch, Loopback};
 use kroma_module_host::{NetworkAction, NetworkAsk, NetworkFlow, NetworkPolicy, NetworkRoute};
-use kroma_wasm_host::{FetchRequest, Header, NetPolicy, Preopen, Request, Response, Verdict};
+use kroma_wasm_host::{FetchRequest, Header, NetPolicy, Request, Response, Verdict};
+
+use super::download::DownloadRoots;
 
 const HOST_API_PREFIX: &str = "/api/_host/";
 const PEER_PREFIX: &str = "/api/module/";
@@ -23,7 +25,7 @@ pub(super) struct Outside {
     pub(super) gateway: Gateway,
     pub(super) network: Arc<dyn NetworkPolicy>,
     pub(super) no_network: bool,
-    pub(super) roots: Vec<Preopen>,
+    pub(super) downloads: DownloadRoots,
     pub(super) watch: crate::asked::Watch,
 }
 
@@ -153,12 +155,6 @@ impl Outside {
             format!("{BLOCKED}: a contained module that declares no permissions has no network")
         })
     }
-
-    fn holds_for_writing(&self, path: &Path) -> bool {
-        let held = super::files::is_within(path, &self.roots, true);
-        self.watch.file(&path.to_string_lossy(), true, held);
-        held
-    }
 }
 
 impl NetPolicy for Outside {
@@ -188,18 +184,24 @@ impl NetPolicy for Outside {
         let Some(target) = kroma_http::address::web_target(&request.url) else {
             return Verdict::Block(format!("{BLOCKED}: not a plain http or https URL"));
         };
-        let path = Path::new(destination);
-        if !self.holds_for_writing(path) {
-            return Verdict::Block(format!(
-                "{destination} is not in a folder this module may write"
-            ));
-        }
+        let file = self.downloads.destination(Path::new(destination));
+        self.watch.file(destination, true, file.is_ok());
+        let file = match file {
+            Ok(file) => file,
+            Err(e) => return Verdict::Block(format!("cannot write {destination}: {e}")),
+        };
         if let Some(reason) = self.refusal(request, &target) {
             return Verdict::Block(reason);
         }
         let username = Gateway::username(&request.purpose, request.public_only, request.sealed);
-        let outcome =
-            Self::carried(request).carry_download(&self.gateway, &username, &request.url, path);
+        let outcome = file.receive(|fd| {
+            Self::carried(request).carry_download_to_file(
+                &self.gateway,
+                &username,
+                &request.url,
+                fd,
+            )
+        });
         self.annotate(request, &target.host, target.port, &outcome);
         match outcome {
             Ok(response) => Verdict::Allow(response_of(response)),

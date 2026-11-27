@@ -43,21 +43,24 @@ const HOME_LAYOUTS: readonly SectionLayoutRequest[] = ['hero', 'spotlight', 'ran
 
 /** Query factories capture the API client owned by this router. */
 export function createQueries(client: QueryClient) {
+  const viewerKey = (viewer?: string) => viewer ? ['viewer', client.baseUrl, viewer] : [];
+  const contentsKey = (viewer: string, library: LibraryId, kind: string) => ['libraries', ...viewerKey(viewer), 'contents', library, kind] as const;
   const catalogQueries = {
     /** The libraries this account was granted, for the browse page's scope. */
-    libraries: () =>
+    libraries: (viewer?: string) =>
       queryOptions({
-        queryKey: ['libraries'] as const,
-        staleTime: 5 * 60_000,
+        queryKey: ['libraries', ...viewerKey(viewer)] as const,
+        staleTime: viewer ? 30_000 : 5 * 60_000,
+        refetchOnWindowFocus: !!viewer,
         queryFn: async (): Promise<Library[]> => client.media.libraries(),
       }),
 
     /** All movies as a grid draws them, art pre-resolved. `library` narrows the
      * list server-side (`GET /movies?library=`), so a library scope is never a
      * client-side slice of the whole catalogue. */
-    moviesView: (library?: LibraryId) =>
+    moviesView: (library?: LibraryId, viewer?: string) =>
       queryOptions({
-        queryKey: ['movies', 'view', library ?? 'all'] as const,
+        queryKey: viewer && library ? contentsKey(viewer, library, 'movies') : ['movies', 'view', library ?? 'all', ...viewerKey(viewer)] as const,
         queryFn: async (): Promise<MovieCardView[]> => {
           const c = client;
           return (await c.media.movieCards(library)).map((m) => toMovieCardView(c, m));
@@ -65,9 +68,9 @@ export function createQueries(client: QueryClient) {
       }),
 
     /** All shows, art pre-resolved. `library` narrows server-side. */
-    showsView: (library?: LibraryId) =>
+    showsView: (library?: LibraryId, viewer?: string) =>
       queryOptions({
-        queryKey: ['shows', 'view', library ?? 'all'] as const,
+        queryKey: viewer && library ? contentsKey(viewer, library, 'shows') : ['shows', 'view', library ?? 'all', ...viewerKey(viewer)] as const,
         queryFn: async (): Promise<ShowView[]> => {
           const c = client;
           return (await c.media.showCards(library)).map((s) => toShowView(c, s));
@@ -92,10 +95,17 @@ export function createQueries(client: QueryClient) {
         },
       }),
 
-    photos: (library?: LibraryId, month?: string) =>
-      client.query.media.photos({ library, month }),
+    photos: (library?: LibraryId, month?: string, viewer?: string) => {
+      const options = client.query.media.photos({ library, month });
+      const key = viewer && library ? [...contentsKey(viewer, library, 'photos'), month ?? null] : [...options.queryKey, ...viewerKey(viewer)];
+      return { ...options, queryKey: key };
+    },
 
-    other: (library?: LibraryId) => client.query.media.other(library),
+    other: (library?: LibraryId, viewer?: string) => {
+      const options = client.query.media.other(library);
+      const key = viewer && library ? contentsKey(viewer, library, 'other') : [...options.queryKey, ...viewerKey(viewer)];
+      return { ...options, queryKey: key };
+    },
 
     shows: () => client.query.media.shows(),
 
@@ -164,23 +174,43 @@ export function createQueries(client: QueryClient) {
 
     upNext: (showId: ShowId) => client.query.playback.upNext(showId),
 
-    /** The player payload: the item (art/stream URLs resolved) + its upcoming
-     * episodes. `next` (the immediate one) drives autoplay; the full list fills the
-     * player's "up next" episode rail. */
-    watch: (id: ItemId) =>
+    following: (id: ItemId) => client.query.playback.following(id),
+
+    resumeProgress: (id: ItemId, viewer: string) =>
       queryOptions({
-        queryKey: ['watch', id] as const,
-        queryFn: async () => {
-          const c = client;
-          const [item, following] = await Promise.all([c.media.item(id), c.playback.following(id)]);
-          return { item: toMovieView(c, item), next: following[0] ?? null, following };
-        },
+        queryKey: ['resume-progress', viewer, id] as const,
+        staleTime: 0,
+        networkMode: 'always',
+        retry: false,
+        queryFn: () => client.playback.itemProgress(id).catch(() => null),
       }),
   } as const;
 
   // Only mount once `ready && user`.
   const userQueries = {
     home: () => client.query.media.homeCards({ layouts: HOME_LAYOUTS }),
+
+    homeDiscovery: (viewer: string) => queryOptions({
+      queryKey: [...client.query.media.homeCards({ layouts: HOME_LAYOUTS }).queryKey, 'discovery', client.baseUrl, viewer] as const,
+      queryFn: () => client.media.homeDiscovery(),
+      staleTime: 5 * 60_000,
+      retry: false,
+    }),
+
+    sidebarLayout: (viewer: string) => queryOptions({
+      queryKey: ['account-sidebar-layout', client.baseUrl, viewer] as const,
+      queryFn: () => client.accounts.sidebarLayout(),
+      staleTime: 30_000,
+      refetchOnWindowFocus: true,
+      retry: false,
+    }),
+
+    homeLayout: (viewer: string) => queryOptions({
+      queryKey: ['account-home-layout', client.baseUrl, viewer] as const,
+      queryFn: () => client.accounts.homeLayout(),
+      staleTime: 30_000,
+      retry: false,
+    }),
 
     continueWatching: () => client.query.playback.continueWatching(),
 

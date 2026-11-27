@@ -65,6 +65,11 @@ pub async fn put_settings(
     Json(mut patch): Json<BTreeMap<String, Value>>,
 ) -> Result<Response, Response> {
     super::require(&user, Permission::SettingsManage)?;
+    if state.config.server_updates.feed().is_none()
+        && patch.keys().any(|key| crate::services::updates::feed_setting(key))
+    {
+        return Err(lerr(super::user_locale(&user), StatusCode::CONFLICT, "admin.updatesWindowsPackageHint"));
+    }
     patch.retain(|key, _| !KEYS_WITH_THEIR_OWN_ENDPOINT.contains(&key.as_str()));
     if let Some(list) = patch.get("libraries").cloned() {
         let refused = query(&state.db, move |pool| settings::refusal(&pool, &list)).await?;

@@ -58,7 +58,8 @@ pub async fn health(
         instance_id: state.instance_id.clone(),
         version: crate::VERSION,
         min_client: crate::model::MIN_CLIENT,
-        update_channel: is_lan.then(|| crate::services::updates::channel(&state.settings)),
+        update_channel: (is_lan && state.config.server_updates.feed().is_some())
+            .then(|| crate::services::updates::channel(&state.settings)),
         ffprobe: state.ffprobe_available,
         libraries: counts.libraries,
         items: counts.items,

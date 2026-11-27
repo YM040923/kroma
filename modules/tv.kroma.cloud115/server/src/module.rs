@@ -52,7 +52,7 @@ fn run_sync<S: HostCtx + Clone + Send + Sync + 'static>(host: &S) -> anyhow::Res
     }
     let config = crate::settings::Config::load();
     let hours = config.options.auto_sync_hours;
-    if hours == 0 {
+    if !config.runnable() || hours == 0 {
         return Ok(());
     }
     let now = crate::events::unix_now();

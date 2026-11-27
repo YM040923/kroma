@@ -16,7 +16,8 @@ const MAX_PACKAGE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const OFFICIAL_DOWNLOADS: &str = "https://github.com/kromatv/kroma/releases/download/";
 
 pub(super) fn ready(state: &SharedState) -> bool {
-    state.config.install == Install::Synology
+    state.config.server_updates.feed().is_some()
+        && state.config.install == Install::Synology
         && state
             .config
             .self_update_dir
@@ -51,7 +52,7 @@ fn apply(state: &SharedState, op: &mut Operation) -> Result<()> {
     let payload = dir.join(op.target.build.to_string());
     if !is_payload(&payload) {
         let package = super::package_of(state, &op.target)?;
-        official(state.config.releases_url.as_deref(), &package.url)?;
+        official(&state.config.server_updates, &package.url)?;
         let spk = dir.join(format!("{}.spk.partial", op.target.build));
         download(&package.url, &spk)?;
         let unpacked = verify(&spk, &package.sha256).and_then(|()| {
@@ -72,11 +73,15 @@ fn apply(state: &SharedState, op: &mut Operation) -> Result<()> {
     Ok(())
 }
 
-fn official(feed: Option<&str>, url: &str) -> Result<()> {
-    if feed.is_none() && !url.starts_with(OFFICIAL_DOWNLOADS) {
-        bail!("The package is not hosted by the official KROMA releases.");
+fn official(source: &crate::config::ServerUpdates, url: &str) -> Result<()> {
+    use crate::config::ServerUpdates;
+    match source {
+        ServerUpdates::WindowsPackage => bail!(super::MANUAL_PACKAGE_HINT),
+        ServerUpdates::ProjectFeed if !url.starts_with(OFFICIAL_DOWNLOADS) => {
+            bail!("The package is not hosted by the official KROMA releases.")
+        }
+        _ => Ok(()),
     }
-    Ok(())
 }
 
 fn is_payload(dir: &Path) -> bool {

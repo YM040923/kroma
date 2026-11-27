@@ -3,10 +3,10 @@
   "schemaVersion": 3,
   "id": "tv.kroma.cloud115",
   "name": "115 Cloud",
-  "version": "0.4.12",
+  "version": "0.4.20",
   "description": "Mirror a 115 drive folder into the library as .strm entries and play them by redirecting to the drive's own link, so nothing streams through this server.",
   "engines": {
-    "server": ">=0.1.39"
+    "server": ">=0.1.42"
   },
   "contributes": [
     {
@@ -38,16 +38,12 @@
             "*.aliyuncs.com"
           ],
           "ports": [443]
-        },
-        {
-          "purpose": "subscription-source",
-          "to": ["lan"]
         }
       ]
     },
     "fs": {
-      "read": ["media", "module"],
-      "write": ["media", "module"]
+      "read": ["module", "selected"],
+      "write": ["module", "selected"]
     }
   }
 }

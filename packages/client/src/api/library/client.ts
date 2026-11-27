@@ -56,7 +56,7 @@ export default function libraryApi(ctx: RequestContext) {
       ctx.patch('/admin/scrape', ScrapeState, { body: patch }),
 
     /** Browse server-side directories for the folder picker. An empty or absent
-     * `path` returns the roots (NAS volumes, or `/` in dev). */
+     * `path` returns Windows drives, NAS volumes, or the Unix root. */
     browse: (path?: string) => ctx.get('/admin/libraries/browse', AdminFsList, { query: { path } }),
   };
 }

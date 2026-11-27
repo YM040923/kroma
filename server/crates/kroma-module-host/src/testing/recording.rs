@@ -92,6 +92,9 @@ impl<H: HostCtx> HostCtx for Recording<H> {
     fn set_settings(&self, patch: BTreeMap<String, serde_json::Value>) {
         self.inner.set_settings(patch);
     }
+    fn commit_selected_folders(&self, module_id: &str, folders: &[String]) -> Result<bool, String> {
+        self.inner.commit_selected_folders(module_id, folders)
+    }
     records_into_log!();
     fn trigger_job(&self, key: &'static str, reason: &'static str) {
         self.inner.trigger_job(key, reason);

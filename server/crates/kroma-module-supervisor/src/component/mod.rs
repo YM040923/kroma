@@ -4,6 +4,7 @@
 
 mod answer;
 mod database;
+mod download;
 mod files;
 mod lan;
 mod media;
@@ -16,7 +17,7 @@ mod startup;
 use answer::answer;
 use pool::tick_forever;
 pub(crate) use pool::{Pool, WORKER_LIFETIME};
-pub use roots::{FolderRoots, Folders};
+pub use roots::{FolderRoots, Folders, SelectedRoot, SelectedRoots};
 
 use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -58,11 +59,14 @@ fn bind_module_listener(endpoint: &super::endpoint::Endpoint) -> std::io::Result
     UnixListener::from_std(listener)
 }
 
+/// Bind a loopback port and hand back both the listener and the port it got, so
+/// the endpoint records the port the module truly answers on.
 #[cfg(not(unix))]
-fn bind_module_listener(endpoint: &super::endpoint::Endpoint) -> std::io::Result<ModuleListener> {
-    let listener = std::net::TcpListener::bind(("127.0.0.1", endpoint.port))?;
+fn bind_tcp_listener() -> std::io::Result<(ModuleListener, u16)> {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+    let port = listener.local_addr()?.port();
     listener.set_nonblocking(true)?;
-    TcpListener::from_std(listener)
+    Ok((TcpListener::from_std(listener)?, port))
 }
 
 fn limits_of(needs: ComponentNeeds) -> Limits {
@@ -140,8 +144,22 @@ impl Supervisor {
             .spawn(kroma_egress::serve_tcp(TcpListener::from_std(tcp)?, policy))
             .abort_handle()];
 
-        let endpoint = self.assign_endpoint(id)?;
-        let listener = bind_module_listener(&endpoint)?;
+        // Bind first, then read the real port back: a port reserved earlier would
+        // have to be released for the listener to bind it, and another process
+        // could claim it in the gap. This way the endpoint always matches the
+        // socket the module actually answers on.
+        #[cfg(not(unix))]
+        let (endpoint, listener) = {
+            let (listener, port) = bind_tcp_listener()?;
+            let endpoint = self.assign_endpoint_at(id, port)?;
+            (endpoint, listener)
+        };
+        #[cfg(unix)]
+        let (endpoint, listener) = {
+            let endpoint = self.assign_endpoint(id)?;
+            let listener = bind_module_listener(&endpoint)?;
+            (endpoint, listener)
+        };
         let say = {
             let log_line = self.cfg.log_line.clone();
             let id = id.to_string();
@@ -202,6 +220,11 @@ impl Supervisor {
             .filter(|p| p.media.contains(&MediaTool::Decode))
             .map(|_| Arc::new(media::ModuleMedia::new(roots.clone())));
         let watch = Watch::over(id, self.watching.get().cloned());
+        let module_data_dir = if cfg!(windows) {
+            "/module".to_string()
+        } else {
+            own_dir.to_string_lossy().into_owned()
+        };
         let programs = Arc::new(
             programs::Programs::new(
                 id,
@@ -233,6 +256,10 @@ impl Supervisor {
                 "KROMA_DATA_DIR".to_string(),
                 self.cfg.data_dir.to_string_lossy().into_owned(),
             ),
+            // This is a guest path matching the module's own preopen. The
+            // server data-dir env above is a host path and cannot be used by a
+            // WASI guest on Windows.
+            ("KROMA_MODULE_DATA_DIR".to_string(), module_data_dir),
             ("TMPDIR".to_string(), "/tmp".to_string()),
         ];
         for name in LOG_FILTERS {
@@ -257,7 +284,7 @@ impl Supervisor {
                 gateway,
                 network: wiring.network.0.clone(),
                 no_network,
-                roots: roots.clone(),
+                downloads: download::DownloadRoots::open(&roots)?,
                 watch: watch.clone(),
             }),
             env,

@@ -1,8 +1,8 @@
 //! The Cloud115 module as a component (its `.kmod` entrypoint).
 //!
 //! It mounts the `cloud115` provider point (`/_port/cloud115/...`, host-token
-//! protected by the runtime) so the core can search, price, acquire and stage
-//! uploads, and serves its admin page through
+//! protected by the runtime) for explicitly requested staged uploads,
+//! and serves its admin page through
 //! [`kroma_cloud115::routes`]. Playback goes through the `.strm` entries the
 //! module writes.
 

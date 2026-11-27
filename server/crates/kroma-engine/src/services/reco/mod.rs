@@ -78,6 +78,18 @@ impl Viewer {
         user_id: &str,
         now: i64,
     ) -> Self {
+        let world = state.home.world.ranked(state);
+        Self::with_world(state, pool, catalog, user_id, now, &world)
+    }
+
+    pub(crate) fn with_world(
+        state: &SharedState,
+        pool: &Pool,
+        catalog: &Catalog,
+        user_id: &str,
+        now: i64,
+        world: &[crate::services::sections::world::Ranked],
+    ) -> Self {
         let played = crate::services::settings::played_percent(&state.settings);
         let history = db::engagements(pool, user_id, played).unwrap_or_else(|e| {
             tracing::warn!(target: "reco", "reading a viewer's history failed: {e:#}");
@@ -97,10 +109,7 @@ impl Viewer {
             .map(|(user, _)| user.as_str())
             .collect::<std::collections::HashSet<_>>()
             .len();
-        let world: Vec<String> = state
-            .home
-            .world
-            .ranked(state)
+        let world: Vec<String> = world
             .iter()
             .filter_map(|(show, tmdb)| catalog.by_provider(*show, *tmdb))
             .map(|title| title.facts.id.clone())

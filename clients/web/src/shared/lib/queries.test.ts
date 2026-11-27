@@ -1,4 +1,4 @@
-import { ItemId, ShowId } from '@kromatv/client/media';
+import { ItemId, LibraryId, ShowId } from '@kromatv/client/media';
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import { c, installHarness, run } from './queries.fixture';
 
@@ -21,6 +21,18 @@ describe('the cache keys', () => {
       catalogQueries.item(ItemId.parse('m1')).queryKey,
     );
     expect(userQueries.notifications().queryKey).toEqual(userQueries.notifications().queryKey);
+  });
+
+  it('keeps two viewers’ scoped movies and shows apart and invalidates them with their library list', () => {
+    const library = LibraryId.parse('lib-one');
+    for (const listing of [catalogQueries.moviesView, catalogQueries.showsView]) {
+      const first = listing(library, 'one').queryKey;
+      expect(first).not.toEqual(listing(library, 'two').queryKey);
+      const grants = catalogQueries.libraries('one').queryKey;
+      expect(first.slice(0, grants.length)).toEqual(grants);
+    }
+    expect(userQueries.homeLayout('one').queryKey).not.toEqual(userQueries.sidebarLayout('one').queryKey);
+    expect(userQueries.sidebarLayout('one').queryKey).not.toEqual(userQueries.sidebarLayout('two').queryKey);
   });
 
   it('separate the queries that would otherwise collide', () => {

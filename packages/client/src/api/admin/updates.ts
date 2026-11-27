@@ -39,10 +39,9 @@ export type UpdateOperation = z.infer<typeof UpdateOperation>;
 
 /** `GET /api/admin/updates`: the running build, the last answer of the
  * owner's channel, and whether it is newer. */
-export const UpdateStatus = z.object({
+const RunningServer = z.object({
   version: z.string(),
   build: z.number(),
-  channel: z.enum(['Stable', 'Canary']),
   auto: z.boolean(),
   autoInstall: z.boolean().default(false),
   latest: UpdateRelease.nullish(),
@@ -56,4 +55,8 @@ export const UpdateStatus = z.object({
   operation: UpdateOperation.nullish(),
   restartable: z.boolean().default(false),
 });
+export const UpdateStatus = z.discriminatedUnion('updateSource', [
+  RunningServer.extend({ updateSource: z.literal('windows-package'), channel: z.undefined().optional() }),
+  RunningServer.extend({ updateSource: z.undefined().optional(), channel: z.enum(['Stable', 'Canary']) }),
+]);
 export type UpdateStatus = z.infer<typeof UpdateStatus>;

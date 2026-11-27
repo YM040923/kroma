@@ -22,6 +22,7 @@ const domains = {
   },
   playback: {
     progress: endpoint(),
+    itemProgress: endpoint(),
     continueWatching: endpoint(),
     upNext: endpoint(),
     following: endpoint(),

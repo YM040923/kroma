@@ -22,6 +22,10 @@ export function useNotificationStream(): void {
       refresh: () => eventClient.refreshSession(),
 
       onEvent: (e) => {
+        if (e.type === 'library.updated' || e.type === 'scan.completed') {
+          void queryClient.invalidateQueries({ queryKey: ['libraries'] });
+          return;
+        }
         if (e.type !== 'notification.created' && e.type !== 'notification.read') {
           return;
         }

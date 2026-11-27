@@ -162,6 +162,11 @@ export function useWebController(item: MovieView): WebController {
 
   const [bytes, setBytes] = useState(0);
   useEffect(() => {
+    if (item.container?.toLowerCase() === 'strm') {
+      const file = item.files?.find((f) => f.id === item.defaultFileId) ?? item.files?.[0];
+      setBytes(file?.size ?? 0);
+      return undefined;
+    }
     let cancelled = false;
     fetch(webRuntime.client.media.streamUrl(item.id), { headers: { Range: 'bytes=0-1' } })
       .then((r) => {
@@ -175,7 +180,7 @@ export function useWebController(item: MovieView): WebController {
     return () => {
       cancelled = true;
     };
-  }, [item.id, webRuntime.client.media.streamUrl]);
+  }, [item.id, item.container, item.files, item.defaultFileId, webRuntime.client]);
 
   const fpsSamplerRef = useRef(makeFpsSampler());
   const statsRef = useRef<() => PlayerStats>(() => ({}));

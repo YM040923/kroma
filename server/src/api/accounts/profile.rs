@@ -1,22 +1,78 @@
-//! The account's own editable fields: username, email, languages and avatar.
+//! The account's own editable profile and home layout.
 
 use axum::body::Bytes;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Map, Value};
 
-use crate::api::error::lerr;
+use crate::api::error::{json_error, lerr};
 use crate::api::extract::AuthUser;
 use crate::api::util::{blocking, query};
 use crate::db;
 use crate::i18n::{self, ReqLocale};
-use crate::model::User;
+use crate::model::{HomeLayout, SidebarLayout, User};
 use crate::state::SharedState;
 
 const AVATAR_MAX_WIDTH: u32 = 512;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct LayoutQuery {}
+
+/// `GET /api/auth/me/home-layout` returns only the signed-in account's overrides.
+pub(super) async fn get_home_layout(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    Query(_): Query<LayoutQuery>,
+) -> Result<Json<HomeLayout>, Response> {
+    query(&state.db, move |pool| db::home_layout(&pool, &user.id))
+        .await
+        .map(Json)
+}
+
+/// `PUT /api/auth/me/home-layout` replaces both lists together; empty lists reset them.
+pub(super) async fn put_home_layout(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    Query(_): Query<LayoutQuery>,
+    Json(body): Json<Map<String, Value>>,
+) -> Result<Json<HomeLayout>, Response> {
+    let layout: HomeLayout = serde_json::from_value(Value::Object(body))
+        .map_err(|_| json_error(StatusCode::BAD_REQUEST, "invalid home layout"))?;
+    query(&state.db, move |pool| {
+        db::set_home_layout(&pool, &user.id, &layout)?;
+        Ok(Json(layout))
+    })
+    .await
+}
+
+pub(super) async fn get_sidebar_layout(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    Query(_): Query<LayoutQuery>,
+) -> Result<Json<SidebarLayout>, Response> {
+    query(&state.db, move |pool| db::sidebar_layout(&pool, &user.id))
+        .await
+        .map(Json)
+}
+
+pub(super) async fn put_sidebar_layout(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    Query(_): Query<LayoutQuery>,
+    Json(body): Json<Map<String, Value>>,
+) -> Result<Json<SidebarLayout>, Response> {
+    let layout: SidebarLayout = serde_json::from_value(Value::Object(body))
+        .map_err(|_| json_error(StatusCode::BAD_REQUEST, "invalid sidebar layout"))?;
+    query(&state.db, move |pool| {
+        db::set_sidebar_layout(&pool, &user.id, &layout)?;
+        Ok(Json(layout))
+    })
+    .await
+}
 
 // Distinguishes an absent field (leave unchanged) from an explicit `null` (clear
 // it), so `PATCH /auth/me` touches only the fields the client actually sent.

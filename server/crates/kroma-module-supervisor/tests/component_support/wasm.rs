@@ -16,6 +16,7 @@ pub fn build_with(crate_dir: &Path, binary: &str, features: &str) -> Vec<u8> {
             "--bin",
             binary,
         ])
+        .args((binary == "asset").then_some("--no-default-features"))
         .args(["--features", features])
         .arg("--manifest-path")
         .arg(crate_dir.join("Cargo.toml"))

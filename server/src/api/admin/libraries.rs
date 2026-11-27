@@ -150,6 +150,7 @@ pub async fn create_library(
         auto_scan: true,
     });
     settings::set_library_defs(&state.settings, &state.db, &defs);
+    state.events.publish(ServerEvent::LibraryUpdated);
     spawn_rescan(state.clone());
     Ok(Json(json!({ "id": id })).into_response())
 }
@@ -239,6 +240,7 @@ pub async fn delete_library(
         ));
     }
     settings::set_library_defs(&state.settings, &state.db, &defs);
+    state.events.publish(ServerEvent::LibraryUpdated);
     spawn_rescan(state.clone());
     Ok(StatusCode::NO_CONTENT.into_response())
 }

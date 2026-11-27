@@ -1,78 +1,29 @@
-import { LibraryId } from '@kromatv/client/media';
 import { useT } from '@kromatv/ui';
-import { Box } from '@kromatv/ui/kit';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
-import { BrowseTitle } from '#web/features/catalog/browse-hero.component';
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { createFileRoute, redirect } from '@tanstack/react-router';
+import { browseDestination } from '#web/features/catalog/browse-search';
 import { BrowseScreen } from '#web/features/catalog/browse-screen.component';
-import { validateBrowseSearch } from '#web/features/catalog/browse-search';
 import { ShowGrid } from '#web/features/catalog/cards.component';
 import { isAuthed } from '#web/shared/lib/api';
 import { useWebRuntime } from '#web/shared/lib/web-runtime';
-
 import { PageFrame, SkeletonRow } from '#web/shared/ui';
 
 export const Route = createFileRoute('/_app/shows/')({
-  validateSearch: validateBrowseSearch,
-  loader: async ({ context: { runtime: webRuntime, queryClient } }) => {
-    if (!isAuthed()) {
-      return;
-    }
-    await Promise.all([
-      queryClient.ensureQueryData(webRuntime.queries.catalogQueries.showsView()),
-      queryClient.ensureQueryData(webRuntime.queries.catalogQueries.libraries()),
-    ]);
+  beforeLoad: ({ location }) => {
+    const destination = browseDestination(location.search);
+    if (destination) throw redirect({ ...destination, replace: true });
   },
-  pendingComponent: ShowsPending,
+  loader: async ({ context: { runtime, queryClient } }) => {
+    if (isAuthed()) await queryClient.ensureQueryData(runtime.queries.catalogQueries.showsView());
+  },
+  pendingComponent: () => <PageFrame><SkeletonRow count={14} /></PageFrame>,
   component: ShowsPage,
 });
 
-function ShowsPending() {
-  const t = useT();
-  return (
-    <PageFrame>
-      <BrowseTitle>{t('nav.series')}</BrowseTitle>
-      <Box mt={24}>
-        <SkeletonRow count={14} />
-      </Box>
-    </PageFrame>
-  );
-}
-
 function ShowsPage() {
-  const webRuntime = useWebRuntime();
-
   const t = useT();
-  const { sort = 'added', genre, library } = Route.useSearch();
-  const navigate = Route.useNavigate();
-  const lib = library ? LibraryId.parse(library) : undefined;
-  const { data: libraries = [] } = useQuery(webRuntime.queries.catalogQueries.libraries());
-  const { data: shows } = useQuery({
-    ...webRuntime.queries.catalogQueries.showsView(lib),
-    placeholderData: keepPreviousData,
-  });
-
-  if (!shows) {
-    return <ShowsPending />;
-  }
-
-  return (
-    <BrowseScreen
-      heading={t('nav.series')}
-      items={shows}
-      countKey="browse.count.series"
-      emptyIcon="device-tv"
-      emptyTitle={t('content.seriesEmpty')}
-      sort={sort}
-      genre={genre}
-      libraries={libraries}
-      library={library}
-      onSort={(mode, opts) =>
-        navigate({ search: (p) => ({ ...p, sort: mode }), resetScroll: opts?.resetScroll })
-      }
-      onGenre={(g) => navigate({ search: (p) => ({ ...p, genre: g }) })}
-      onLibrary={(id) => navigate({ search: (p) => ({ ...p, library: id }) })}
-      renderGrid={(view) => <ShowGrid shows={view} />}
-    />
-  );
+  const { queries } = useWebRuntime();
+  const { data } = useSuspenseQuery(queries.catalogQueries.showsView());
+  return <BrowseScreen heading={t('nav.series')} items={data} countKey="browse.count.series"
+    emptyIcon="device-tv" emptyTitle={t('content.seriesEmpty')} renderGrid={(shows) => <ShowGrid shows={shows} />} />;
 }

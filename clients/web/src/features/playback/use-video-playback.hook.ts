@@ -56,8 +56,8 @@ export function useVideoPlayback(latest: MovieView): VideoPlayback {
     const tracks = audioTracksOf(item);
     return (tracks.find((t) => t.default) ?? tracks[0])?.index ?? 0;
   });
-  const { client, user } = useAuth();
-  const { anchor, setAnchor, bootAnchor } = useResumeAnchor(item, client, user?.id ?? null);
+  const { user } = useAuth();
+  const { anchor, setAnchor, bootAnchor } = useResumeAnchor(item, user?.id ?? null);
   const wantPlay = useRef(true);
   const [restarts] = useState(restartBudget);
 
@@ -230,12 +230,16 @@ export function useVideoPlayback(latest: MovieView): VideoPlayback {
       return undefined;
     }
     const onErr = () => {
+      if (item.container?.toLowerCase() === 'strm') {
+        fail('broken');
+        return;
+      }
       setAnchor(Math.max(0, Math.floor(v.currentTime)));
       setForceHls(true);
     };
     v.addEventListener('error', onErr);
     return () => v.removeEventListener('error', onErr);
-  }, [decision.kind, item.id, anchor, audioIndex, setAnchor, setForceHls]);
+  }, [decision.kind, item.id, item.container, anchor, audioIndex, setAnchor, setForceHls, fail]);
 
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- item.id is an intentional trigger (not referenced in the effect); reset forceHls whenever the item changes, not on every render.
   useEffect(() => setForceHls(false), [item.id, setForceHls]);
@@ -301,6 +305,7 @@ export function useVideoPlayback(latest: MovieView): VideoPlayback {
     setAudio,
     anchor,
     baseSec,
+    resumeAt: bootAnchor || null,
     aac:
       decision.kind === 'direct'
         ? false

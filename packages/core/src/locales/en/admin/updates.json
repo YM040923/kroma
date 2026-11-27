@@ -67,5 +67,7 @@
   "admin.updatesSubtitle": "A fresh version. A familiar library. Update on your terms.",
   "admin.updatesSynologyHint": "The KROMA package updates itself. Install the latest package once from Package Center or kroma.tv to turn this on.",
   "admin.updatesTitle": "Server updates",
+  "admin.updatesWindowsServer": "KROMA for Windows",
+  "admin.updatesWindowsPackageHint": "Install updates manually using the update package for this Windows edition.",
   "admin.updatesWaitingIdle": "Waiting for playback to finish"
 }

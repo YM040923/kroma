@@ -1,21 +1,34 @@
 //! The module's configuration, as a run reads it.
 //!
 //! The stored half lives in [`crate::store`]; this is the resolved view a run
-//! and a route use. The cookie is a credential, so the admin page never echoes
-//! it back: it reports whether one is stored, never the value.
+//! and a route use. It references the authorization by ID; tokens stay private.
 
 use serde::{Deserialize, Serialize};
 
 /// One drive folder mirrored into one local folder.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Library {
     /// The drive folder, for example `/电影`.
     pub remote: String,
-    /// Where it lands: an absolute path under a storage root, for example
-    /// `/media/115/电影`. A relative path from an older config is anchored at
-    /// the first library folder (or `/media`).
+    /// The module's guest path for the folder granted by KROMA, for example
+    /// `/selected/8f1d...`; it is never a host path.
     pub local: String,
+    /// Host path shown in settings. Sync uses `local`, never this display label.
+    pub local_display: String,
+    /// Include this mapping in the minute-level, add-only Open API check.
+    pub fast_sync: bool,
+}
+
+impl Default for Library {
+    fn default() -> Self {
+        Self {
+            remote: String::new(),
+            local: String::new(),
+            local_display: String::new(),
+            fast_sync: true,
+        }
+    }
 }
 
 /// The knobs that decide how hard this module leans on the drive.
@@ -44,10 +57,9 @@ pub struct Options {
     pub organize_enabled: bool,
     /// Seconds between two write calls while tidying.
     pub write_pause_ms: u64,
-    /// Poll 115's life events so a change made elsewhere (Symedia organising,
-    /// a phone upload) produces its `.strm` within about a minute.
+    /// Check enabled mappings for new videos using the official file listing.
     pub watch_enabled: bool,
-    /// Floor for two life-event polls; the job ticks every minute.
+    /// Minimum interval between checks; the host scheduler ticks every minute.
     pub watch_interval_secs: u64,
     /// Leave ISO/Blu-ray images out of the mirror: a browser cannot decode one,
     /// and this server cannot remux a URL.
@@ -71,7 +83,7 @@ pub struct Options {
     /// daily ceiling. Background work stops at 70% so a late film can still play.
     pub daily_call_budget: u32,
     /// Hours between scheduled full mirrors; 0 disables the schedule and leaves
-    /// manual runs and the life-event watcher in charge.
+    /// manual runs and the quick mapping checks in charge.
     pub auto_sync_hours: u8,
 }
 
@@ -129,15 +141,12 @@ impl Options {
 /// Everything a run reads, resolved once.
 #[derive(Debug, Clone, Default)]
 pub struct Config {
-    pub cookie: String,
+    /// Opaque ID of the locally authorized grant, never an access/refresh token.
+    pub auth_id: String,
     /// The origin players reach this server at, used to build the URL each
     /// `.strm` names. Written by the first manual sync (the browser knows it),
     /// editable in the settings, required for a scheduled run.
     pub base_url: String,
-    /// The subscription source that answers `/search`, `/unlock` and `/job/{id}`
-    /// (madreel-svc). The provider point proxies to it; empty until an operator
-    /// sets it, and readiness names it as the blocker until then.
-    pub source_url: String,
     /// The drive folder every acquisition lands in before the organiser picks it
     /// up, for example `/待整理`. Empty means the drive root.
     pub transit_folder: String,
@@ -149,19 +158,18 @@ impl Config {
     pub fn load() -> Self {
         let stored = crate::store::load();
         Self {
-            cookie: stored.cookie.trim().to_string(),
+            auth_id: crate::login::authorization_id(),
             base_url: stored.base_url.trim().trim_end_matches('/').to_string(),
-            source_url: stored.source_url.trim().trim_end_matches('/').to_string(),
             transit_folder: stored.transit_folder.trim().to_string(),
             libraries: stored.libraries,
             options: stored.options.sane(),
         }
     }
 
-    /// What can run: a cookie, an origin to point players at, and a mapping with
+    /// What can run: an active grant, an origin to point players at, and a mapping with
     /// both sides named.
     pub fn runnable(&self) -> bool {
-        !self.cookie.is_empty()
+        !self.auth_id.is_empty()
             && !self.base_url.is_empty()
             && self
                 .libraries
@@ -183,22 +191,29 @@ mod tests {
             ..Options::default()
         }
         .sane();
-        assert!(wild.interval_ms >= 500, "a zero interval would hammer the drive");
+        assert!(
+            wild.interval_ms >= 500,
+            "a zero interval would hammer the drive"
+        );
         assert!(wild.page_size <= 1150);
         assert!(wild.max_calls_per_run >= 50);
     }
 
     #[test]
-    fn a_config_without_a_cookie_or_a_library_cannot_run() {
+    fn a_config_without_an_authorization_or_a_library_cannot_run() {
         let mut config = Config::default();
         assert!(!config.runnable());
-        config.cookie = "UID=1".into();
-        assert!(!config.runnable(), "a cookie alone mirrors nothing");
+        config.auth_id = "test-grant".into();
+        assert!(!config.runnable(), "authorization alone mirrors nothing");
         config.libraries = vec![Library {
             remote: "/电影".into(),
-            local: "/media/115/电影".into(),
+            local: "/selected/test-folder".into(),
+            ..Library::default()
         }];
-        assert!(!config.runnable(), "without an origin a .strm names nothing");
+        assert!(
+            !config.runnable(),
+            "without an origin a .strm names nothing"
+        );
         config.base_url = "http://192.168.1.10:8096".into();
         assert!(config.runnable());
     }

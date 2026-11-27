@@ -47,6 +47,16 @@ impl WorldTrending {
         self.world(state).ranked
     }
 
+    /// The ranking already in hand, without scheduling a provider refresh.
+    pub(crate) fn cached_ranking(&self) -> Arc<Vec<Ranked>> {
+        self.held
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .map(|(_, world)| Arc::clone(&world.ranked))
+            .unwrap_or_default()
+    }
+
     /// The artwork of the titles leading the ranking, for a screen that has no
     /// library to draw from yet. Read with the ranking and as fresh as it is.
     pub fn covers(&self, state: &SharedState) -> Arc<Vec<SplashEntry>> {

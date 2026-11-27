@@ -49,6 +49,46 @@ describe('the accounts endpoints', () => {
     },
     { name: 'me', call: (c) => c.accounts.me(), method: 'GET', path: '/auth/me' },
     {
+      name: 'homeLayout',
+      call: (c) => c.accounts.homeLayout(),
+      method: 'GET',
+      path: '/auth/me/home-layout',
+    },
+    {
+      name: 'setHomeLayout keeps the position of a hidden component',
+      call: (c) => c.accounts.setHomeLayout({ order: ['genre:28', 'hero'], hidden: ['hero'] }),
+      method: 'PUT',
+      path: '/auth/me/home-layout',
+      body: { order: ['genre:28', 'hero'], hidden: ['hero'] },
+    },
+    {
+      name: 'setHomeLayout restores the default',
+      call: (c) => c.accounts.setHomeLayout({ order: [], hidden: [] }),
+      method: 'PUT',
+      path: '/auth/me/home-layout',
+      body: { order: [], hidden: [] },
+    },
+    {
+      name: 'sidebarLayout',
+      call: (c) => c.accounts.sidebarLayout(),
+      method: 'GET',
+      path: '/auth/me/sidebar-layout',
+    },
+    {
+      name: 'setSidebarLayout',
+      call: (c) => c.accounts.setSidebarLayout({ hidden: ['module:requests'] }),
+      method: 'PUT',
+      path: '/auth/me/sidebar-layout',
+      body: { hidden: ['module:requests'] },
+    },
+    {
+      name: 'reset sidebar visibility',
+      call: (c) => c.accounts.setSidebarLayout({ hidden: [] }),
+      method: 'PUT',
+      path: '/auth/me/sidebar-layout',
+      body: { hidden: [] },
+    },
+    {
       name: 'update',
       call: (c) => c.accounts.update({ username: 'max' }),
       method: 'PATCH',
@@ -177,6 +217,14 @@ describe('the accounts endpoints', () => {
       path: '/invites/t%201',
     },
   ])('$name', checkEndpoint);
+});
+
+it('reads the bare home layout from both self-service methods', async () => {
+  const layout = { order: ['for-you', 'hero'], hidden: ['hero'] };
+  const { client } = recordingClient(() => ({ json: layout }));
+
+  await expect(client.accounts.homeLayout()).resolves.toEqual(layout);
+  await expect(client.accounts.setHomeLayout(layout)).resolves.toEqual(layout);
 });
 
 describe('config', () => {

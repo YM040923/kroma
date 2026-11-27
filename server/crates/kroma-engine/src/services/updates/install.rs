@@ -56,10 +56,11 @@ fn read<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
 
 pub(super) fn installer(state: &SharedState) -> Installer {
     let platform = state.config.install.as_str().to_owned();
-    let ready = match state.config.update_dir.as_ref() {
-        Some(dir) => host_ready(dir, &platform),
-        None => super::package::ready(state),
-    };
+    let ready = state.config.server_updates.feed().is_some()
+        && match state.config.update_dir.as_ref() {
+            Some(dir) => host_ready(dir, &platform),
+            None => super::package::ready(state),
+        };
     Installer { platform, ready }
 }
 
@@ -101,6 +102,7 @@ fn stored(state: &SharedState) -> Option<Operation> {
 }
 
 pub(super) fn operation(state: &SharedState) -> Option<Operation> {
+    state.config.server_updates.feed()?;
     let mut op = match state.config.update_dir.as_ref() {
         Some(dir) => {
             let request = stored(state).or_else(|| read(&dir.join("request.json")))?;
@@ -120,6 +122,9 @@ pub(super) fn operation(state: &SharedState) -> Option<Operation> {
 /// Startup recovery for work this server owned when it stopped. Once a request
 /// reaches a host bridge, only the independently supervised updater reconciles it.
 pub fn recover(state: &SharedState) -> Result<()> {
+    if state.config.server_updates.feed().is_none() {
+        return Ok(());
+    }
     let Some(mut op) = stored(state) else {
         return Ok(());
     };
@@ -171,8 +176,11 @@ pub fn install_automatically(state: &SharedState) -> Result<Option<Status>> {
     let Some(build) = latest.build.filter(|b| *b > 0) else {
         return Ok(None);
     };
+    let Some(channel) = shown.channel else {
+        return Ok(None);
+    };
     let target = Target {
-        channel: shown.channel,
+        channel,
         version: latest.version,
         build,
     };
@@ -196,6 +204,9 @@ pub(super) fn idle_for(state: &SharedState, op: &Operation) -> bool {
 }
 
 fn install_with_policy(state: &SharedState, target: Target, automatic: bool) -> Result<Status> {
+    if state.config.server_updates.feed().is_none() {
+        bail!(super::MANUAL_PACKAGE_HINT);
+    }
     let _guard = exclusive();
     if !installer(state).ready {
         bail!("The host updater is offline or has not been configured.");
@@ -213,7 +224,7 @@ fn install_with_policy(state: &SharedState, target: Target, automatic: bool) -> 
     let matches = status.latest.as_ref().is_some_and(|latest| {
         latest.version == target.version && latest.build == Some(target.build)
     });
-    if !status.available || status.channel != target.channel || !matches || target.build == 0 {
+    if !status.available || status.channel != Some(target.channel) || !matches || target.build == 0 {
         bail!("The available release changed. Refresh before updating.");
     }
     let mut op = Operation {

@@ -29,6 +29,7 @@ pub async fn install(
     Json(target): Json<updates::Target>,
 ) -> Result<Response, Response> {
     super::require(&user, Permission::SettingsManage)?;
+    require_feed(&state, &user)?;
     let result = tokio::task::spawn_blocking(move || updates::install(&state, target))
         .await
         .map_err(|_| {
@@ -71,6 +72,14 @@ pub async fn check(
     AuthUser(user): AuthUser,
 ) -> Result<Response, Response> {
     super::require(&user, Permission::SettingsManage)?;
+    require_feed(&state, &user)?;
     let status = blocking(move || updates::check(&state)).await?;
     Ok(Json(status).into_response())
+}
+
+fn require_feed(state: &SharedState, user: &crate::model::User) -> Result<(), Response> {
+    if state.config.server_updates.feed().is_some() {
+        return Ok(());
+    }
+    Err(lerr(super::user_locale(user), StatusCode::CONFLICT, "admin.updatesWindowsPackageHint"))
 }

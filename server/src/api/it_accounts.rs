@@ -428,6 +428,122 @@ async fn revoke_session_by_id_then_404_on_unknown() {
     assert_eq!(status, StatusCode::NO_CONTENT);
 }
 
+const HOME_LAYOUT: &str = "/api/auth/me/home-layout";
+
+#[tokio::test]
+async fn home_layout_follows_the_account_to_another_device_and_resets() {
+    let t = test_app();
+    let (id, token) = seed_session(&t.state, "layout@test.dev", "viewer", &[]);
+    let original = json!({ "order": [], "hidden": [] });
+    let custom = json!({ "order": ["genre:28", "hero"], "hidden": ["hero"] });
+    let read = |token| get(&t.app, HOME_LAYOUT, Some(token));
+    let write = |body| send(&t.app, "PUT", HOME_LAYOUT, Some(&token), Some(body));
+
+    assert_eq!(read(&token).await, (StatusCode::OK, original.clone()));
+    assert_eq!(
+        write(custom.clone()).await,
+        (StatusCode::OK, custom.clone())
+    );
+    let (status, device) = send(
+        &t.app,
+        "POST",
+        "/api/auth/token",
+        None,
+        Some(json!({ "accessToken": seed_access_token(&t.state, &id, false) })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let second = device["token"].as_str().expect("second device's bearer");
+    assert_eq!(read(second).await, (StatusCode::OK, custom));
+    assert_eq!(read(&t.token).await, (StatusCode::OK, original.clone()));
+    assert_eq!(
+        write(original.clone()).await,
+        (StatusCode::OK, original.clone())
+    );
+    assert_eq!(read(second).await, (StatusCode::OK, original));
+}
+
+#[tokio::test]
+async fn home_layout_rejects_anonymous_and_invalid_writes_without_changing_either_account() {
+    let t = test_app();
+    let (_, token) = seed_session(&t.state, "layout@test.dev", "viewer", &[]);
+    let original = json!({ "order": [], "hidden": [] });
+    let custom = json!({ "order": ["for-you"], "hidden": [] });
+    let write = |token, body| send(&t.app, "PUT", HOME_LAYOUT, token, Some(body));
+
+    assert_eq!(
+        get(&t.app, HOME_LAYOUT, None).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        write(None, custom.clone()).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(write(Some(&token), custom.clone()).await.0, StatusCode::OK);
+    for invalid in [
+        json!({ "order": [], "hidden": [], "userId": t.user_id }),
+        json!({ "order": [] }),
+        json!({ "order": ["hero", "hero"], "hidden": [] }),
+        json!({ "order": [], "hidden": ["invalid/id"] }),
+    ] {
+        assert_eq!(
+            write(Some(&token), invalid).await.0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    assert!(
+        write(Some(&token), json!([[], []]))
+            .await
+            .0
+            .is_client_error()
+    );
+    let query = format!("{HOME_LAYOUT}?userId={}", t.user_id);
+    assert_eq!(
+        get(&t.app, &query, Some(&token)).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        send(&t.app, "PUT", &query, Some(&token), Some(original.clone()))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        get(&t.app, HOME_LAYOUT, Some(&token)).await,
+        (StatusCode::OK, custom)
+    );
+    assert_eq!(
+        get(&t.app, HOME_LAYOUT, Some(&t.token)).await,
+        (StatusCode::OK, original)
+    );
+}
+
+#[tokio::test]
+async fn sidebar_visibility_is_self_service_and_independent_of_home() {
+    const SIDEBAR: &str = "/api/auth/me/sidebar-layout";
+    let t = test_app();
+    let (_, token) = seed_session(&t.state, "sidebar@test.dev", "viewer", &[]);
+    let original = json!({ "hidden": [] });
+    let custom = json!({ "hidden": ["library:015bf427-cb08-434a-85dc-5a8470a32979", "module:requests", "nav:home"] });
+    let home = json!({ "order": ["hero"], "hidden": ["hero"] });
+    let put = |path, body| send(&t.app, "PUT", path, Some(&token), Some(body));
+    assert_eq!(get(&t.app, SIDEBAR, None).await.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(send(&t.app, "PUT", SIDEBAR, None, Some(custom.clone())).await.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(get(&t.app, SIDEBAR, Some(&token)).await, (StatusCode::OK, original.clone()));
+    assert_eq!(put(SIDEBAR, custom.clone()).await, (StatusCode::OK, custom.clone()));
+    assert_eq!(put(HOME_LAYOUT, home.clone()).await.0, StatusCode::OK);
+    for invalid in [json!({ "hidden": [], "userId": t.user_id }), json!({ "order": [], "hidden": [] })] {
+        assert_eq!(put(SIDEBAR, invalid).await.0, StatusCode::BAD_REQUEST);
+    }
+    let selector = format!("{SIDEBAR}?userId={}", t.user_id);
+    assert_eq!(send(&t.app, "PUT", &selector, Some(&token), Some(original.clone())).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(get(&t.app, SIDEBAR, Some(&t.token)).await, (StatusCode::OK, original.clone()));
+    assert_eq!(get(&t.app, SIDEBAR, Some(&token)).await, (StatusCode::OK, custom));
+    assert_eq!(put(SIDEBAR, original.clone()).await, (StatusCode::OK, original.clone()));
+    assert_eq!(get(&t.app, SIDEBAR, Some(&token)).await, (StatusCode::OK, original));
+    assert_eq!(get(&t.app, HOME_LAYOUT, Some(&token)).await, (StatusCode::OK, home));
+}
+
 #[tokio::test]
 async fn ui_language_sets_then_clears() {
     let t = test_app();

@@ -2,6 +2,7 @@
 // fires on "use this folder"; browsing state is internal, seeded from `value`.
 // `onCancel` adds a cancel button for callers that show the browser on demand.
 
+import { apiErrorText } from '@kromatv/client';
 import type { AdminFsList } from '@kromatv/client/admin';
 import { useT } from '@kromatv/ui';
 import {
@@ -30,35 +31,37 @@ interface Browsed {
   path: string;
   list: AdminFsList | null;
   loading: boolean;
+  error: string | null;
 }
 
 function useFolder(path: string): Browsed {
   const { library } = useWebRuntime().client;
-  const [loaded, setLoaded] = useState<{ path: string; list: AdminFsList | null } | null>(null);
+  const t = useT();
+  const [loaded, setLoaded] = useState<Browsed | null>(null);
   useEffect(() => {
     let active = true;
-    const keep = (list: AdminFsList | null) => {
-      if (active) {
-        setLoaded({ path, list });
-      }
+    const keep = (list: AdminFsList | null, error: string | null) => {
+      if (active) setLoaded({ path, list, error, loading: false });
     };
-    library
-      .browse(path)
-      .then(keep)
-      .catch(() => keep(null));
+    library.browse(path).then(
+      (list) => keep(list, null),
+      (reason: unknown) => keep(null, apiErrorText(reason, t('error.serverBody'))),
+    );
     return () => {
       active = false;
     };
-  }, [path, library]);
-  return { path, list: loaded?.list ?? null, loading: loaded?.path !== path };
+  }, [path, library, t]);
+  return loaded?.path === path ? loaded : { path, list: null, error: null, loading: true };
 }
 
-function Nothing({ loading }: Readonly<{ loading: boolean }>) {
+function Nothing({ loading, error }: Readonly<Pick<Browsed, 'loading' | 'error'>>) {
   const t = useT();
   return (
     <EmptyState.Root size="sm" icon={loading ? undefined : 'folder-off'}>
       {loading ? <Spinner size={22} /> : null}
-      <EmptyState.Title>{loading ? t('common.loading') : t('admin.noSubfolders')}</EmptyState.Title>
+      <EmptyState.Title>
+        {loading ? t('common.loading') : (error ?? t('admin.noSubfolders'))}
+      </EmptyState.Title>
     </EmptyState.Root>
   );
 }
@@ -66,7 +69,7 @@ function Nothing({ loading }: Readonly<{ loading: boolean }>) {
 function Entries({ at, onOpen }: Readonly<{ at: Browsed; onOpen: (path: string) => void }>) {
   const entries = at.list?.entries ?? [];
   if (entries.length === 0) {
-    return <Nothing loading={at.loading} />;
+    return <Nothing loading={at.loading} error={at.error} />;
   }
   return entries.map((entry) => (
     <ListRow.Root key={entry.path} onPress={() => onOpen(entry.path)}>
@@ -81,8 +84,7 @@ function Entries({ at, onOpen }: Readonly<{ at: Browsed; onOpen: (path: string) 
 function Crumb({ at, onOpen }: Readonly<{ at: Browsed; onOpen: (path: string) => void }>) {
   const t = useT();
   const atRoot = at.path === '';
-  const parent = at.list?.parent;
-  const busy = at.loading && (at.list?.entries.length ?? 0) > 0;
+  const parent = at.error && !atRoot ? '' : at.list?.parent;
   return (
     <Row gap={8} px={10} py={8}>
       <IconButton
@@ -98,7 +100,6 @@ function Crumb({ at, onOpen }: Readonly<{ at: Browsed; onOpen: (path: string) =>
       <Text variant="meta" color="textMuted" lines={1} flex={1} minW={0}>
         {atRoot ? t('admin.volumes') : at.path}
       </Text>
-      {busy ? <Spinner size={14} /> : null}
     </Row>
   );
 }
@@ -137,7 +138,12 @@ export function FolderPicker({ value, onChange, onCancel }: Readonly<PickerProps
       <ScrollView style={s.pane}>
         <Entries at={at} onOpen={setPath} />
       </ScrollView>
-      <Choose path={path} value={value} onChange={onChange} onCancel={onCancel} />
+      <Choose
+        path={path && at.list ? at.list.path : ''}
+        value={value}
+        onChange={onChange}
+        onCancel={onCancel}
+      />
     </ListRow.Group>
   );
 }

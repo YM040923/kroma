@@ -74,7 +74,7 @@ impl Outside for TheMachine {
     }
 
     fn spawn_program(&self, spec: CommandSpec) -> Result<u64, String> {
-        let mut command = Command::new(&spec.program);
+        let mut command = kroma_primitives::process::new(&spec.program);
         command
             .args(&spec.args)
             .envs(spec.env.iter().map(|(name, value)| (name, value)))
@@ -189,7 +189,7 @@ impl Outside for TheMachine {
     fn decode_audio(&self, spec: DecodeSpec) -> Result<u64, String> {
         let destination = std::path::Path::new(&spec.destination);
         let source = std::path::Path::new(&spec.source);
-        let ran = Command::new("ffmpeg")
+        let ran = kroma_primitives::process::new("ffmpeg")
             .args(kroma_primitives::pcm::decode_args(
                 source,
                 spec.track,

@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::api::extract::AuthUser;
 use crate::api::media::ListView;
 use crate::api::util::query;
-use crate::api::{etag, visibility};
+use crate::api::{content_limit, etag, visibility};
 use crate::i18n::ReqLocale;
 use crate::model::{CardSection, Section};
 use crate::services::sections;
@@ -22,6 +22,7 @@ pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/home", get(home))
         .route("/home/featured", get(featured))
+        .route("/home/discovery", get(discovery))
         .route_layer(axum::middleware::from_fn(etag::revalidate))
 }
 
@@ -62,6 +63,25 @@ pub async fn home(
                 None => Json(list).into_response(),
             }
         }
+        Err(resp) => resp,
+    }
+}
+
+pub async fn discovery(
+    State(state): State<SharedState>,
+    AuthUser(user): AuthUser,
+    ReqLocale(locale): ReqLocale,
+) -> Response {
+    let source = state.clone();
+    let limit = content_limit::for_user(&user);
+    let result = query(&state.db, move |pool| {
+        sections::discovery(&source, &pool, locale, &user, |library, certification| {
+            user.sees_library(library) && limit.is_none_or(|limit| limit.allows(certification))
+        })
+    })
+    .await;
+    match result {
+        Ok(items) => Json(serde_json::json!({ "items": items })).into_response(),
         Err(resp) => resp,
     }
 }

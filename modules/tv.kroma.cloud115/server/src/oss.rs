@@ -3,9 +3,6 @@
 //! to want in memory. Signing is OSS's V1 scheme (HMAC-SHA1 over a canonical
 //! request), reimplemented from the wire behaviour.
 
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
-
 use base64::Engine;
 use hmac::{Hmac, Mac};
 use md5::{Digest, Md5};
@@ -14,58 +11,51 @@ use sha1::Sha1;
 
 use kroma_module_sdk::http::Fetch;
 
-const ENDPOINT: &str = "oss-cn-shenzhen.aliyuncs.com";
-pub(crate) const DEFAULT_BUCKET: &str = "fhnfile";
-const TOKEN_TTL: Duration = Duration::from_secs(50 * 60);
 const TIMEOUT: u32 = 300;
 
-#[derive(Clone)]
+// Request-scoped STS credentials: never saved in settings, a job or a global cache.
 struct Token {
+    endpoint: String,
     key_id: String,
     secret: String,
     security: String,
 }
 
-fn token_slot() -> &'static Mutex<Option<(Instant, Token)>> {
-    static SLOT: std::sync::OnceLock<Mutex<Option<(Instant, Token)>>> = std::sync::OnceLock::new();
-    SLOT.get_or_init(|| Mutex::new(None))
+fn dns_label(value: &str) -> bool {
+    (1..=63).contains(&value.len())
+        && !value.starts_with('-')
+        && !value.ends_with('-')
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
-fn credentials() -> Result<Token, String> {
-    if let Some((at, token)) = token_slot()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .as_ref()
-    {
-        if at.elapsed() < TOKEN_TTL {
-            return Ok(token.clone());
-        }
+fn token_from_data(data: &Value) -> Result<Token, String> {
+    let field = |keys: &[&str]| {
+        keys.iter()
+            .find_map(|key| data[*key].as_str())
+            .filter(|v| !v.is_empty() && !v.bytes().any(|b| b.is_ascii_control()))
+            .ok_or("115 上传凭证不完整")
+    };
+    let raw = field(&["endpoint"])?.trim_end_matches('/');
+    let endpoint = raw
+        .strip_prefix("https://")
+        .or_else(|| raw.strip_prefix("http://"))
+        .unwrap_or(raw);
+    let region = endpoint
+        .strip_suffix(".aliyuncs.com")
+        .ok_or("无效的 OSS 域名")?;
+    if !region.starts_with("oss-") || !dns_label(region) {
+        return Err("无效的 OSS 域名".into());
     }
-    let response = Fetch::default()
-        .purpose("cloud-drive")
-        .header("User-Agent", crate::client::UPLOAD_UA)
-        .max_time(30)
-        .get("https://uplb.115.com/3.0/gettoken.php")
-        .map_err(|error| format!("拿不到上传凭证：{error}"))?;
-    let body: Value = response
-        .json()
-        .map_err(|error| format!("上传凭证无法解析：{error}"))?;
-    let text = |key: &str| {
-        body.get(key)
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-    };
-    let token = Token {
-        key_id: text("AccessKeyId").ok_or("上传凭证缺少 AccessKeyId")?,
-        secret: text("AccessKeySecret").ok_or("上传凭证缺少 AccessKeySecret")?,
-        security: text("SecurityToken").ok_or("上传凭证缺少 SecurityToken")?,
-    };
-    *token_slot()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((Instant::now(), token.clone()));
-    Ok(token)
+    // OSS enforces the STS Expiration; fetch a fresh credential for each request.
+    field(&["Expiration", "expiration"])?;
+    Ok(Token {
+        endpoint: endpoint.to_owned(),
+        key_id: field(&["AccessKeyId", "access_key_id"])?.into(),
+        secret: field(&["AccessKeySecret", "AccessKeySecrett", "access_key_secret"])?.into(),
+        security: field(&["SecurityToken", "security_token"])?.into(),
+    })
 }
 
 fn quote_path(raw: &str) -> String {
@@ -130,7 +120,12 @@ fn signature(
 
     let mut subresources: Vec<(String, String)> = params
         .iter()
-        .filter(|(name, _)| matches!(name.as_str(), "uploads" | "uploadId" | "partNumber" | "sequential"))
+        .filter(|(name, _)| {
+            matches!(
+                name.as_str(),
+                "uploads" | "uploadId" | "partNumber" | "sequential"
+            )
+        })
         .cloned()
         .collect();
     subresources.sort_by(|a, b| a.0.cmp(&b.0));
@@ -145,15 +140,15 @@ fn signature(
         format!("/{bucket}/{}?{query}", quote_path(key))
     };
     let text = format!("{method}\n\n{content_type}\n{date}\n{oss_headers}\n{resource}");
-    let mut mac = Hmac::<Sha1>::new_from_slice(token.secret.as_bytes())
-        .expect("HMAC accepts any key length");
+    let mut mac =
+        Hmac::<Sha1>::new_from_slice(token.secret.as_bytes()).expect("HMAC accepts any key length");
     mac.update(text.as_bytes());
     let digest = base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes());
     (date, format!("OSS {}:{digest}", token.key_id))
 }
 
-fn url(bucket: &str, key: &str, params: &[(String, String)]) -> String {
-    let mut url = format!("https://{bucket}.{ENDPOINT}/{}", quote_path(key));
+fn url(endpoint: &str, bucket: &str, key: &str, params: &[(String, String)]) -> String {
+    let mut url = format!("https://{bucket}.{endpoint}/{}", quote_path(key));
     if !params.is_empty() {
         let query = params
             .iter()
@@ -166,7 +161,8 @@ fn url(bucket: &str, key: &str, params: &[(String, String)]) -> String {
     url
 }
 
-fn request(
+async fn request(
+    grant: &str,
     method: &str,
     bucket: &str,
     key: &str,
@@ -175,11 +171,18 @@ fn request(
     params: &[(String, String)],
     body: &[u8],
 ) -> Result<Response, String> {
-    let token = credentials()?;
+    if !dns_label(bucket) {
+        return Err("无效的 OSS bucket".into());
+    }
+    let data = crate::client::open_get(grant, "/open/upload/get_token")
+        .await
+        .map_err(|_| "无法取得 OSS 临时凭证")?;
+    let token = token_from_data(&data)?;
     let (date, authorization) = signature(&token, method, bucket, key, content_type, extra, params);
     let mut fetch = Fetch::default()
         .purpose("cloud-drive")
-        .header("User-Agent", crate::client::UPLOAD_UA)
+        .no_redirects()
+        .https_only()
         .header("Date", date)
         .header("Authorization", authorization)
         .header("x-oss-security-token", token.security.clone())
@@ -187,13 +190,13 @@ fn request(
     for (name, value) in extra {
         fetch = fetch.header(name, value.clone());
     }
-    let target = url(bucket, key, params);
+    let target = url(&token.endpoint, bucket, key, params);
     let response = match method {
         "PUT" => fetch.put_bytes(&target, content_type, body),
         "POST" => fetch.post_bytes(&target, content_type, body),
-        _ => fetch.get(&target),
+        _ => return Err("不支持的 OSS 操作".into()),
     }
-    .map_err(|error| format!("OSS 请求失败：{error}"))?;
+    .map_err(|_| "OSS 请求失败")?;
     Ok(response)
 }
 
@@ -206,24 +209,32 @@ fn xml_text(xml: &str, tag: &str) -> Option<String> {
 }
 
 /// Open a multipart upload and answer its id.
-pub(crate) fn start(bucket: &str, key: &str) -> Result<String, String> {
+pub(crate) async fn start(grant: &str, bucket: &str, key: &str) -> Result<String, String> {
     let params = vec![
         ("uploads".to_string(), "1".to_string()),
         ("sequential".to_string(), "1".to_string()),
     ];
-    let response = request("POST", bucket, key, "application/octet-stream", &[], &params, &[])?;
+    let response = request(
+        grant,
+        "POST",
+        bucket,
+        key,
+        "application/octet-stream",
+        &[],
+        &params,
+        &[],
+    )
+    .await?;
     let body = response.text();
     if !(200..300).contains(&response.status) {
-        return Err(format!(
-            "OSS 分片上传开不了头（{}）",
-            xml_text(&body, "Code").unwrap_or_else(|| response.status.to_string())
-        ));
+        return Err(format!("OSS 分片上传开不了头（{}）", response.status));
     }
     xml_text(&body, "UploadId").ok_or_else(|| "OSS 没有给出 UploadId".to_string())
 }
 
 /// Upload one part; answers its ETag once it matches the part's MD5.
-pub(crate) fn put_part(
+pub(crate) async fn put_part(
+    grant: &str,
     bucket: &str,
     key: &str,
     upload_id: &str,
@@ -234,12 +245,19 @@ pub(crate) fn put_part(
         ("partNumber".to_string(), number.to_string()),
         ("uploadId".to_string(), upload_id.to_string()),
     ];
-    let response = request("PUT", bucket, key, "application/octet-stream", &[], &params, data)?;
+    let response = request(
+        grant,
+        "PUT",
+        bucket,
+        key,
+        "application/octet-stream",
+        &[],
+        &params,
+        data,
+    )
+    .await?;
     if !(200..300).contains(&response.status) {
-        return Err(format!(
-            "OSS 分片 {number} 没传上（{}）",
-            xml_text(&response.text(), "Code").unwrap_or_else(|| response.status.to_string())
-        ));
+        return Err(format!("OSS 分片 {number} 没传上（{}）", response.status));
     }
     let etag = response
         .header("etag")
@@ -253,14 +271,15 @@ pub(crate) fn put_part(
 }
 
 /// Merge the parts; 115 only learns the file exists through the callback.
-pub(crate) fn complete(
+pub(crate) async fn complete(
+    grant: &str,
     bucket: &str,
     key: &str,
     upload_id: &str,
     etags: &[String],
     callback: &str,
     callback_var: &str,
-) -> Result<String, String> {
+) -> Result<(), String> {
     let mut parts = String::new();
     for (at, etag) in etags.iter().enumerate() {
         parts.push_str(&format!(
@@ -281,6 +300,7 @@ pub(crate) fn complete(
     ];
     let params = vec![("uploadId".to_string(), upload_id.to_string())];
     let response = request(
+        grant,
         "POST",
         bucket,
         key,
@@ -288,19 +308,42 @@ pub(crate) fn complete(
         &extra,
         &params,
         body.as_bytes(),
-    )?;
+    )
+    .await?;
     let text = response.text();
     if !(200..300).contains(&response.status) {
-        return Err(format!(
-            "OSS 合并分片失败（{}）",
-            xml_text(&text, "Code").unwrap_or_else(|| response.status.to_string())
-        ));
+        return Err(format!("OSS 合并分片失败（{}）", response.status));
     }
-    let answer: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-    if answer.get("state").and_then(Value::as_bool) == Some(false) {
-        return Err(format!("115 没有接收上传的文件：{text}"));
+    let answer: Value = serde_json::from_str(&text).map_err(|_| "115 上传回调无法解析")?;
+    if answer["state"].as_bool() != Some(true) {
+        return Err("115 没有确认接收文件".into());
     }
-    Ok(text)
+    Ok(())
 }
 
 use kroma_module_sdk::http::Response;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn sts_uses_only_the_official_data_and_oss_host() {
+        let mut envelope = serde_json::json!({"state":true,"code":0,"data":{
+            "endpoint":"http://oss-cn-shenzhen.aliyuncs.com", "Expiration":"2030-01-01T00:00:00Z",
+            "AccessKeyId":"example","AccessKeySecret":"example","SecurityToken":"example"}});
+        let token = token_from_data(&envelope["data"]).unwrap();
+        assert_eq!(
+            url(&token.endpoint, "example", "a b", &[]),
+            "https://example.oss-cn-shenzhen.aliyuncs.com/a%20b"
+        );
+        for endpoint in [
+            "oss-test.aliyuncs.com.evil.test",
+            "oss-test@evil.test",
+            "evil.test/path/oss-test.aliyuncs.com",
+        ] {
+            envelope["data"]["endpoint"] = endpoint.into();
+            assert!(token_from_data(&envelope["data"]).is_err());
+        }
+        assert!(!dns_label("example.test/path"));
+    }
+}

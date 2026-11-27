@@ -1,17 +1,10 @@
-//! 秒传: test a local file's fingerprint against the drive before any byte is
-//! sent. A hit is one or two signed calls; anything else is reported as "needs
-//! a real upload", which this module does not do yet.
-//!
-//! Only files under a configured library folder are read, and never more than
-//! the operator asked for: the path comes from the admin page, the fingerprint
-//! is computed with ordinary file reads.
+//! Explicit uploads of files under a configured library folder.
 
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
-
 
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -24,8 +17,7 @@ use sha1::{Digest, Sha1};
 use kroma_module_sdk::domain::Permission;
 use kroma_module_sdk::host::{json_error, AuthUser, HostCtx};
 
-use crate::client::{self, ApiError};
-use crate::crypto::{self, UploadInit};
+use crate::client;
 use crate::settings::Config;
 
 #[derive(Deserialize)]
@@ -70,38 +62,9 @@ pub(crate) async fn resolve_folder_cid(
     if remote.is_empty() {
         return Err("目录号无效".into());
     }
-    client::folder_id_by_path(&config.cookie, client::MODULE_UA, remote)
+    client::folder_id_by_path(&config.auth_id, client::MODULE_UA, remote)
         .await
         .map_err(|error| error.to_string())
-}
-
-/// The same answer, creating the folders that do not exist yet. An acquisition
-/// must not fail because the operator named a transit folder the drive has not
-/// been given; the first transfer makes it.
-pub(crate) async fn ensure_folder_cid(config: &Config, remote: &str) -> Result<String, String> {
-    let remote = remote.trim();
-    if remote.is_empty() || remote == "/" {
-        return Ok("0".to_string());
-    }
-    // Fast path: the folder is usually already there.
-    if let Ok(cid) = client::folder_id_by_path(&config.cookie, client::MODULE_UA, remote).await {
-        return Ok(cid);
-    }
-    let mut parent = "0".to_string();
-    let mut walked = String::new();
-    for part in remote.split('/').filter(|part| !part.trim().is_empty()) {
-        walked.push('/');
-        walked.push_str(part);
-        match client::folder_id_by_path(&config.cookie, client::MODULE_UA, &walked).await {
-            Ok(cid) => parent = cid,
-            Err(_) => {
-                parent = client::mkdir(&config.cookie, client::MODULE_UA, &parent, part)
-                    .await
-                    .map_err(|error| error.to_string())?;
-            }
-        }
-    }
-    Ok(parent)
 }
 
 #[derive(Serialize)]
@@ -111,13 +74,6 @@ pub(crate) struct RapidResult {
     need_upload: bool,
     pickcode: Option<String>,
     status: i64,
-}
-
-pub(crate) fn cookie_uid(cookie: &str) -> Option<String> {
-    cookie.split(';').find_map(|pair| {
-        let (key, value) = pair.trim().split_once('=')?;
-        (key.eq_ignore_ascii_case("UID")).then(|| value.trim().to_string())
-    })
 }
 
 pub(crate) fn status_of(data: &Value) -> i64 {
@@ -154,10 +110,10 @@ fn range_sha1(path: &Path, start: u64, length: u64) -> std::io::Result<String> {
     let mut left = length;
     let mut buffer = vec![0u8; 1024 * 1024];
     while left > 0 {
-        let want = buffer.len().min(left as usize);
+        let want = left.min(buffer.len() as u64) as usize;
         let read = file.read(&mut buffer[..want])?;
         if read == 0 {
-            break;
+            return Err(std::io::ErrorKind::UnexpectedEof.into());
         }
         sha.update(&buffer[..read]);
         left -= read as u64;
@@ -165,7 +121,7 @@ fn range_sha1(path: &Path, start: u64, length: u64) -> std::io::Result<String> {
     Ok(hex::encode(sha.finalize()).to_uppercase())
 }
 
-/// Resolve `path` only when it sits under one of the configured roots.
+/// Resolve `path` only when it sits under one of the module's selected folders.
 pub(crate) fn allowed_path(raw: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
     let path = std::fs::canonicalize(raw).map_err(|error| format!("读不到这个文件：{error}"))?;
     if !path.is_file() {
@@ -176,38 +132,9 @@ pub(crate) fn allowed_path(raw: &str, roots: &[PathBuf]) -> Result<PathBuf, Stri
         path.starts_with(root)
     });
     if !inside {
-        return Err("只能在媒体库目录范围内读写文件".into());
+        return Err("只能读取已选择并授权给 115 的本地文件夹".into());
     }
     Ok(path)
-}
-
-async fn init_once(
-    config: &Config,
-    userkey: &str,
-    userid: &str,
-    target: &str,
-    name: &str,
-    fileid: &str,
-    size: u64,
-    sign_key: &str,
-    sign_val: &str,
-) -> Result<Value, ApiError> {
-    let payload = crypto::upload_payload(&UploadInit {
-        userkey,
-        userid,
-        fileid,
-        filename: name,
-        filesize: size,
-        target,
-        sign_key,
-        sign_val,
-        appversion: client::APP_VERSION,
-    });
-    client::upload_init(&config.cookie, &payload.0, &payload.1).await
-}
-
-fn failed(error: ApiError) -> Response {
-    json_error(StatusCode::BAD_GATEWAY, &error.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +145,7 @@ const MIN_PART: u64 = 20 * 1024 * 1024;
 const MAX_PARTS: u64 = 9000;
 
 struct Pending {
+    grant: String,
     path: PathBuf,
     bucket: String,
     object: String,
@@ -250,6 +178,9 @@ pub(crate) fn read_part(path: &Path, offset: u64, length: u64) -> std::io::Resul
     file.seek(SeekFrom::Start(offset))?;
     let mut data = Vec::with_capacity(length as usize);
     file.take(length).read_to_end(&mut data)?;
+    if data.len() as u64 != length {
+        return Err(std::io::ErrorKind::UnexpectedEof.into());
+    }
     Ok(data)
 }
 
@@ -264,36 +195,81 @@ pub(crate) fn new_upload_id() -> String {
     format!("{:016x}", hasher.finish())
 }
 
-/// Run the signed init, answering the range challenge once when the drive asks.
+pub(crate) enum Init {
+    Hit(String),
+    Multipart {
+        pickcode: String,
+        bucket: String,
+        object: String,
+        callback: String,
+        callback_var: String,
+    },
+}
+
+fn field<'a>(data: &'a Value, name: &str) -> Result<&'a str, String> {
+    data[name]
+        .as_str()
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| format!("115 上传响应缺少 {name}"))
+}
+
+fn parse_init(data: &Value) -> Result<Init, String> {
+    let pickcode = field(data, "pick_code")?.to_owned();
+    match status_of(data) {
+        2 => Ok(Init::Hit(pickcode)),
+        1 => Ok(Init::Multipart {
+            pickcode,
+            bucket: field(data, "bucket")?.into(),
+            object: field(data, "object")?.into(),
+            callback: field(&data["callback"], "callback")?.into(),
+            callback_var: field(&data["callback"], "callback_var")?.into(),
+        }),
+        _ => Err("115 没有接受这次上传".into()),
+    }
+}
+
+fn range_answer(path: &Path, size: u64, check: &str) -> Result<String, String> {
+    let invalid = "115 返回无效的校验范围";
+    let (first, last) = check.split_once('-').ok_or(invalid)?;
+    let start = first.parse::<u64>().map_err(|_| invalid)?;
+    let end = last.parse::<u64>().map_err(|_| invalid)?;
+    if start > end || end >= size {
+        return Err(invalid.into());
+    }
+    range_sha1(path, start, end - start + 1).map_err(|_| "无法读取校验范围".into())
+}
+
 pub(crate) async fn init_with_challenge(
     config: &Config,
-    userkey: &str,
-    userid: &str,
     target: &str,
     name: &str,
     path: &Path,
     fileid: &str,
     size: u64,
-) -> Result<Value, ApiError> {
-    let mut answer = init_once(config, userkey, userid, target, name, fileid, size, "", "").await?;
-    let status = status_of(&answer);
-    if matches!(status, 6 | 7 | 8) {
-        if let Some(check) = answer.get("sign_check").and_then(Value::as_str) {
-            if let Some((start, end)) = check.split_once('-') {
-                if let (Ok(start), Ok(end)) = (start.trim().parse::<u64>(), end.trim().parse::<u64>()) {
-                    let length = end.saturating_sub(start).saturating_add(1).min(size);
-                    let digest = range_sha1(path, start, length)
-                        .map_err(|error| ApiError::network(format!("读取文件失败：{error}")))?;
-                    let sign_key = answer.get("sign_key").and_then(Value::as_str).unwrap_or("");
-                    answer = init_once(
-                        config, userkey, userid, target, name, fileid, size, sign_key, &digest,
-                    )
-                    .await?;
-                }
-            }
-        }
+) -> Result<Init, String> {
+    let bytes = size.to_string();
+    let mut form = vec![
+        ("target", target),
+        ("file_name", name),
+        ("file_size", bytes.as_str()),
+        ("fileid", fileid),
+    ];
+    let data = client::open_form(&config.auth_id, "/open/upload/init", &form)
+        .await
+        .map_err(|_| "115 上传初始化失败")?;
+    if status_of(&data) != 7 {
+        return parse_init(&data);
     }
-    Ok(answer)
+    let key = field(&data, "sign_key")?;
+    let digest = range_answer(path, size, field(&data, "sign_check")?)?;
+    form.extend([("sign_key", key), ("sign_val", digest.as_str())]);
+    if let Some(code) = data["pick_code"].as_str().filter(|v| !v.is_empty()) {
+        form.push(("pick_code", code));
+    }
+    let answer = client::open_form(&config.auth_id, "/open/upload/init", &form)
+        .await
+        .map_err(|_| "115 二次认证失败")?;
+    parse_init(&answer)
 }
 
 #[derive(Serialize)]
@@ -340,19 +316,18 @@ pub(crate) async fn start<S: HostCtx + Clone + Send + Sync + 'static>(
 ) -> Result<Json<StartResult>, Response> {
     host.require(&user, Permission::SettingsManage)?;
     let config = Config::load();
-    if config.cookie.trim().is_empty() {
-        return Err(json_error(StatusCode::SERVICE_UNAVAILABLE, "115 的 Cookie 还没配置"));
+    if config.auth_id.trim().is_empty() {
+        return Err(json_error(StatusCode::SERVICE_UNAVAILABLE, "115 尚未授权"));
     }
     let cid = folder_cid(&config, &body.cid, &body.remote).await?;
-    let roots: Vec<PathBuf> = host
-        .library_folders()
-        .into_iter()
-        .flat_map(|folder| folder.folders)
-        .map(PathBuf::from)
+    let roots: Vec<PathBuf> = config
+        .libraries
+        .iter()
+        .filter_map(|library| crate::sync::resolve_local_path(&[], &library.local))
         .collect();
     let raw = body.path.trim().to_string();
-    let resolved = allowed_path(&raw, &roots)
-        .map_err(|error| json_error(StatusCode::BAD_REQUEST, &error))?;
+    let resolved =
+        allowed_path(&raw, &roots).map_err(|error| json_error(StatusCode::BAD_REQUEST, &error))?;
     let (fileid, size) = fingerprint(&resolved)
         .map_err(|error| json_error(StatusCode::BAD_REQUEST, &format!("读取文件失败：{error}")))?;
     let name = resolved
@@ -360,65 +335,31 @@ pub(crate) async fn start<S: HostCtx + Clone + Send + Sync + 'static>(
         .and_then(std::ffi::OsStr::to_str)
         .unwrap_or("upload.bin")
         .to_string();
-    let userid = cookie_uid(&config.cookie)
-        .ok_or_else(|| json_error(StatusCode::BAD_GATEWAY, "Cookie 里缺少 UID"))?;
-    let userkey = client::upload_key(&config.cookie, client::UPLOAD_UA)
-        .await
-        .map_err(failed)?;
     let target = format!("U_1_{cid}");
-    let answer = init_with_challenge(
-        &config, &userkey, &userid, &target, &name, &resolved, &fileid, size,
-    )
-    .await
-    .map_err(failed)?;
-    let status = status_of(&answer);
-    if status == 2 {
-        return Ok(Json(StartResult {
-            hit: true,
-            upload: None,
-            parts: 0,
-            part_size: 0,
-            pickcode: answer
-                .get("pickcode")
-                .and_then(Value::as_str)
-                .map(str::to_string),
-        }));
-    }
-    if status != 1 {
-        return Err(json_error(
-            StatusCode::BAD_GATEWAY,
-            &format!("115 没有接受这次上传（状态 {status}）"),
-        ));
-    }
-    let bucket = answer
-        .get("bucket")
-        .and_then(Value::as_str)
-        .unwrap_or(crate::oss::DEFAULT_BUCKET)
-        .to_string();
-    let object = answer
-        .get("object")
-        .and_then(Value::as_str)
-        .ok_or_else(|| json_error(StatusCode::BAD_GATEWAY, "115 没有给出上传对象"))?
-        .to_string();
-    let callback = answer
-        .get("callback")
-        .and_then(|callback| callback.get("callback"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| json_error(StatusCode::BAD_GATEWAY, "115 没有给出回调参数"))?
-        .to_string();
-    let callback_var = answer
-        .get("callback")
-        .and_then(|callback| callback.get("callback_var"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| json_error(StatusCode::BAD_GATEWAY, "115 没有给出回调变量"))?
-        .to_string();
-    let pickcode = answer
-        .get("pickcode")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    let upload_id = crate::oss::start(&bucket, &object)
-        .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))?;
+    let init = init_with_challenge(&config, &target, &name, &resolved, &fileid, size)
+        .await
+        .map_err(|err| json_error(StatusCode::BAD_GATEWAY, &err))?;
+    let (pickcode, bucket, object, callback, callback_var) = match init {
+        Init::Hit(code) => {
+            return Ok(Json(StartResult {
+                hit: true,
+                upload: None,
+                parts: 0,
+                part_size: 0,
+                pickcode: Some(code),
+            }))
+        }
+        Init::Multipart {
+            pickcode,
+            bucket,
+            object,
+            callback,
+            callback_var,
+        } => (pickcode, bucket, object, callback, callback_var),
+    };
+    let upload_id = crate::oss::start(&config.auth_id, &bucket, &object)
+        .await
+        .map_err(|err| json_error(StatusCode::BAD_GATEWAY, &err))?;
     let part_size = part_size_for(size);
     let parts = part_count(size, part_size);
     let upload = new_upload_id();
@@ -428,6 +369,7 @@ pub(crate) async fn start<S: HostCtx + Clone + Send + Sync + 'static>(
         .insert(
             upload.clone(),
             Pending {
+                grant: config.auth_id,
                 path: resolved,
                 bucket,
                 object,
@@ -456,6 +398,7 @@ pub(crate) async fn part<S: HostCtx + Clone + Send + Sync + 'static>(
     Json(body): Json<PartBody>,
 ) -> Result<Json<PartResult>, Response> {
     host.require(&user, Permission::SettingsManage)?;
+    let config = Config::load();
     let (path, bucket, object, upload_id, part_size, size, index) = {
         let all = pending()
             .lock()
@@ -463,6 +406,9 @@ pub(crate) async fn part<S: HostCtx + Clone + Send + Sync + 'static>(
         let entry = all
             .get(&body.upload)
             .ok_or_else(|| json_error(StatusCode::NOT_FOUND, "这次上传已经结束"))?;
+        if config.auth_id != entry.grant {
+            return Err(json_error(StatusCode::FORBIDDEN, "上传授权已更改"));
+        }
         if body.index >= entry.etags.len() {
             return Err(json_error(StatusCode::BAD_REQUEST, "分片号超出范围"));
         }
@@ -478,10 +424,25 @@ pub(crate) async fn part<S: HostCtx + Clone + Send + Sync + 'static>(
     };
     let offset = part_size * index as u64;
     let length = part_size.min(size.saturating_sub(offset));
+    let roots = config
+        .libraries
+        .iter()
+        .filter_map(|lib| crate::sync::resolve_local_path(&[], &lib.local))
+        .collect::<Vec<_>>();
+    let path = allowed_path(path.to_str().unwrap_or(""), &roots)
+        .map_err(|err| json_error(StatusCode::BAD_REQUEST, &err))?;
     let data = read_part(&path, offset, length)
         .map_err(|error| json_error(StatusCode::BAD_REQUEST, &format!("读取分片失败：{error}")))?;
-    let etag = crate::oss::put_part(&bucket, &object, &upload_id, index as u32 + 1, &data)
-        .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))?;
+    let etag = crate::oss::put_part(
+        &config.auth_id,
+        &bucket,
+        &object,
+        &upload_id,
+        index as u32 + 1,
+        &data,
+    )
+    .await
+    .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))?;
     let parts = {
         let mut all = pending()
             .lock()
@@ -513,7 +474,11 @@ pub(crate) async fn finish<S: HostCtx + Clone + Send + Sync + 'static>(
     let Some(etags) = entry.etags.iter().cloned().collect::<Option<Vec<String>>>() else {
         return Err(json_error(StatusCode::CONFLICT, "还有分片没传完"));
     };
+    if Config::load().auth_id != entry.grant {
+        return Err(json_error(StatusCode::FORBIDDEN, "上传授权已更改"));
+    }
     crate::oss::complete(
+        &entry.grant,
         &entry.bucket,
         &entry.object,
         &entry.upload_id,
@@ -521,6 +486,7 @@ pub(crate) async fn finish<S: HostCtx + Clone + Send + Sync + 'static>(
         &entry.callback,
         &entry.callback_var,
     )
+    .await
     .map_err(|error| json_error(StatusCode::BAD_GATEWAY, &error))?;
     Ok(Json(FinishResult {
         pickcode: entry.pickcode,
@@ -535,19 +501,18 @@ pub(crate) async fn rapid<S: HostCtx + Clone + Send + Sync + 'static>(
 ) -> Result<Json<RapidResult>, Response> {
     host.require(&user, Permission::SettingsManage)?;
     let config = Config::load();
-    if config.cookie.trim().is_empty() {
-        return Err(json_error(StatusCode::SERVICE_UNAVAILABLE, "115 的 Cookie 还没配置"));
+    if config.auth_id.trim().is_empty() {
+        return Err(json_error(StatusCode::SERVICE_UNAVAILABLE, "115 尚未授权"));
     }
     let cid = folder_cid(&config, &body.cid, &body.remote).await?;
-    let roots: Vec<PathBuf> = host
-        .library_folders()
-        .into_iter()
-        .flat_map(|folder| folder.folders)
-        .map(PathBuf::from)
+    let roots: Vec<PathBuf> = config
+        .libraries
+        .iter()
+        .filter_map(|library| crate::sync::resolve_local_path(&[], &library.local))
         .collect();
     let raw = body.path.trim().to_string();
-    let resolved = allowed_path(&raw, &roots)
-        .map_err(|error| json_error(StatusCode::BAD_REQUEST, &error))?;
+    let resolved =
+        allowed_path(&raw, &roots).map_err(|error| json_error(StatusCode::BAD_REQUEST, &error))?;
     let (fileid, size) = fingerprint(&resolved)
         .map_err(|error| json_error(StatusCode::BAD_REQUEST, &format!("读取文件失败：{error}")))?;
     let name = resolved
@@ -555,60 +520,55 @@ pub(crate) async fn rapid<S: HostCtx + Clone + Send + Sync + 'static>(
         .and_then(std::ffi::OsStr::to_str)
         .unwrap_or("upload.bin")
         .to_string();
-    let userid = cookie_uid(&config.cookie)
-        .ok_or_else(|| json_error(StatusCode::BAD_GATEWAY, "Cookie 里缺少 UID"))?;
-    let userkey = client::upload_key(&config.cookie, client::UPLOAD_UA)
-        .await
-        .map_err(failed)?;
     let target = format!("U_1_{cid}");
-
-    let first = init_once(
-        &config, &userkey, &userid, &target, &name, &fileid, size, "", "",
-    )
-    .await
-    .map_err(failed)?;
-    let mut status = status_of(&first);
-    let mut answer = first;
-
-    // A range challenge: hash the bytes the drive names, then ask again.
-    if matches!(status, 6 | 7 | 8) {
-        if let Some(check) = answer.get("sign_check").and_then(Value::as_str) {
-            if let Some((start, end)) = check.split_once('-') {
-                if let (Ok(start), Ok(end)) = (start.trim().parse::<u64>(), end.trim().parse::<u64>()) {
-                    let length = end.saturating_sub(start).saturating_add(1).min(size);
-                    let path = resolved.clone();
-                    let digest = tokio::task::spawn_blocking(move || range_sha1(&path, start, length))
-                        .await
-                        .map_err(|_| json_error(StatusCode::BAD_REQUEST, "读取文件失败"))?
-                        .map_err(|error| {
-                            json_error(StatusCode::BAD_REQUEST, &format!("读取文件失败：{error}"))
-                        })?;
-                    let sign_key = answer
-                        .get("sign_key")
-                        .and_then(Value::as_str)
-                        .unwrap_or("");
-                    answer = init_once(
-                        &config, &userkey, &userid, &target, &name, &fileid, size, sign_key,
-                        &digest,
-                    )
-                    .await
-                    .map_err(failed)?;
-                    status = status_of(&answer);
-                }
-            }
-        }
-    }
-
-    let pickcode = answer
-        .get("pickcode")
-        .and_then(Value::as_str)
-        .filter(|code| !code.is_empty())
-        .map(str::to_string);
-    let hit = status == 2 && pickcode.is_some();
+    let init = init_with_challenge(&config, &target, &name, &resolved, &fileid, size)
+        .await
+        .map_err(|err| json_error(StatusCode::BAD_GATEWAY, &err))?;
+    let (hit, pickcode, status) = match init {
+        Init::Hit(code) => (true, code, 2),
+        Init::Multipart { pickcode, .. } => (false, pickcode, 1),
+    };
     Ok(Json(RapidResult {
         hit,
         need_upload: !hit,
-        pickcode,
+        pickcode: Some(pickcode),
         status,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn official_init_data_distinguishes_hit_from_multipart() {
+        let hit =
+            json!({"state": true,"code":0,"data":{"status":2,"pick_code":"pc","file_id":"1"}});
+        assert!(matches!(parse_init(&hit["data"]),Ok(Init::Hit(pc)) if pc == "pc"));
+        let data = json!({"status":1,"pick_code":"pc","bucket":"example","object":"k","callback":{"callback":"cb","callback_var":"vars"}});
+        assert!(
+            matches!(parse_init(&data),Ok(Init::Multipart{object,callback_var,..}) if object=="k" && callback_var=="vars")
+        );
+        assert!(parse_init(&json!({"status":1,"pick_code":"pc"})).is_err());
+        assert!(parse_init(&json!({"status":2,"pickcode":"legacy"})).is_err());
+    }
+
+    #[test]
+    fn official_challenge_hashes_both_ends_and_rejects_short_reads() {
+        let challenge = json!({"state":false,"code":701,"data":{"status":7,"sign_key":"key","sign_check":"1-3"}});
+        let dir = kroma_module_sdk::testing::temp_dir("cloud115-range");
+        let file = dir.path().join("input");
+        std::fs::write(&file, b"XabcY").unwrap();
+        let data = &challenge["data"];
+        assert_eq!(status_of(data), 7);
+        assert_eq!(
+            range_answer(&file, 5, field(data, "sign_check").unwrap()).unwrap(),
+            "A9993E364706816ABA3E25717850C26C9CD0D89D"
+        );
+        for invalid in ["2-1", "0-5", "1", "1-18446744073709551615"] {
+            assert!(range_answer(&file, 5, invalid).is_err());
+        }
+        assert!(range_answer(&file, 6, "4-5").is_err());
+    }
 }

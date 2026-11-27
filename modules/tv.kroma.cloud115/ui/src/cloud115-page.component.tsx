@@ -1,22 +1,19 @@
-// Admin "115 Cloud" page, in five tabs over ONE settings store: the account and
-// its pacing, ingest (share transfer + upload), STRM mappings, the watcher and
-// its sync board, and the logs. Backed by this module's `/settings`, `/status`,
-// `/sync`, `/transfer/*` and `/browse` routes.
-//
-// The page never sees the stored cookie: it is told only whether one is set. A
-// blank field keeps it, and clearing takes an explicit button, so autofill or a
-// stray save cannot sign the module out of the account.
-//
-// The five tabs share the state above them, so the save bar is one bar with one
-// dirty flag rather than a copy per tab, and switching tabs never discards an
-// edit.
-import { Denied, ModuleFailed, ModuleLoading, useCap, useT } from '@kromatv/module-sdk';
+// Settings drafts persist across tabs; authorization is independent of configuration.
+import {
+  apiErrorText,
+  Denied,
+  ModuleFailed,
+  ModuleLoading,
+  useAdminHost,
+  useCap,
+  useT,
+} from '@kromatv/module-sdk';
 import {
   Badge,
   Box,
   Button,
   Callout,
-  ChoiceList,
+  Checkbox,
   Dialog,
   Field,
   Icon,
@@ -35,6 +32,9 @@ import {
 } from '@kromatv/ui/kit';
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useCloud115Api } from './api.hook';
+import { SyncBoard } from './sync-board.component';
+import { CloudConfigExport } from './schemas';
+import { pickLocalFolder } from './local-folder';
 import type {
   BrowseEntry,
   BrowseView,
@@ -42,26 +42,15 @@ import type {
   CloudLibrary,
   CloudOptions,
   CloudStatusView,
-  LoginStarted,
-  LoginState,
-  ShareView,
   SyncReport,
-  TransferEntryView,
 } from './schemas';
 
-// The clients a 115 login can be made from. Each is a distinct session, so the
-// operator picks one neither they nor another tool is holding.
-const LOGIN_APPS = [
-  { value: 'alipaymini', label: 'cloud115.loginApp.alipaymini' },
-  { value: 'wechatmini', label: 'cloud115.loginApp.wechatmini' },
-  { value: 'tv', label: 'cloud115.loginApp.tv' },
-  { value: 'apple_tv', label: 'cloud115.loginApp.apple_tv' },
-  { value: 'harmony', label: 'cloud115.loginApp.harmony' },
-  { value: 'os_linux', label: 'cloud115.loginApp.os_linux' },
-  { value: 'os_mac', label: 'cloud115.loginApp.os_mac' },
-  { value: 'os_windows', label: 'cloud115.loginApp.os_windows' },
-  { value: 'web', label: 'cloud115.loginApp.web' },
-] as const;
+import { AppIdLogin } from './app-id-login.component';
+
+const FAST_STATES: Record<string, string> = {
+  pending: 'cloud115.state.queued', checked: 'cloud115.fastChecked', baselining: 'cloud115.fastBaseline',
+  'rate limited': 'cloud115.fastLimited', error: 'cloud115.state.failed',
+};
 
 const TABS = ['account', 'ingest', 'strm', 'sync', 'logs'] as const;
 type Tab = (typeof TABS)[number];
@@ -93,13 +82,7 @@ const sDefinition = styles({
   sticky: { position: 'sticky', bottom: 0, zIndex: 5 },
 });
 
-const EMPTY_LIBRARY: CloudLibrary = { remote: '', local: '' };
-
-// The backend's own fallback when a share carries no title; rendering it would
-// print Chinese in every other language, so it is replaced at the edge.
-const UNTITLED_SHARE = '115 分享';
-
-type Target = { cid: string; name: string };
+const EMPTY_LIBRARY: CloudLibrary = { remote: '', local: '', localDisplay: '', fastSync: true };
 
 function errorText(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
@@ -109,17 +92,22 @@ function errorText(reason: unknown): string {
 export function Cloud115Settings() {
   const t = useT();
   const api = useCloud115Api();
+  const { client } = useAdminHost();
   const canManage = useCap('settings.manage');
 
   const [status, setStatus] = useState<CloudStatusView | null>(null);
   const [account, setAccount] = useState<CloudAccount | null>(null);
   const [baseUrl, setBaseUrl] = useState('');
-  const [transitFolder, setTransitFolder] = useState('');
-  const [cookie, setCookie] = useState('');
-  const [hasCookie, setHasCookie] = useState(false);
+  const [appId, setAppId] = useState('');
+  const [authorized, setAuthorized] = useState(false);
   const [libraries, setLibraries] = useState<CloudLibrary[]>([]);
   const [options, setOptions] = useState<CloudOptions | null>(null);
-  const [resolved, setResolved] = useState<string[]>([]);
+  const [pickingLocalRow, setPickingLocalRow] = useState<CloudLibrary | null>(null);
+  const [localPickerError, setLocalPickerError] = useState<{
+    row: CloudLibrary;
+    message: string;
+  } | null>(null);
+  const localPickPending = useRef(false);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -131,32 +119,16 @@ export function Cloud115Settings() {
   // What the server held when this page loaded: a save is allowed to carry zero
   // mappings only when there were none to begin with.
   const savedMappings = useRef(0);
-  const [picker, setPicker] = useState<{ at: number; mode: 'remote' | 'local' } | null>(null);
-  const [loginApp, setLoginApp] = useState<string>('alipaymini');
-  const [login, setLogin] = useState<LoginStarted | null>(null);
-  const [loginState, setLoginState] = useState<LoginState | null>(null);
-  const [loginBusy, setLoginBusy] = useState(false);
+  const [remotePickerRow, setRemotePickerRow] = useState<CloudLibrary | null>(null);
   const [uploadRemote, setUploadRemote] = useState('');
   const [uploadPath, setUploadPath] = useState('');
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [tab, setTab] = useState<Tab>('account');
   const [showAdvanced, setShowAdvanced] = useState(false);
-  // Share transfer: the pasted text, the preview it produced, the entries
-  // ticked per share, the destination folder and the last receipt.
-  const [shareText, setShareText] = useState('');
-  const [shares, setShares] = useState<ShareView[]>([]);
-  const [shareBusy, setShareBusy] = useState(false);
-  const [shareError, setShareError] = useState<string | null>(null);
-  const [picked, setPicked] = useState<Record<string, string[]>>({});
-  const [target, setTarget] = useState<Target>({ cid: '0', name: '' });
-  const [targetOpen, setTargetOpen] = useState(false);
   const [replaceBusy, setReplaceBusy] = useState(false);
   const [replaceCount, setReplaceCount] = useState<number | null>(null);
   const [replaceMsg, setReplaceMsg] = useState<string | null>(null);
-  const [receiveBusy, setReceiveBusy] = useState(false);
-  const [receiveFiles, setReceiveFiles] = useState<number | null>(null);
-  const [receiveErrors, setReceiveErrors] = useState<string[]>([]);
   const [accountBusy, setAccountBusy] = useState(false);
   const [aliasOpen, setAliasOpen] = useState(false);
   const [aliasDraft, setAliasDraft] = useState('');
@@ -180,11 +152,10 @@ export function Cloud115Settings() {
           (library) => library.remote.trim() || library.local.trim(),
         ).length;
         setBaseUrl(view.baseUrl);
-        setTransitFolder(view.transitFolder);
-        setHasCookie(view.hasCookie);
+        setAppId(view.appId);
+        setAuthorized(view.authorized);
         setLibraries(view.libraries.length ? view.libraries : [{ ...EMPTY_LIBRARY }]);
         setOptions(view.options);
-        setResolved(view.resolvedLocal);
       })
       .catch(() => setError(t('cloud115.loadFailed')));
 
@@ -193,7 +164,7 @@ export function Cloud115Settings() {
         .status()
         .then((view) => {
           setStatus(view);
-          setHasCookie(view.cookieSet);
+          setAuthorized(view.authorized);
         })
         .catch(() => undefined);
     };
@@ -205,56 +176,6 @@ export function Cloud115Settings() {
       .catch(() => undefined);
     return () => clearInterval(id);
   }, [api, t]);
-
-  // Poll a scan while it is open; a confirmed one has already stored the
-  // cookies server-side, so the page only has to re-read its settings.
-  useEffect(() => {
-    if (!login) {
-      return;
-    }
-    const id = setInterval(() => {
-      api
-        .loginState(login.flow)
-        .then((view) => {
-          setLoginState(view);
-          if (view.status === 'confirmed') {
-            setLogin(null);
-            setHasCookie(true);
-            setSaved(false);
-            setDirty(false);
-            api
-              .settings()
-              .then((settings) => setResolved(settings.resolvedLocal))
-              .catch(() => undefined);
-            api
-              .account()
-              .then(setAccount)
-              .catch(() => undefined);
-          } else if (view.status === 'expired' || view.status === 'failed') {
-            setLogin(null);
-          }
-        })
-        .catch(() => undefined);
-    }, 2000);
-    return () => clearInterval(id);
-  }, [api, login]);
-
-  const startLogin = () => {
-    setLoginBusy(true);
-    setLoginState(null);
-    api
-      .loginStart(loginApp)
-      .then(setLogin)
-      .catch((reason) => setError(errorText(reason)))
-      .finally(() => setLoginBusy(false));
-  };
-
-  const cancelLogin = () => {
-    if (login) {
-      void api.loginCancel(login.flow).catch(() => undefined);
-    }
-    setLogin(null);
-  };
 
   const rapidCheck = async () => {
     const remote = uploadRemote.trim();
@@ -317,99 +238,6 @@ export function Cloud115Settings() {
     }
   };
 
-  const previewShares = async () => {
-    const text = shareText.trim();
-    if (!text) {
-      setShareError(t('cloud115.transferMissing'));
-      return;
-    }
-    setShareBusy(true);
-    setShareError(null);
-    setReceiveFiles(null);
-    setReceiveErrors([]);
-    try {
-      const list = await api.transferPreview(text);
-      if (list.length === 0) {
-        setShares([]);
-        setPicked({});
-        setShareError(t('cloud115.transferEmpty'));
-        return;
-      }
-      setShares(list);
-      // Everything is ticked on arrival; unticking is the narrower gesture.
-      setPicked(
-        Object.fromEntries(
-          list.map((share) => [share.code, share.entries.map((entry) => entry.id)]),
-        ),
-      );
-    } catch (reason) {
-      setShares([]);
-      setPicked({});
-      setShareError(errorText(reason));
-    } finally {
-      setShareBusy(false);
-    }
-  };
-
-  const receiveSelected = async () => {
-    const jobs = shares
-      .map((share) => ({
-        share,
-        entries: share.entries.filter((entry) => (picked[share.code] ?? []).includes(entry.id)),
-      }))
-      .filter((job) => job.entries.length > 0);
-    if (jobs.length === 0) {
-      setReceiveErrors([t('cloud115.transferPickNone')]);
-      return;
-    }
-    setReceiveBusy(true);
-    setReceiveFiles(null);
-    setReceiveErrors([]);
-    const failures: string[] = [];
-    const done: string[] = [];
-    let files = 0;
-    try {
-      // One call per share: the API takes one code, and a batch can hold several.
-      for (const job of jobs) {
-        try {
-          const report = await api.transferReceive({
-            code: job.share.code,
-            password: job.share.password,
-            title: shareTitle(job.share),
-            cid: target.cid,
-            entries: job.entries.map((entry) => ({ id: entry.id, isDir: entry.isDir })),
-          });
-          files += report.files;
-          done.push(job.share.code);
-        } catch (reason) {
-          failures.push(`${shareTitle(job.share)} · ${errorText(reason)}`);
-        }
-      }
-      setReceiveFiles(done.length > 0 ? files : null);
-      setReceiveErrors(failures);
-      if (done.length > 0) {
-        // Succeeded shares drop their ticks; a failed one keeps what to retry.
-        setPicked((current) => {
-          const next = { ...current };
-          for (const code of done) {
-            next[code] = [];
-          }
-          return next;
-        });
-        // Pull the new receipt immediately instead of waiting for the poll.
-        api
-          .status()
-          .then((view) => {
-            setStatus(view);
-            setHasCookie(view.cookieSet);
-          })
-          .catch(() => undefined);
-      }
-    } finally {
-      setReceiveBusy(false);
-    }
-  };
-
   if (!canManage) {
     return <Denied />;
   }
@@ -417,9 +245,43 @@ export function Cloud115Settings() {
     return error ? <ModuleFailed /> : <ModuleLoading panels={3} />;
   }
 
-  const updateLibrary = (at: number, patch: Partial<CloudLibrary>) => {
+  const updateLibrary = (row: CloudLibrary, patch: Partial<CloudLibrary>) => {
     setDirty(true);
-    setLibraries((current) => current.map((item, i) => (i === at ? { ...item, ...patch } : item)));
+    setLibraries((current) => current.map((item) => (item === row ? { ...item, ...patch } : item)));
+  };
+
+  const pickingLocal = pickingLocalRow !== null;
+  const mappingBusy = busy || pickingLocal || replaceBusy;
+  const pickerDisabled =
+    mappingBusy || accountBusy || uploadBusy;
+  const incompleteMapping = libraries.some(
+    (row) => Boolean(row.remote.trim()) !== Boolean(row.local.trim()),
+  );
+
+  const chooseLocalFolder = async (row: CloudLibrary) => {
+    if (pickerDisabled || localPickPending.current) {
+      return;
+    }
+    localPickPending.current = true;
+    setPickingLocalRow(row);
+    setLocalPickerError(null);
+    try {
+      const choice = await pickLocalFolder(client.admin);
+      if (choice === 'unavailable') {
+        setLocalPickerError({ row, message: t('cloud115.localPickerUnavailable') });
+      } else if (choice) {
+        updateLibrary(row, choice);
+      }
+    } catch (reason) {
+      const fallback = t('cloud115.localPickerFailed');
+      setLocalPickerError({
+        row,
+        message: typeof apiErrorText === 'function' ? apiErrorText(reason, fallback) : fallback,
+      });
+    } finally {
+      localPickPending.current = false;
+      setPickingLocalRow(null);
+    }
   };
 
   const patchOptions = (patch: Partial<CloudOptions>) => {
@@ -427,7 +289,17 @@ export function Cloud115Settings() {
     setOptions((current) => (current ? { ...current, ...patch } : current));
   };
 
+  const restartAfterMappingChange = async () => {
+    if (typeof client.admin.restartModule !== 'function') {
+      throw new Error(t('cloud115.mappingRestartUnavailable'));
+    }
+    await client.admin.restartModule('tv.kroma.cloud115');
+  };
+
   const save = async () => {
+    if (localPickPending.current || (incompleteMapping && tab !== 'account')) {
+      return;
+    }
     setBusy(true);
     setSaved(false);
     setError(null);
@@ -442,25 +314,22 @@ export function Cloud115Settings() {
       }
       const result = await api.save({
         baseUrl,
-        transitFolder,
-        libraries: kept,
+        ...(incompleteMapping ? {} : { libraries: kept }),
         options,
-        ...(cookie.trim() ? { cookie: cookie.trim() } : {}),
       });
-      setCookie('');
-      setHasCookie(hasCookie || Boolean(cookie.trim()));
-      setDirty(false);
-      setSaved(true);
+      if (result.restartRequired) {
+        await restartAfterMappingChange();
+      }
+      setDirty(incompleteMapping);
+      setSaved(!incompleteMapping);
       setSavedAt(new Date());
-      savedMappings.current = kept.length;
-      // The save also creates each mapping's folder; a path outside the storage
-      // roots fails here, and that must be said now rather than at the next sync.
-      const view = await api.settings();
-      setResolved(view.resolvedLocal);
+      if (!incompleteMapping) {
+        savedMappings.current = kept.length;
+      }
       if (result.errors.length) {
         setSaved(false);
         setError(result.errors.join(' · '));
-      } else if (view.resolvedLocal.some((path) => !path)) {
+      } else if (!incompleteMapping && (await api.settings()).resolvedLocal.some((path) => !path)) {
         setError(t('cloud115.unresolved'));
       }
     } catch (reason) {
@@ -481,49 +350,11 @@ export function Cloud115Settings() {
         (library) => library.remote.trim() || library.local.trim(),
       ).length;
       setBaseUrl(view.baseUrl);
-      setHasCookie(view.hasCookie);
+      setAuthorized(view.authorized);
       setLibraries(view.libraries.length ? view.libraries : [{ ...EMPTY_LIBRARY }]);
       setOptions(view.options);
-      setResolved(view.resolvedLocal);
-      setCookie('');
       setDirty(false);
       setSaved(false);
-    } catch (reason) {
-      setError(errorText(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const importCookie = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api.loginCookie(cookie.trim());
-      if (result.ok) {
-        setCookie('');
-        setHasCookie(true);
-        setSaved(true);
-        setSavedAt(new Date());
-      } else {
-        setError(result.message);
-      }
-    } catch (reason) {
-      setError(errorText(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const clearCookie = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.save({ clearCookie: true, baseUrl, transitFolder, libraries, options });
-      setHasCookie(false);
-      setDirty(false);
-      setSaved(true);
-      setSavedAt(new Date());
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -555,10 +386,9 @@ export function Cloud115Settings() {
       (library) => library.remote.trim() || library.local.trim(),
     ).length;
     setBaseUrl(view.baseUrl);
-    setHasCookie(view.hasCookie);
+    setAuthorized(view.authorized);
     setLibraries(view.libraries.length ? view.libraries : [{ ...EMPTY_LIBRARY }]);
     setOptions(view.options);
-    setResolved(view.resolvedLocal);
   };
 
   const refreshAccount = async () => {
@@ -568,7 +398,7 @@ export function Cloud115Settings() {
       const [view, board] = await Promise.all([api.account(true), api.status()]);
       setAccount(view);
       setStatus(board);
-      setHasCookie(board.cookieSet);
+      setAuthorized(board.authorized);
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -596,14 +426,13 @@ export function Cloud115Settings() {
     try {
       await api.accountRemove();
       setAccount(null);
-      setHasCookie(false);
-      setCookie('');
+      setAuthorized(false);
       setRemoveOpen(false);
       api
         .status()
         .then((view) => {
           setStatus(view);
-          setHasCookie(view.cookieSet);
+          setAuthorized(view.authorized);
         })
         .catch(() => undefined);
     } catch (reason) {
@@ -666,10 +495,14 @@ export function Cloud115Settings() {
     setError(null);
     try {
       const parsed = JSON.parse(importText) as unknown;
-      if (!parsed || typeof parsed !== 'object') {
+      const config = CloudConfigExport.safeParse(parsed);
+      if (!config.success || !Array.isArray((parsed as { libraries?: unknown }).libraries)) {
         throw new Error(t('cloud115.importInvalid'));
       }
-      await api.configImport(parsed as never);
+      const imported = await api.configImport(config.data);
+      if (imported.restartRequired) {
+        await restartAfterMappingChange();
+      }
       await reloadSettings();
       setDirty(false);
       setSaved(true);
@@ -706,19 +539,14 @@ export function Cloud115Settings() {
   };
 
   const report = status.report;
+  const lastErrorCount = report.mappings?.length
+    ? report.mappings.reduce((sum, mapping) => sum + mapping.errorCount, 0)
+    : status.running ? report.errors.length : status.history.at(-1)?.errors ?? report.errors.length;
   const usedText = account ? account.usedText || formatSize(account.used) || '0' : '—';
   const totalText = account ? account.totalText || formatSize(account.total) || '0' : '—';
   const capacity = account && account.total > 0 ? account.used / account.total : 0;
   const displayName = account?.alias || account?.userName || '115 Cloud';
-  const shareTitle = (share: ShareView) =>
-    share.title && share.title !== UNTITLED_SHARE ? share.title : t('cloud115.transferUntitled');
-  const selectedCount = shares.reduce(
-    (total, share) => total + (picked[share.code]?.length ?? 0),
-    0,
-  );
-  // Only the settings tabs carry the bar; STRM and Sync wait for an account,
-  // while Account also owns the pacing and so always shows it.
-  const showSaveBar = tab === 'account' || (hasCookie && (tab === 'strm' || tab === 'sync'));
+  const showSaveBar = tab === 'account' || tab === 'strm' || (authorized && tab === 'sync');
 
   return (
     <>
@@ -729,7 +557,7 @@ export function Cloud115Settings() {
           </Callout.Root>
         ) : null}
 
-        <TabPicker tab={tab} onPick={setTab} />
+        <TabPicker tab={tab} onPick={setTab} disabled={pickingLocal} />
 
         {tab === 'account' ? (
           <>
@@ -754,8 +582,8 @@ export function Cloud115Settings() {
                       <Text variant="title" lines={1}>
                         {displayName}
                       </Text>
-                      <Badge tone={hasCookie ? 'success' : 'warning'}>
-                        {hasCookie ? t('cloud115.cookieSet') : t('cloud115.cookieMissing')}
+                      <Badge tone={authorized ? 'success' : 'warning'}>
+                        {authorized ? t('cloud115.connected') : t('cloud115.disconnected')}
                       </Badge>
                       {account?.vip ? (
                         <Badge tone="neutral">{t('cloud115.member')}</Badge>
@@ -800,13 +628,14 @@ export function Cloud115Settings() {
                   variant="ghost"
                   size="sm"
                   loading={accountBusy}
+                  disabled={!authorized}
                   onPress={() => void refreshAccount()}
                 />
                 <Button
                   label={t('cloud115.renameAccount')}
                   variant="ghost"
                   size="sm"
-                  disabled={!hasCookie}
+                  disabled={!authorized}
                   onPress={() => {
                     setAliasDraft(account?.alias || account?.userName || '');
                     setAliasOpen(true);
@@ -816,65 +645,18 @@ export function Cloud115Settings() {
                   label={t('cloud115.removeAccount')}
                   variant="ghost"
                   size="sm"
-                  disabled={!hasCookie}
+                  disabled={!authorized}
                   onPress={() => setRemoveOpen(true)}
                 />
               </Row>
 
-              <Row wrap gap={12} align="center" mt={20}>
-                <Text variant="meta" color="textDim">
-                  {t('cloud115.qrApp')}
-                </Text>
-                <Select.Root
-                  value={loginApp}
-                  onValueChange={setLoginApp}
-                  label={t('cloud115.qrApp')}
-                >
-                  <Select.Trigger size="sm" />
-                  {LOGIN_APPS.map((app) => (
-                    <Select.Item key={app.value} value={app.value} label={t(app.label)} />
-                  ))}
-                </Select.Root>
-                <Button
-                  label={hasCookie ? t('cloud115.relogin') : t('cloud115.qrLogin')}
-                  icon="qrcode"
-                  variant="glass"
-                  size="sm"
-                  onPress={startLogin}
-                  disabled={loginBusy || login !== null}
-                />
-                <Text variant="meta" color="textDim">
-                  {t('cloud115.qrHint')}
-                </Text>
-              </Row>
-
-              {login ? (
-                <Row wrap gap={20} mt={16} align="flex-start">
-                  <Box w={220} h={220} p={8} bg="surface2" radius="lg" shrink={0} overflow="hidden">
-                    <img
-                      src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(login.svg)}`}
-                      alt={t('cloud115.qrLogin')}
-                      style={{ width: '100%', height: '100%', display: 'block' }}
-                    />
-                  </Box>
-                  <Box gap={8} maxW={360}>
-                    <Text variant="meta" color="textDim">
-                      {loginState?.message ?? t('cloud115.qrWaiting')}
-                    </Text>
-                    <Row gap={8}>
-                      <Button
-                        label={t('cloud115.qrCancel')}
-                        variant="ghost"
-                        size="sm"
-                        onPress={cancelLogin}
-                      />
-                    </Row>
-                    <Text variant="meta" color="textDim" font="mono" lines={1}>
-                      {login.qr}
-                    </Text>
-                  </Box>
-                </Row>
-              ) : null}
+              {!removeOpen && <AppIdLogin key={appId} initialId={appId} authorized={authorized} disabled={accountBusy}
+                onConfirmed={(id) => {
+                  setAuthorized(true);
+                  setAppId(id);
+                  setAccount(null);
+                  void api.account(true).then(setAccount).catch(() => undefined);
+                }} />}
 
               <Row mt={16}>
                 <Button
@@ -891,24 +673,6 @@ export function Cloud115Settings() {
                   <Box row wrap gap={16}>
                     <Box flex minW={240}>
                       <Field.Root
-                        label={t('cloud115.cookie')}
-                        value={cookie}
-                        onValueChange={(value) => {
-                          setDirty(true);
-                          setCookie(value);
-                        }}
-                      >
-                        <Field.Input
-                          type="password"
-                          placeholder={
-                            hasCookie ? t('cloud115.cookieKeep') : 'UID=…; CID=…; SEID=…'
-                          }
-                        />
-                        <Field.Hint>{t('cloud115.cookieHint')}</Field.Hint>
-                      </Field.Root>
-                    </Box>
-                    <Box flex minW={240}>
-                      <Field.Root
                         label={t('cloud115.baseUrl')}
                         value={baseUrl}
                         onValueChange={(value) => {
@@ -920,38 +684,8 @@ export function Cloud115Settings() {
                         <Field.Hint>{t('cloud115.baseUrlHint')}</Field.Hint>
                       </Field.Root>
                     </Box>
-                    <Box flex minW={240}>
-                      <Field.Root
-                        label={t('cloud115.transitFolder')}
-                        value={transitFolder}
-                        onValueChange={(value) => {
-                          setDirty(true);
-                          setTransitFolder(value);
-                        }}
-                      >
-                        <Field.Input placeholder="/待整理" />
-                        <Field.Hint>{t('cloud115.transitFolderHint')}</Field.Hint>
-                      </Field.Root>
-                    </Box>
                   </Box>
                   <Row wrap gap={8} center>
-                    {cookie.trim() ? (
-                      <Button
-                        label={t('cloud115.cookieImport')}
-                        variant="glass"
-                        size="sm"
-                        onPress={() => void importCookie()}
-                        disabled={busy}
-                      />
-                    ) : null}
-                    {hasCookie ? (
-                      <Button
-                        label={t('cloud115.clearCookie')}
-                        variant="ghost"
-                        size="sm"
-                        onPress={() => void clearCookie()}
-                      />
-                    ) : null}
                     {baseMismatch ? (
                       <>
                         <Text variant="meta" color="accentText">
@@ -961,7 +695,7 @@ export function Cloud115Settings() {
                           label={t('cloud115.useCurrent')}
                           variant="ghost"
                           size="sm"
-                          onPress={() => setBaseUrl(origin)}
+                          onPress={() => { setBaseUrl(origin); setDirty(true); }}
                         />
                       </>
                     ) : null}
@@ -1052,187 +786,10 @@ export function Cloud115Settings() {
               </Box>
             </Panel>
           </>
-        ) : !hasCookie ? (
+        ) : !authorized && tab !== 'strm' ? (
           <LoginPrompt onGoAccount={() => setTab('account')} />
         ) : tab === 'ingest' ? (
           <>
-            <Panel title={t('cloud115.transferTitle')} hint={t('cloud115.transferHint')}>
-              <Box gap={14}>
-                <Field.Root
-                  label={t('cloud115.transferLinks')}
-                  value={shareText}
-                  onValueChange={setShareText}
-                >
-                  <Field.Textarea
-                    rows={4}
-                    maxRows={8}
-                    placeholder={t('cloud115.transferPlaceholder')}
-                  />
-                </Field.Root>
-                <Row wrap gap={10} align="center">
-                  <Button
-                    label={
-                      shareBusy ? t('cloud115.transferPreviewing') : t('cloud115.transferPreview')
-                    }
-                    icon="eye"
-                    variant="glass"
-                    size="sm"
-                    loading={shareBusy}
-                    disabled={shareBusy}
-                    onPress={() => void previewShares()}
-                  />
-                </Row>
-
-                {shareError ? (
-                  <Callout.Root tone="danger" icon="alert-triangle">
-                    <Callout.Title>{t('cloud115.transferPreviewFailed')}</Callout.Title>
-                    <Callout.Detail>{shareError}</Callout.Detail>
-                  </Callout.Root>
-                ) : null}
-
-                {shares.length ? (
-                  <Box gap={12}>
-                    {shares.map((share) => {
-                      const chosen = picked[share.code] ?? [];
-                      const allChosen =
-                        share.entries.length > 0 && chosen.length === share.entries.length;
-                      return (
-                        <Box key={share.code} gap={10} p={16} bg="surface2" radius="lg">
-                          <Row between wrap gap={10} center>
-                            <Box shrink={1} minW={0} gap={2}>
-                              <Text variant="label" lines={1}>
-                                {shareTitle(share)}
-                              </Text>
-                              <Text variant="meta" color="textDim">
-                                {t('cloud115.transferEntryCount', {
-                                  count: share.entries.length,
-                                })}
-                                {share.totalSize ? ` · ${formatSize(share.totalSize)}` : ''}
-                                {` · ${share.code}`}
-                              </Text>
-                            </Box>
-                            {share.entries.length ? (
-                              <Button
-                                label={
-                                  allChosen
-                                    ? t('cloud115.transferClearAll')
-                                    : t('cloud115.transferSelectAll')
-                                }
-                                variant="ghost"
-                                size="sm"
-                                onPress={() =>
-                                  setPicked((current) => ({
-                                    ...current,
-                                    [share.code]: allChosen
-                                      ? []
-                                      : share.entries.map((entry) => entry.id),
-                                  }))
-                                }
-                              />
-                            ) : null}
-                          </Row>
-                          {share.entries.length ? (
-                            <Box maxH={320} overflow="scroll" pr={4}>
-                              <ChoiceList.Root
-                                mode="multiple"
-                                label={shareTitle(share)}
-                                value={chosen}
-                                onValueChange={(next) =>
-                                  setPicked((current) => ({ ...current, [share.code]: next }))
-                                }
-                              >
-                                {share.entries.map((entry) => (
-                                  <ChoiceList.Item
-                                    key={entry.id}
-                                    value={entry.id}
-                                    actions={
-                                      !entry.isDir && entry.size > 0 ? (
-                                        <Text variant="meta" color="textDim">
-                                          {formatSize(entry.size)}
-                                        </Text>
-                                      ) : undefined
-                                    }
-                                  >
-                                    <Row gap={8} center>
-                                      <Icon
-                                        name={entry.isDir ? 'folder' : 'file'}
-                                        size={15}
-                                        color={entry.isDir ? 'accentText' : 'textDim'}
-                                      />
-                                      <ChoiceList.Label>{entry.name}</ChoiceList.Label>
-                                    </Row>
-                                  </ChoiceList.Item>
-                                ))}
-                              </ChoiceList.Root>
-                            </Box>
-                          ) : (
-                            <Text variant="meta" color="textDim">
-                              {t('cloud115.transferNoEntries')}
-                            </Text>
-                          )}
-                        </Box>
-                      );
-                    })}
-
-                    <Row between wrap gap={16} align="center" mt={4}>
-                      <Row gap={10} center shrink={1} minW={240}>
-                        <Icon name="folder" size={17} color="accentText" />
-                        <Box shrink={1} minW={0}>
-                          <Text variant="meta" color="textDim">
-                            {t('cloud115.transferTarget')}
-                          </Text>
-                          <Text variant="label" lines={1}>
-                            {target.name ? `/${target.name}` : t('cloud115.root')}
-                          </Text>
-                          <Text variant="meta" color="textDim">
-                            {t('cloud115.transferTargetHint')}
-                          </Text>
-                        </Box>
-                        <Button
-                          label={t('cloud115.transferPickTarget')}
-                          variant="ghost"
-                          size="sm"
-                          onPress={() => setTargetOpen(true)}
-                        />
-                      </Row>
-                      <Row gap={10} center>
-                        <Text variant="meta" color="textDim">
-                          {t('cloud115.transferSelected', { count: selectedCount })}
-                        </Text>
-                        <Button
-                          label={
-                            receiveBusy
-                              ? t('cloud115.transferReceiving')
-                              : t('cloud115.transferReceive')
-                          }
-                          icon="download"
-                          variant="primary"
-                          size="sm"
-                          loading={receiveBusy}
-                          disabled={receiveBusy || selectedCount === 0}
-                          onPress={() => void receiveSelected()}
-                        />
-                      </Row>
-                    </Row>
-
-                    {receiveErrors.length ? (
-                      <Callout.Root tone="danger" icon="alert-triangle">
-                        <Callout.Title>{t('cloud115.transferFailed')}</Callout.Title>
-                        <Callout.Detail>{receiveErrors.join(' · ')}</Callout.Detail>
-                      </Callout.Root>
-                    ) : null}
-                    {receiveFiles !== null ? (
-                      <Callout.Root tone="success" icon="check">
-                        <Callout.Title>
-                          {t('cloud115.transferDone', { files: receiveFiles })}
-                        </Callout.Title>
-                      </Callout.Root>
-                    ) : null}
-                  </Box>
-                ) : null}
-              </Box>
-            </Panel>
-
             <Panel title={t('cloud115.upload')} hint={t('cloud115.uploadHint')}>
               <Box gap={12}>
                 <Box row wrap gap={16} align="flex-end">
@@ -1282,9 +839,6 @@ export function Cloud115Settings() {
               </Box>
             </Panel>
 
-            <Panel title={t('cloud115.transferHistory')} hint={t('cloud115.transferHistoryHint')}>
-              <TransferHistory entries={status.transfers} />
-            </Panel>
           </>
         ) : tab === 'strm' ? (
           <>
@@ -1298,8 +852,8 @@ export function Cloud115Settings() {
                           {t('cloud115.remote')}
                         </Text>
                         <Box minH={40} px={12} py={10} bg="surface1" radius="md" border="border">
-                          <Text variant="body" lines={1}>
-                            {library.remote || '—'}
+                          <Text variant="body" selectable>
+                            {library.remote || t('cloud115.driveFolderUnset')}
                           </Text>
                         </Box>
                         <Row>
@@ -1308,53 +862,65 @@ export function Cloud115Settings() {
                             icon="folder"
                             variant="glass"
                             size="sm"
-                            onPress={() => setPicker({ at: i, mode: 'remote' })}
-                            disabled={busy}
+                            onPress={() => setRemotePickerRow(library)}
+                            disabled={mappingBusy || !authorized}
                           />
                         </Row>
+                        {!authorized ? (
+                          <Text variant="meta" color="textDim">
+                            {t('cloud115.mappingLoginHint')}
+                          </Text>
+                        ) : null}
                       </Box>
                       <Box flex minW={240}>
-                        <Field.Root
-                          label={t('cloud115.local')}
-                          value={library.local}
-                          onValueChange={(value) => updateLibrary(i, { local: value })}
-                        >
-                          <Field.Input placeholder={t('cloud115.localPlaceholder')} />
-                          <Field.Hint>{t('cloud115.localHint')}</Field.Hint>
-                        </Field.Root>
-                        <Row mt={8}>
+                        <Text variant="meta" color="textDim" mb={6}>
+                          {t('cloud115.local')}
+                        </Text>
+                        <Box minH={40} px={12} py={10} bg="surface1" radius="md" border="border">
+                          <Text variant="body" selectable>
+                            {library.localDisplay || t('cloud115.localFolderUnset')}
+                          </Text>
+                        </Box>
+                        <Text variant="meta" color="textDim" mt={6}>
+                          {t('cloud115.localHint')}
+                        </Text>
+                        <Row mt={8} accessibilityLiveRegion="polite">
                           <Button
-                            label={t('cloud115.browseLocal')}
+                            label={t(
+                              pickingLocalRow === library
+                                ? 'cloud115.localPickerWaiting'
+                                : 'cloud115.browseLocal',
+                            )}
                             icon="folder"
                             variant="ghost"
                             size="sm"
-                            onPress={() => setPicker({ at: i, mode: 'local' })}
-                            disabled={busy}
+                            onPress={() => void chooseLocalFolder(library)}
+                            loading={pickingLocalRow === library}
+                            disabled={pickerDisabled}
                           />
                         </Row>
-                        {!library.remote.trim() || !library.local.trim() ? null : i <
-                          resolved.length ? (
-                          resolved[i] ? (
-                            <Text variant="meta" color="textDim" mt={6}>
-                              {t('cloud115.resolved', { path: resolved[i] as string })}
-                            </Text>
-                          ) : (
-                            <Text variant="meta" color="accentText" mt={6}>
-                              {t('cloud115.unresolved')}
-                            </Text>
-                          )
-                        ) : (
-                          <Text variant="meta" color="textDim" mt={6}>
-                            {t('cloud115.willCreate')}
+                        {localPickerError?.row === library ? (
+                          <Callout.Root tone="danger" size="sm" icon="alert-triangle">
+                            <Callout.Detail>{localPickerError.message}</Callout.Detail>
+                          </Callout.Root>
+                        ) : library.local && !library.localDisplay ? (
+                          <Text variant="meta" color="accentText" mt={6}>
+                            {t('cloud115.unresolved')}
                           </Text>
-                        )}
+                        ) : null}
                       </Box>
                     </Box>
-                    <Row justify="flex-end">
+                    <Row wrap gap={12} justify="space-between" align="center">
+                      <Row gap={8} center>
+                        <Checkbox label={t('cloud115.fastMapping')} checked={library.fastSync ?? true}
+                          disabled={mappingBusy} onCheckedChange={(fastSync) => updateLibrary(library, { fastSync })} />
+                        <Text variant="meta">{t('cloud115.fastMapping')}</Text>
+                      </Row>
                       <Button
                         label={t('cloud115.remove')}
                         variant="ghost"
                         size="sm"
+                        disabled={mappingBusy}
                         onPress={() => {
                           setDirty(true);
                           setLibraries((current) => current.filter((_, at) => at !== i));
@@ -1373,143 +939,131 @@ export function Cloud115Settings() {
                       setDirty(true);
                       setLibraries((current) => [...current, { ...EMPTY_LIBRARY }]);
                     }}
-                    disabled={busy}
+                    disabled={mappingBusy}
                   />
                 </Row>
               </Box>
             </Panel>
 
-            <Panel title={t('cloud115.strmOptions')} hint={t('cloud115.strmOptionsHint')}>
-              <Box gap={18}>
-                <SettingRow label={t('cloud115.skipIso')} hint={t('cloud115.skipIsoHint')}>
-                  <Switch
-                    checked={options.skipIso}
-                    onCheckedChange={(skipIso) => patchOptions({ skipIso })}
-                    label={t('cloud115.skipIso')}
-                  />
-                </SettingRow>
-                <SettingRow label={t('cloud115.probe')} hint={t('cloud115.probeHint')}>
-                  <Switch
-                    checked={options.probeEnabled}
-                    onCheckedChange={(probeEnabled) => patchOptions({ probeEnabled })}
-                    label={t('cloud115.probe')}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('cloud115.keepSuffix')}
-                  hint={t('cloud115.keepSuffixHint')}
-                >
-                  <Switch
-                    checked={options.keepSuffix}
-                    onCheckedChange={(keepSuffix) => patchOptions({ keepSuffix })}
-                    label={t('cloud115.keepSuffix')}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('cloud115.overwriteStrm')}
-                  hint={t('cloud115.overwriteStrmHint')}
-                >
-                  <Switch
-                    checked={options.overwriteStrm}
-                    onCheckedChange={(overwriteStrm) => patchOptions({ overwriteStrm })}
-                    label={t('cloud115.overwriteStrm')}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('cloud115.minVideoSize')}
-                  hint={t('cloud115.minVideoSizeHint')}
-                >
-                  <NumberField
-                    label={t('cloud115.minVideoSize')}
-                    value={options.minVideoSizeMb}
-                    min={0}
-                    max={1_048_576}
-                    step={100}
-                    w={140}
-                    onValueChange={(minVideoSizeMb) => patchOptions({ minVideoSizeMb })}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('cloud115.prefetchNext')}
-                  hint={t('cloud115.prefetchNextHint')}
-                >
-                  <NumberField
-                    label={t('cloud115.prefetchNext')}
-                    value={options.prefetchNext}
-                    min={0}
-                    max={3}
-                    step={1}
-                    w={140}
-                    onValueChange={(prefetchNext) => patchOptions({ prefetchNext })}
-                  />
-                </SettingRow>
-              </Box>
-            </Panel>
+            {authorized ? (
+              <div inert={pickingLocal || busy}>
+                <Box gap={20} opacity={pickingLocal || busy ? 0.5 : 1}>
+                  <Panel title={t('cloud115.strmOptions')} hint={t('cloud115.strmOptionsHint')}>
+                    <Box gap={18}>
+                      <SettingRow label={t('cloud115.skipIso')} hint={t('cloud115.skipIsoHint')}>
+                        <Switch
+                          checked={options.skipIso}
+                          onCheckedChange={(skipIso) => patchOptions({ skipIso })}
+                          label={t('cloud115.skipIso')}
+                        />
+                      </SettingRow>
+                      <SettingRow label={t('cloud115.probe')} hint={t('cloud115.probeHint')}>
+                        <Switch
+                          checked={options.probeEnabled}
+                          onCheckedChange={(probeEnabled) => patchOptions({ probeEnabled })}
+                          label={t('cloud115.probe')}
+                        />
+                      </SettingRow>
+                      <SettingRow label={t('cloud115.keepSuffix')} hint={t('cloud115.keepSuffixHint')}>
+                        <Switch
+                          checked={options.keepSuffix}
+                          onCheckedChange={(keepSuffix) => patchOptions({ keepSuffix })}
+                          label={t('cloud115.keepSuffix')}
+                        />
+                      </SettingRow>
+                      <SettingRow label={t('cloud115.overwriteStrm')} hint={t('cloud115.overwriteStrmHint')}>
+                        <Switch
+                          checked={options.overwriteStrm}
+                          onCheckedChange={(overwriteStrm) => patchOptions({ overwriteStrm })}
+                          label={t('cloud115.overwriteStrm')}
+                        />
+                      </SettingRow>
+                      <SettingRow label={t('cloud115.minVideoSize')} hint={t('cloud115.minVideoSizeHint')}>
+                        <NumberField
+                          label={t('cloud115.minVideoSize')}
+                          value={options.minVideoSizeMb}
+                          min={0}
+                          max={1_048_576}
+                          step={100}
+                          w={140}
+                          onValueChange={(minVideoSizeMb) => patchOptions({ minVideoSizeMb })}
+                        />
+                      </SettingRow>
+                      <SettingRow label={t('cloud115.prefetchNext')} hint={t('cloud115.prefetchNextHint')}>
+                        <NumberField
+                          label={t('cloud115.prefetchNext')}
+                          value={options.prefetchNext}
+                          min={0}
+                          max={3}
+                          step={1}
+                          w={140}
+                          onValueChange={(prefetchNext) => patchOptions({ prefetchNext })}
+                        />
+                      </SettingRow>
+                    </Box>
+                  </Panel>
 
-            <Panel title={t('cloud115.assetsTitle')} hint={t('cloud115.assetsHint')}>
-              <Box gap={18}>
-                <SettingRow
-                  label={t('cloud115.syncImages')}
-                  hint={t('cloud115.syncImagesHint')}
-                >
-                  <Switch
-                    checked={options.syncImages}
-                    onCheckedChange={(syncImages) => patchOptions({ syncImages })}
-                    label={t('cloud115.syncImages')}
-                  />
-                </SettingRow>
-                <SettingRow label={t('cloud115.syncNfo')} hint={t('cloud115.syncNfoHint')}>
-                  <Switch
-                    checked={options.syncNfo}
-                    onCheckedChange={(syncNfo) => patchOptions({ syncNfo })}
-                    label={t('cloud115.syncNfo')}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('cloud115.syncSubtitles')}
-                  hint={t('cloud115.syncSubtitlesHint')}
-                >
-                  <Switch
-                    checked={options.syncSubtitles}
-                    onCheckedChange={(syncSubtitles) => patchOptions({ syncSubtitles })}
-                    label={t('cloud115.syncSubtitles')}
-                  />
-                </SettingRow>
-              </Box>
-            </Panel>
+                  <Panel title={t('cloud115.assetsTitle')} hint={t('cloud115.assetsHint')}>
+                    <Box gap={18}>
+                      <SettingRow label={t('cloud115.syncImages')} hint={t('cloud115.syncImagesHint')}>
+                        <Switch
+                          checked={options.syncImages}
+                          onCheckedChange={(syncImages) => patchOptions({ syncImages })}
+                          label={t('cloud115.syncImages')}
+                        />
+                      </SettingRow>
+                      <SettingRow label={t('cloud115.syncNfo')} hint={t('cloud115.syncNfoHint')}>
+                        <Switch
+                          checked={options.syncNfo}
+                          onCheckedChange={(syncNfo) => patchOptions({ syncNfo })}
+                          label={t('cloud115.syncNfo')}
+                        />
+                      </SettingRow>
+                      <SettingRow label={t('cloud115.syncSubtitles')} hint={t('cloud115.syncSubtitlesHint')}>
+                        <Switch
+                          checked={options.syncSubtitles}
+                          onCheckedChange={(syncSubtitles) => patchOptions({ syncSubtitles })}
+                          label={t('cloud115.syncSubtitles')}
+                        />
+                      </SettingRow>
+                    </Box>
+                  </Panel>
 
-            <Panel title={t('cloud115.replaceTitle')} hint={t('cloud115.replaceHint')}>
-              <Box gap={12}>
-                <Row between wrap gap={12} center>
-                  <Text variant="meta" color="textDim" lines={1}>
-                    {baseUrl || origin || '—'}
-                  </Text>
-                  <Row gap={8}>
-                    <Button
-                      label={t('cloud115.replacePreview')}
-                      icon="eye"
-                      variant="ghost"
-                      size="sm"
-                      loading={replaceBusy}
-                      onPress={() => void replaceAddresses(true)}
-                    />
-                    <Button
-                      label={t('cloud115.replaceRun')}
-                      icon="refresh"
-                      variant="glass"
-                      size="sm"
-                      disabled={replaceBusy || !replaceCount}
-                      onPress={() => void replaceAddresses(false)}
-                    />
-                  </Row>
-                </Row>
-                {replaceMsg ? (
-                  <Text variant="meta" color="textMuted">
-                    {replaceMsg}
-                  </Text>
-                ) : null}
-              </Box>
-            </Panel>
+                  <Panel title={t('cloud115.replaceTitle')} hint={t('cloud115.replaceHint')}>
+                    <Box gap={12}>
+                      <Row between wrap gap={12} center>
+                        <Text variant="meta" color="textDim" lines={1}>
+                          {baseUrl || origin || '—'}
+                        </Text>
+                        <Row gap={8}>
+                          <Button
+                            label={t('cloud115.replacePreview')}
+                            icon="eye"
+                            variant="ghost"
+                            size="sm"
+                            loading={replaceBusy}
+                            onPress={() => void replaceAddresses(true)}
+                          />
+                          <Button
+                            label={t('cloud115.replaceRun')}
+                            icon="refresh"
+                            variant="glass"
+                            size="sm"
+                            disabled={replaceBusy || !replaceCount}
+                            onPress={() => void replaceAddresses(false)}
+                          />
+                        </Row>
+                      </Row>
+                      {replaceMsg ? (
+                        <Text variant="meta" color="textMuted">
+                          {replaceMsg}
+                        </Text>
+                      ) : null}
+                    </Box>
+                  </Panel>
+                </Box>
+              </div>
+            ) : null}
           </>
         ) : tab === 'sync' ? (
           <>
@@ -1523,7 +1077,7 @@ export function Cloud115Settings() {
                     variant="ghost"
                     size="sm"
                     onPress={() => void watchNow()}
-                    disabled={busy || !hasCookie}
+                    disabled={busy || !authorized}
                   />
                   <Switch
                     checked={options.watchEnabled}
@@ -1548,19 +1102,23 @@ export function Cloud115Settings() {
                     onValueChange={(watchIntervalSecs) => patchOptions({ watchIntervalSecs })}
                   />
                 </SettingRow>
-                <Text variant="meta" color={status.gateOk === false ? 'danger' : 'textDim'}>
-                  {status.lastPollAt
-                    ? t('cloud115.lastPoll', {
-                        time: new Date(status.lastPollAt * 1000).toLocaleTimeString(),
-                      })
-                    : t('cloud115.neverPolled')}
-                  {status.gateOk === false ? ` · ${t('cloud115.gateOff')}` : ''}
-                </Text>
-                {status.watchEnabled && status.indexedDirs === 0 ? (
-                  <Text variant="meta" color="accentText">
-                    {t('cloud115.indexNotReady')}
-                  </Text>
-                ) : null}
+                <Badge tone={status.watchEnabled ? 'success' : 'neutral'}>
+                  {t(status.watchEnabled ? 'cloud115.fastEnabled' : 'cloud115.autoSyncOff')}
+                </Badge>
+                <Text variant="meta">{status.fastSync.lastPollAt
+                  ? t('cloud115.lastPoll', { time: new Date(status.fastSync.lastPollAt * 1000).toLocaleString() })
+                  : t('cloud115.neverPolled')}</Text>
+                <Stat label={t('cloud115.statWritten')} value={status.fastSync.lastAdded} />
+                <Stat label={t('cloud115.indexedDirs')} value={status.fastSync.indexedDirs} />
+                {status.fastSync.mappings.map((m, i) => (
+                  <Box key={`${m.remote}:${i}`} gap={4}>
+                    <Text variant="label">{m.remote} · {t(FAST_STATES[m.state] ?? 'cloud115.fastUnknown')}</Text>
+                    <Text variant="meta">{m.lastCheckedAt ? t('cloud115.lastPoll', {
+                      time: new Date(m.lastCheckedAt * 1000).toLocaleString(),
+                    }) : t('cloud115.neverPolled')} · {t('cloud115.statWritten')} {m.lastAdded}{m.total != null && m.lastCheckedAt > 0 ? ` · ${t('cloud115.statFiles')} ${m.total}` : ''}</Text>
+                  </Box>
+                ))}
+                {status.fastSync.lastError && <Callout.Root tone="danger"><Callout.Detail>{status.fastSync.lastError}</Callout.Detail></Callout.Root>}
               </Box>
             </Panel>
 
@@ -1601,7 +1159,7 @@ export function Cloud115Settings() {
                   variant="ghost"
                   size="sm"
                   onPress={() => setClearOpen(true)}
-                  disabled={busy || !hasCookie}
+                  disabled={busy || !authorized}
                 />
                 <Button
                   label={t('cloud115.exportConfig')}
@@ -1632,7 +1190,7 @@ export function Cloud115Settings() {
                   variant="glass"
                   size="sm"
                   onPress={() => void syncNow()}
-                  disabled={busy || status.running}
+                  disabled={busy || status.running || !authorized}
                 />
               }
             >
@@ -1641,94 +1199,7 @@ export function Cloud115Settings() {
                   {t('cloud115.syncDirtyHint')}
                 </Text>
               ) : null}
-              {status.running ? (
-                <Row wrap gapX={18} gapY={4} mb={10}>
-                  <Text variant="meta" color="accentText">
-                    {t('cloud115.syncProgress')}
-                  </Text>
-                  {report.current ? (
-                    <Text variant="meta" color="textDim">
-                      {t('cloud115.currentDir', { dir: report.current })}
-                    </Text>
-                  ) : null}
-                  {report.startedAt ? (
-                    <Text variant="meta" color="textDim">
-                      {t('cloud115.elapsed', {
-                        seconds: Math.max(0, Math.floor(Date.now() / 1000) - report.startedAt),
-                      })}
-                    </Text>
-                  ) : null}
-                </Row>
-              ) : null}
-              {status.running && report.callsTotal > 0 ? (
-                <Box mb={10}>
-                  <Progress
-                    value={report.callsTotal > 0 ? report.calls / report.callsTotal : 0}
-                    label={t('cloud115.budgetProgress')}
-                  />
-                  <Row between mt={4}>
-                    <Text variant="meta" color="textDim">
-                      {t('cloud115.budgetLine', {
-                        calls: report.calls,
-                        total: report.callsTotal,
-                      })}
-                    </Text>
-                    <Text variant="meta" color="textDim">
-                      {t('cloud115.statFilesRate', {
-                        rate: (report.startedAt
-                          ? report.files / Math.max(1, Date.now() / 1000 - report.startedAt)
-                          : 0
-                        ).toFixed(1),
-                      })}
-                    </Text>
-                  </Row>
-                </Box>
-              ) : null}
-              <Row wrap gapX={24} gapY={6}>
-                <Stat label={t('cloud115.statDirs')} value={report.dirs} />
-                <Stat label={t('cloud115.statFiles')} value={report.files} />
-                <Stat label={t('cloud115.statWritten')} value={report.written} />
-                <Stat label={t('cloud115.statKept')} value={report.kept} />
-                <Stat label={t('cloud115.statPruned')} value={report.pruned} />
-                <Stat label={t('cloud115.statProbed')} value={report.probed} />
-                <Stat label={t('cloud115.statPendingProbe')} value={report.pendingProbe} />
-                <Stat label={t('cloud115.statAssets')} value={report.assets} />
-                <Stat label={t('cloud115.statCalls')} value={report.calls} />
-                <Stat label={t('cloud115.statLinks')} value={status.linkCache} />
-              </Row>
-              {status.history.length ? (
-                <>
-                  <Text variant="cardTitle" mt={18}>
-                    {t('cloud115.history')}
-                  </Text>
-                  <Box gap={6} mt={8}>
-                    {[...status.history]
-                      .reverse()
-                      .slice(0, 10)
-                      .map((entry) => (
-                        <Row between wrap gap={12} key={entry.at}>
-                          <Text variant="meta" color="textDim">
-                            {new Date(entry.at * 1000).toLocaleString()}
-                          </Text>
-                          <Text variant="meta" color={entry.errors ? 'accentText' : 'textDim'}>
-                            {t('cloud115.historyLine', {
-                              dirs: entry.dirs,
-                              files: entry.files,
-                              written: entry.written,
-                              pruned: entry.pruned,
-                              errors: entry.errors,
-                            })}
-                          </Text>
-                        </Row>
-                      ))}
-                  </Box>
-                </>
-              ) : null}
-              {report.truncated ? (
-                <Text variant="meta" color="accentText" mt={8}>
-                  {t('cloud115.truncated')}
-                </Text>
-              ) : null}
+              <SyncBoard running={status.running} report={report} history={status.history} />
             </Panel>
           </>
         ) : (
@@ -1744,7 +1215,11 @@ export function Cloud115Settings() {
                   <pre style={ERRORS_PANE}>{report.errors.join('\n')}</pre>
                 ) : (
                   <Text variant="meta" color="textDim">
-                    {report.finishedAt ? t('cloud115.noErrors') : t('cloud115.never')}
+                    {lastErrorCount > 0
+                      ? t('cloud115.mappingErrors', { count: lastErrorCount })
+                      : status.running || report.finishedAt || status.history.length
+                        ? t('cloud115.noErrors')
+                        : t('cloud115.never')}
                   </Text>
                 )}
               </Box>
@@ -1775,9 +1250,6 @@ export function Cloud115Settings() {
                       <Text variant="meta" color="textDim">
                         {t('cloud115.lastLink')}
                       </Text>
-                      <Text variant="body" color="textDim" font="mono" lines={1}>
-                        {status.lastPlayUrl}
-                      </Text>
                       {copyError ? (
                         <Text variant="meta" color="danger" mt={4}>
                           {copyError}
@@ -1805,9 +1277,6 @@ export function Cloud115Settings() {
               </Box>
             </Panel>
 
-            <Panel title={t('cloud115.transferHistory')} hint={t('cloud115.transferHistoryHint')}>
-              <TransferHistory entries={status.transfers} />
-            </Panel>
           </>
         )}
 
@@ -1815,6 +1284,11 @@ export function Cloud115Settings() {
           <SaveBar
             dirty={dirty}
             busy={busy}
+            canSave={dirty && !mappingBusy && (!incompleteMapping || tab === 'account')}
+            canDiscard={dirty && !mappingBusy}
+            hint={incompleteMapping
+              ? t(tab === 'account' ? 'cloud115.accountMappingDraft' : 'cloud115.mappingIncomplete')
+              : t('cloud115.savedHint')}
             saved={saved}
             savedAt={savedAt}
             error={error}
@@ -1824,23 +1298,12 @@ export function Cloud115Settings() {
         ) : null}
       </Box>
 
-      {picker !== null ? (
+      {authorized && remotePickerRow ? (
         <FolderPicker
-          mode={picker.mode}
-          onClose={() => setPicker(null)}
+          onClose={() => setRemotePickerRow(null)}
           onPick={(path) => {
-            updateLibrary(picker.at, picker.mode === 'remote' ? { remote: path } : { local: path });
-            setPicker(null);
-          }}
-        />
-      ) : null}
-
-      {targetOpen ? (
-        <CloudFolderPicker
-          onClose={() => setTargetOpen(false)}
-          onPick={(next) => {
-            setTarget(next);
-            setTargetOpen(false);
+            updateLibrary(remotePickerRow, { remote: path });
+            setRemotePickerRow(null);
           }}
         />
       ) : null}
@@ -1971,12 +1434,17 @@ export function Cloud115Settings() {
   );
 }
 
-function TabPicker({ tab, onPick }: Readonly<{ tab: Tab; onPick: (next: Tab) => void }>) {
+function TabPicker({ tab, onPick, disabled }: Readonly<{
+  tab: Tab;
+  onPick: (next: Tab) => void;
+  disabled: boolean;
+}>) {
   const t = useT();
   if (useBreakpoint() === 'base') {
     return (
       <Select.Root
         label={t('cloud115.tabs')}
+        disabled={disabled}
         value={tab}
         onValueChange={(next) => onPick(TABS.find((one) => one === next) ?? 'account')}
       >
@@ -1990,7 +1458,7 @@ function TabPicker({ tab, onPick }: Readonly<{ tab: Tab; onPick: (next: Tab) => 
   return (
     <SegmentGroup.Root value={tab} onValueChange={onPick} label={t('cloud115.tabs')}>
       {TABS.map((one) => (
-        <SegmentGroup.Item key={one} value={one}>
+        <SegmentGroup.Item key={one} value={one} disabled={disabled}>
           <SegmentGroup.Label>{t(TAB_LABEL[one])}</SegmentGroup.Label>
         </SegmentGroup.Item>
       ))}
@@ -2063,6 +1531,9 @@ function SettingRow({
 function SaveBar({
   dirty,
   busy,
+  canSave,
+  canDiscard,
+  hint,
   saved,
   savedAt,
   error,
@@ -2071,6 +1542,9 @@ function SaveBar({
 }: Readonly<{
   dirty: boolean;
   busy: boolean;
+  canSave: boolean;
+  canDiscard: boolean;
+  hint: string;
   saved: boolean;
   savedAt: Date | null;
   error: string | null;
@@ -2094,7 +1568,7 @@ function SaveBar({
           )}
           {dirty ? (
             <Text variant="meta" color="textDim">
-              {t('cloud115.savedHint')}
+              {hint}
             </Text>
           ) : saved && savedAt ? (
             <Text variant="meta" color="textDim">
@@ -2109,7 +1583,7 @@ function SaveBar({
             variant="ghost"
             size="sm"
             onPress={onDiscard}
-            disabled={busy || !dirty}
+            disabled={!canDiscard}
           />
           <Button
             label={busy ? t('cloud115.saving') : t('cloud115.save')}
@@ -2117,7 +1591,7 @@ function SaveBar({
             variant="primary"
             size="sm"
             onPress={onSave}
-            disabled={busy || !dirty}
+            disabled={!canSave}
             loading={busy && dirty}
           />
         </Row>
@@ -2128,175 +1602,6 @@ function SaveBar({
         </Text>
       ) : null}
     </Surface>
-  );
-}
-
-/** The share receipts the module keeps, newest first. The stored `at` is in
- *  MILLISECONDS (store::now_ms), unlike the scan history's seconds. */
-function TransferHistory({ entries }: Readonly<{ entries: TransferEntryView[] }>) {
-  const t = useT();
-  if (entries.length === 0) {
-    return (
-      <Text variant="meta" color="textDim">
-        {t('cloud115.transferNoHistory')}
-      </Text>
-    );
-  }
-  return (
-    <Box gap={10}>
-      {[...entries].reverse().map((entry) => (
-        <Row key={`${entry.at}-${entry.code}`} between wrap gap={12} align="flex-start">
-          <Box shrink={1} minW={0} gap={3}>
-            <Text variant="label" lines={1}>
-              {entry.title && entry.title !== UNTITLED_SHARE
-                ? entry.title
-                : t('cloud115.transferUntitled')}
-            </Text>
-            <Text variant="meta" color="textDim">
-              {new Date(entry.at).toLocaleString()} · {t('cloud115.transferCode')} {entry.code} ·{' '}
-              {t('cloud115.transferFileCount', { count: entry.files })}
-            </Text>
-            {/* A success message is the server's own Chinese sentence; the
-                badge and the count already say it in every language. */}
-            {!entry.ok && entry.message ? (
-              <Text variant="meta" color="danger" lines={2}>
-                {entry.message}
-              </Text>
-            ) : null}
-          </Box>
-          <Badge tone={entry.ok ? 'success' : 'danger'}>
-            {entry.ok ? t('cloud115.transferOk') : t('cloud115.transferFail')}
-          </Badge>
-        </Row>
-      ))}
-    </Box>
-  );
-}
-
-/** Pick a 115 folder for a share transfer, answering the folder's cid and the
- *  path it ends on. Starts at the root, like the mapping picker. */
-function CloudFolderPicker({
-  onClose,
-  onPick,
-}: Readonly<{ onClose: () => void; onPick: (target: Target) => void }>) {
-  const t = useT();
-  const api = useCloud115Api();
-  const [trail, setTrail] = useState<{ cid: string; name: string }[]>([{ cid: '0', name: '' }]);
-  const [view, setView] = useState<BrowseView | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const current = trail[trail.length - 1] ?? { cid: '0', name: '' };
-  const path = trail
-    .slice(1)
-    .map((step) => step.name)
-    .join('/');
-
-  const load = (cid: string) => {
-    setBusy(true);
-    setError(null);
-    api
-      .browse(cid)
-      .then(setView)
-      .catch((reason) => {
-        setView(null);
-        setError(errorText(reason));
-      })
-      .finally(() => setBusy(false));
-  };
-
-  useEffect(() => {
-    load('0');
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one initial read per mount
-  }, [api]);
-
-  const enter = (entry: BrowseEntry) => {
-    if (!entry.cid) {
-      return;
-    }
-    setTrail((steps) => [...steps, { cid: entry.cid as string, name: entry.name }]);
-    load(entry.cid);
-  };
-
-  const up = () => {
-    if (trail.length <= 1) {
-      return;
-    }
-    const next = trail.slice(0, -1);
-    setTrail(next);
-    load((next[next.length - 1] ?? { cid: '0' }).cid);
-  };
-
-  const folders = view
-    ? view.entries
-        .filter((entry) => entry.isDir)
-        .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans'))
-    : [];
-
-  return (
-    <Dialog.Root open title={t('cloud115.chooseFolder')} onClose={onClose} width="md" fullHeight>
-      <Dialog.Header>
-        <Text variant="title">{t('cloud115.chooseFolder')}</Text>
-        <Row wrap gap={10} center>
-          <Button
-            label={t('cloud115.up')}
-            icon="arrow-left"
-            variant="ghost"
-            size="sm"
-            disabled={busy || trail.length <= 1}
-            onPress={up}
-          />
-          <Text variant="meta" color="textDim">
-            {path ? `/${path}` : t('cloud115.root')}
-          </Text>
-        </Row>
-      </Dialog.Header>
-      <Dialog.Panel>
-        {error ? (
-          <Text variant="meta" color="danger" mb={8}>
-            {error}
-          </Text>
-        ) : null}
-        {busy ? (
-          <Text variant="meta" color="textDim">
-            {t('cloud115.loading')}
-          </Text>
-        ) : null}
-        {!busy && view
-          ? folders.map((entry) => (
-              <Row between gap={12} key={entry.cid ?? entry.name}>
-                <Row gap={10} center shrink={1} minW={0}>
-                  <Icon name="folder" size={16} thickness={1.8} color="accentText" />
-                  <Text variant="meta" lines={1}>
-                    {entry.name}
-                  </Text>
-                </Row>
-                <Button
-                  label={t('cloud115.open')}
-                  variant="ghost"
-                  size="sm"
-                  onPress={() => enter(entry)}
-                />
-              </Row>
-            ))
-          : null}
-        {!busy && view && folders.length === 0 ? (
-          <Text variant="meta" color="textDim">
-            {t('cloud115.emptyFolder')}
-          </Text>
-        ) : null}
-      </Dialog.Panel>
-      <Dialog.Footer>
-        <Text variant="meta" color="textDim" mb={8}>
-          {t('cloud115.pickHint')}
-        </Text>
-        <Dialog.Actions
-          onCancel={onClose}
-          cancelLabel={t('cloud115.cancel')}
-          onConfirm={() => onPick({ cid: current.cid, name: path })}
-          confirmLabel={t('cloud115.pickThis')}
-        />
-      </Dialog.Footer>
-    </Dialog.Root>
   );
 }
 
@@ -2582,33 +1887,26 @@ export function Cloud115Files() {
 /** Pick a drive folder by walking the tree, so a mapping's remote side is never
  *  typed from memory. Starts at the root and answers the path it ends on. */
 function FolderPicker({
-  mode,
   onClose,
   onPick,
-}: Readonly<{ mode: 'remote' | 'local'; onClose: () => void; onPick: (path: string) => void }>) {
+}: Readonly<{ onClose: () => void; onPick: (path: string) => void }>) {
   const t = useT();
   const api = useCloud115Api();
-  const start = mode === 'local' ? '/media' : '0';
-  const [trail, setTrail] = useState<{ cid: string; name: string }[]>([
-    mode === 'local' ? { cid: start, name: start } : { cid: start, name: '' },
-  ]);
+  const start = '0';
+  const [trail, setTrail] = useState<{ cid: string; name: string }[]>([{ cid: start, name: '' }]);
   const [view, setView] = useState<BrowseView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const current = trail[trail.length - 1] ?? { cid: start, name: '' };
-  const path =
-    mode === 'local'
-      ? current.cid
-      : `/${trail
-          .slice(1)
-          .map((step) => step.name)
-          .join('/')}`;
-  const heading = mode === 'local' ? t('cloud115.chooseLocalFolder') : t('cloud115.chooseFolder');
+  const path = `/${trail
+    .slice(1)
+    .map((step) => step.name)
+    .join('/')}`;
+  const heading = t('cloud115.chooseFolder');
 
   const load = (cid: string) => {
     setBusy(true);
     setError(null);
-    (mode === 'local' ? api.browseLocal(cid) : api.browse(cid))
+    api.browse(cid)
       .then(setView)
       .catch((reason) => {
         setView(null);
@@ -2623,12 +1921,6 @@ function FolderPicker({
   }, [api]);
 
   const enter = (entry: BrowseEntry) => {
-    if (mode === 'local') {
-      const next = `${current.cid.replace(/\/$/, '')}/${entry.name}`;
-      setTrail((steps) => [...steps, { cid: next, name: entry.name }]);
-      load(next);
-      return;
-    }
     if (!entry.cid) {
       return;
     }
@@ -2665,7 +1957,7 @@ function FolderPicker({
             onPress={up}
           />
           <Text variant="meta" color="textDim">
-            {mode === 'local' ? path : path === '/' ? t('cloud115.root') : path}
+            {path === '/' ? t('cloud115.root') : path}
           </Text>
         </Row>
       </Dialog.Header>
@@ -2713,6 +2005,7 @@ function FolderPicker({
           cancelLabel={t('cloud115.cancel')}
           onConfirm={() => onPick(path)}
           confirmLabel={t('cloud115.pickThis')}
+          disabled={busy || !view}
         />
       </Dialog.Footer>
     </Dialog.Root>

@@ -11,7 +11,7 @@ use anyhow::Result;
 use time::OffsetDateTime;
 
 use crate::db::{self, HeroCandidate, HomeActivity, Pool};
-use crate::model::{Section, SectionItem};
+use crate::model::{Section, SectionCard, SectionItem, User};
 use crate::services::jobs::now_ms;
 use crate::services::settings;
 use crate::state::SharedState;
@@ -53,6 +53,7 @@ impl Inputs {
 struct Key {
     user_id: String,
     locale: String,
+    grant: Option<(Option<Vec<String>>, Option<u8>, bool)>,
 }
 
 impl Key {
@@ -60,7 +61,16 @@ impl Key {
         Self {
             user_id: user_id.to_string(),
             locale: locale.to_string(),
+            grant: None,
         }
+    }
+
+    fn discovery(user: &User, locale: &str) -> Self {
+        let mut key = Self::new(&user.id, locale);
+        if !user.sees_every_library() {
+            key.grant = Some((user.libraries.clone().into(), user.max_age, user.allow_unrated));
+        }
+        key
     }
 }
 
@@ -137,6 +147,7 @@ impl<V: Clone> Slot<V> {
 #[derive(Default)]
 pub struct HomeMemo {
     sections: Shelf<Arc<Vec<Section>>>,
+    discovery_ids: Shelf<Arc<Vec<String>>>,
     hero: Shelf<SectionItem>,
     candidates: Slot<Arc<Vec<HeroCandidate>>>,
     pub(super) catalog: crate::services::reco::CatalogMemo,
@@ -173,6 +184,35 @@ pub fn home(state: &SharedState, pool: &Pool, locale: &str, user_id: &str) -> Ar
         || Some(Arc::new(super::build_home(state, pool, locale, user_id))),
     )
     .unwrap_or_default()
+}
+
+pub fn discovery(
+    state: &SharedState,
+    pool: &Pool,
+    locale: &str,
+    user: &User,
+    visible: impl Fn(&str, Option<&str>) -> bool,
+) -> Result<Vec<SectionCard>> {
+    let ids = remember(&state.home.discovery_ids, state, pool, Key::discovery(user, locale), || {
+        let world = state.home.world.cached_ranking();
+        let ids = super::with_board(state, pool, locale, &user.id, &world, |board| board.discovery_ids(&visible));
+        Some(Arc::new(ids))
+    }).unwrap_or_default();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+    let mut items = db::entities_by_ids(pool, &refs)?;
+    // A grant or certification can change after the candidates were ranked.
+    items.retain(|entry| {
+        let (library, metadata) = match entry {
+            SectionItem::Movie { item } => (&item.library, item.metadata.as_ref()),
+            SectionItem::Show { show } => (&show.library, show.metadata.as_ref()),
+        };
+        visible(library, metadata.and_then(|m| m.certification.as_deref()))
+    });
+    db::localize::overlay_section_items(pool, &mut items, crate::i18n::content_locale(locale))?;
+    Ok(items.into_iter().map(SectionCard::from).collect())
 }
 
 /// [`featured::pick`] for `user_id`, reused like [`home`]. An empty answer is

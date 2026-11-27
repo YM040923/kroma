@@ -67,5 +67,7 @@
   "admin.updatesSubtitle": "Une nouvelle version, la même bibliothèque. Mettez à jour à votre rythme.",
   "admin.updatesSynologyHint": "Le paquet KROMA se met à jour seul. Installez une fois le dernier paquet depuis le Centre de paquets ou kroma.tv pour l’activer.",
   "admin.updatesTitle": "Mises à jour du serveur",
+  "admin.updatesWindowsServer": "KROMA pour Windows",
+  "admin.updatesWindowsPackageHint": "Installez les mises à jour manuellement avec le paquet de cette édition Windows.",
   "admin.updatesWaitingIdle": "En attente de la fin des lectures"
 }

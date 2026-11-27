@@ -15,15 +15,27 @@ use crate::Supervisor;
 /// A list of folders, asked again each time a module starts.
 pub type Folders = Arc<dyn Fn() -> Vec<PathBuf> + Send + Sync>;
 
+/// One administrator-selected folder, opened at a stable guest path for the
+/// module that owns the grant.
+#[derive(Clone, Debug)]
+pub struct SelectedRoot {
+    pub host: PathBuf,
+    pub guest: String,
+}
+
+pub type SelectedRoots = Arc<dyn Fn(&str) -> Vec<SelectedRoot> + Send + Sync>;
+
 /// Where the named roots are on this machine, as the core answers them: the
 /// library folders behind `media`, the folders the operator named for downloads
-/// (a recycle bin included) behind `downloads`, and the folders holding the
-/// server's own files besides its data directory. No module holds one of those,
-/// nor a download folder above one, and a library folder above one is read-only.
+/// (a recycle bin included) behind `downloads`, per-module selected folders, and
+/// the folders holding the server's own files besides its data directory. No
+/// module holds a server folder or a download folder above one, and a library
+/// folder above one is read-only.
 #[derive(Clone)]
 pub struct FolderRoots {
     pub media: Folders,
     pub downloads: Folders,
+    pub selected: SelectedRoots,
     pub server_dirs: Vec<PathBuf>,
 }
 
@@ -34,6 +46,7 @@ impl FolderRoots {
         Self {
             media: Arc::new(Vec::new),
             downloads: Arc::new(Vec::new),
+            selected: Arc::new(|_| Vec::new()),
             server_dirs: Vec::new(),
         }
     }
@@ -73,11 +86,30 @@ pub(super) fn declares(manifest: &ModuleManifest, root: FsRoot) -> bool {
 fn held(dir: impl Into<PathBuf>, writable: bool) -> Preopen {
     let dir = dir.into();
     let guest = dir.to_string_lossy().into_owned();
+    held_at(dir, guest, writable)
+}
+
+/// Give the module its own writable folder at a stable WASI path. The host path
+/// is commonly `C:\\Users\\...` on Windows, which is not a valid absolute path
+/// inside a WASI guest; using `/module` lets the component persist its own
+/// config without ever seeing host path syntax.
+fn held_at(dir: impl Into<PathBuf>, guest: impl Into<String>, writable: bool) -> Preopen {
+    let dir = dir.into();
     Preopen {
         host: dir.canonicalize().unwrap_or(dir),
-        guest,
+        guest: guest.into(),
         writable,
     }
+}
+
+fn selected_guest_path_valid(guest: &str) -> bool {
+    let Some(grant) = guest.strip_prefix("/selected/") else {
+        return false;
+    };
+    !grant.is_empty()
+        && grant
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
 }
 
 impl Supervisor {
@@ -108,6 +140,9 @@ impl Supervisor {
         });
 
         let own_writable = fs.write.contains(&FsRoot::Module) || manifest.storage.is_some();
+        #[cfg(windows)]
+        roots.push(held_at(self.own_dir(id), "/module", own_writable));
+        #[cfg(not(windows))]
         roots.push(held(self.own_dir(id), own_writable));
         if first_party {
             for name in manifest
@@ -135,6 +170,22 @@ impl Supervisor {
                     }),
             );
         }
+        if declares(manifest, FsRoot::Selected) {
+            let writable = fs.write.contains(&FsRoot::Selected);
+            roots.extend((folders.selected)(id).into_iter().filter_map(|selected| {
+                if !selected_guest_path_valid(&selected.guest)
+                    || !selected.host.is_absolute()
+                    || selected.host.file_name().is_none()
+                    || !selected.host.is_dir()
+                    || files.above(&selected.host)
+                    || files.inside(&selected.host)
+                    || files.inside_reserved(&selected.host)
+                {
+                    return None;
+                }
+                Some(held_at(selected.host, selected.guest, writable))
+            }));
+        }
         for name in permissions.map_or(&[][..], |p| p.env.as_slice()) {
             if let Some(path) = std::env::var_os(name).map(PathBuf::from) {
                 if path.is_absolute()
@@ -153,6 +204,15 @@ impl Supervisor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_guest_paths_require_one_safe_grant_segment() {
+        assert!(selected_guest_path_valid("/selected/abc-123"));
+        assert!(!selected_guest_path_valid("/media/abc-123"));
+        assert!(!selected_guest_path_valid("/selected/"));
+        assert!(!selected_guest_path_valid("/selected/abc/child"));
+        assert!(!selected_guest_path_valid("/selected/../module"));
+    }
 
     #[test]
     fn a_data_dir_is_a_bare_name_outside_the_cores_own() {

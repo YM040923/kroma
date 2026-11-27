@@ -47,6 +47,18 @@ pub fn routes() -> Router<SharedState> {
         .route("/auth/relock", post(relock))
         .route("/auth/logout", post(logout))
         .route("/auth/me", get(me).patch(update_me))
+        .route(
+            "/auth/me/home-layout",
+            get(profile::get_home_layout)
+                .put(profile::put_home_layout)
+                .layer(DefaultBodyLimit::max(192 * 1024)),
+        )
+        .route(
+            "/auth/me/sidebar-layout",
+            get(profile::get_sidebar_layout)
+                .put(profile::put_sidebar_layout)
+                .layer(DefaultBodyLimit::max(96 * 1024)),
+        )
         .route("/auth/me/password", patch(change_password))
         .route(
             "/auth/me/sessions",

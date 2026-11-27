@@ -30,6 +30,7 @@ fn on_a_machine(tag: &str) -> Server {
         FolderRoots {
             media: Arc::new(move || libraries.to_vec()),
             downloads: Arc::new(move || named.to_vec()),
+            selected: Arc::new(|_| Vec::new()),
             server_dirs: vec![machine.join("releases")],
         }
     });

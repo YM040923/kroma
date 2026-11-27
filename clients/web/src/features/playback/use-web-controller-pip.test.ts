@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { MediaFile } from '@kromatv/client/media';
 import { act, renderHook } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -38,9 +39,9 @@ const { useWebController } = await import('#web/features/playback/use-web-contro
 
 installHarness();
 
-function render() {
+function render(target = item) {
   const runtime = createWebTestRuntime({});
-  return renderHook(() => useWebController(item), {
+  return renderHook(() => useWebController(target), {
     wrapper: ({ children }: { children: ReactNode }) =>
       createElement(WebRuntimeProvider, { value: runtime }, children),
   });
@@ -121,6 +122,22 @@ const headers = (map: Record<string, string>) => ({
 });
 
 describe('useWebController stream size probe', () => {
+  it('skips an extra range request for STRM playback', async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const file = MediaFile.parse({ id: 'a', container: 'strm', size: 12, probed: false,
+      durationMs: null, relPath: null, video: null, audio: null, audioTracks: [], subtitles: [] });
+    const selected = MediaFile.parse({ ...file, id: 'b', size: 1234567 });
+    for (const size of [selected.size, null]) {
+      const view = render({ ...item, container: 'strm', files: [file, { ...selected, size }], defaultFileId: selected.id });
+      await settle();
+      view.result.current.controller.getStats();
+      expect(H.statsInput).toMatchObject({ bytes: size ?? 0 });
+      view.unmount();
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('takes the total from a Content-Range and feeds it to the stats snapshot', async () => {
     vi.stubGlobal(
       'fetch',

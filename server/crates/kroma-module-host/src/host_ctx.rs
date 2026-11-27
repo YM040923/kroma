@@ -41,6 +41,13 @@ pub trait HostCtx: Send + Sync + 'static {
     // Persist a batch of settings atomically (one write).
     fn set_settings(&self, patch: std::collections::BTreeMap<String, serde_json::Value>);
 
+    /// Commit the selected-directory grants referenced by this module's saved
+    /// configuration. Paths must have been issued by the host's native picker.
+    fn commit_selected_folders(&self, module_id: &str, folders: &[String]) -> Result<bool, String> {
+        let _ = (module_id, folders);
+        Ok(false)
+    }
+
     fn publish(&self, event: Event);
     // Publish an event addressed to ONE user. Required rather than defaulted: a
     // host that forgot it would silently swallow every addressed event.
@@ -147,6 +154,9 @@ impl<T: HostCtx + ?Sized> HostCtx for std::sync::Arc<T> {
     }
     fn set_settings(&self, patch: std::collections::BTreeMap<String, serde_json::Value>) {
         (**self).set_settings(patch)
+    }
+    fn commit_selected_folders(&self, module_id: &str, folders: &[String]) -> Result<bool, String> {
+        (**self).commit_selected_folders(module_id, folders)
     }
     fn publish(&self, event: Event) {
         (**self).publish(event)

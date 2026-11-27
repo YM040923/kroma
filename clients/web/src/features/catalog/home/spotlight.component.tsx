@@ -1,6 +1,8 @@
 import { posterColors, synopsisLead } from '@kromatv/core';
 import { useT } from '@kromatv/ui';
-import { Box, Button, classes, Row, styles, Text, useStyles } from '@kromatv/ui/kit';
+import { Button, Row, Text } from '@kromatv/ui/kit';
+import { HeroArt, HeroIntro } from '#web/features/catalog/hero-art.component';
+import layout from '#web/features/catalog/hero-layout.module.css';
 import {
   entryBackdrop,
   entryFacts,
@@ -12,143 +14,54 @@ import {
 } from '#web/features/catalog/home/entries';
 import { entryLink } from '#web/features/catalog/home/entry-link';
 import { useAuth } from '#web/shared/lib/auth';
-import { Image } from '#web/shared/ui';
 import { RouteLink } from '#web/shared/ui/route-link.component';
-
-const BACKDROP_W = 1280;
-const SYNOPSIS_BUDGET = 220;
-
-const sDefinition = styles({
-  band: {
-    position: 'relative',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-    mt: 48,
-    minHeight: 'clamp(280px, 34vw, 420px)',
-    radius: 'xl',
-    borderWidth: 1,
-    borderColor: 'white/10',
-  },
-  art: { position: 'absolute', top: 0, right: 0, bottom: 0, left: { base: 0, md: '32%' } },
-  scrim: {
-    backgroundImage: {
-      base: 'linear-gradient(0deg, var(--kroma-bg) 8%, color-mix(in srgb, var(--kroma-bg) 55%, transparent) 46%, transparent 78%)',
-      md: [
-        'linear-gradient(90deg, var(--kroma-bg) 30%,',
-        'color-mix(in srgb, var(--kroma-bg) 78%, transparent) 46%,',
-        'color-mix(in srgb, var(--kroma-bg) 20%, transparent) 68%, transparent 86%)',
-      ].join(' '),
-    },
-  },
-  copy: { p: { base: 20, md: 36 }, maxW: 560 },
-});
-
-function SpotlightArt({ entry }: Readonly<{ entry: HomeEntry }>) {
-  const s = useStyles(sDefinition);
-  const { client } = useAuth();
-
-  return (
-    <Box style={s.art}>
-      <Image
-        src={entryBackdrop(client, entry, BACKDROP_W)}
-        background={`linear-gradient(158deg, ${posterColors(entryId(entry)).join(', ')})`}
-        fit="cover"
-        position="center 22%"
-        fill
-      />
-    </Box>
-  );
-}
 
 function SpotlightActions({ entry }: Readonly<{ entry: HomeEntry }>) {
   const t = useT();
-
   return (
-    <Row wrap gap={12}>
+    <Row wrap gap={8}>
       {entry.type === 'movie' ? (
-        <Button icon="player-play-filled" label={t('content.play')} asChild>
+        <Button size="sm" icon="player-play-filled" label={t('content.play')} asChild>
           <RouteLink to="/watch/$id" params={{ id: entry.item.id }} />
         </Button>
       ) : null}
-      <Button
-        variant={entry.type === 'movie' ? 'glass' : undefined}
-        label={t('content.moreInfo')}
-        asChild
-      >
+      <Button size="sm" variant={entry.type === 'movie' ? 'glass' : undefined} label={t('content.moreInfo')} asChild>
         {entryLink(entry)}
       </Button>
     </Row>
   );
 }
 
-function SpotlightFacts({ entry }: Readonly<{ entry: HomeEntry }>) {
-  const t = useT();
-  const rating = entryMetadata(entry)?.rating;
-
-  return (
-    <Row wrap gap={12} mb={12}>
-      {rating ? <Text variant="meta" color="accent">{`${rating.toFixed(1)}★`}</Text> : null}
-      <Text variant="meta" color="textMuted">
-        {entryFacts(t, entry).join(' · ')}
-      </Text>
-    </Row>
-  );
-}
-
-interface SpotlightCopyProps {
-  entry: HomeEntry;
-  title: string;
-  note: string | null;
-}
-
-function SpotlightCopy({ entry, title, note }: Readonly<SpotlightCopyProps>) {
-  const s = useStyles(sDefinition);
-  const synopsis = synopsisLead(entryMetadata(entry)?.overview, SYNOPSIS_BUDGET);
-
-  return (
-    <Box style={s.copy}>
-      <Row wrap gap={10} mb={10}>
-        <Text variant="overline" color="accent">
-          {title}
-        </Text>
-        {note ? (
-          <Text variant="overline" color="textMuted">
-            {note}
-          </Text>
-        ) : null}
-      </Row>
-      <h2>
-        <Text variant="h1" lines={2} mb={10}>
-          {entryTitle(entry)}
-        </Text>
-      </h2>
-      <SpotlightFacts entry={entry} />
-      {synopsis ? (
-        <Text variant="body" mb={20} color="text/82">
-          {synopsis}
-        </Text>
-      ) : null}
-      <SpotlightActions entry={entry} />
-    </Box>
-  );
-}
-
-/** One title given the width of the page, with why it was picked. */
+/** One editorial pick. On phones its copy follows the faded edge of the art. */
 export function Spotlight({ section }: Readonly<{ section: HomeSection }>) {
-  const s = useStyles(sDefinition);
+  const { client } = useAuth();
+  const t = useT();
   const entry = section.items[0];
-  if (!entry) {
-    return null;
-  }
-  const note = section.notes[entryId(entry)] ?? section.reason ?? null;
+  if (!entry) return null;
+  const meta = entryMetadata(entry);
+  const synopsis = synopsisLead(meta?.overview, 220);
+  const note = section.notes[entryId(entry)] ?? section.reason;
 
   return (
-    <section className={classes(s.band)} aria-label={section.title}>
-      <SpotlightArt entry={entry} />
-      <Box fill pointerEvents="none" style={s.scrim} />
-      <SpotlightCopy entry={entry} title={section.title} note={note} />
+    <section className={layout.spotlight} aria-label={section.title}>
+      <div className={`${layout.mast} ${layout.band}`}>
+        <div className={layout.spotArt}>
+          <HeroArt src={entryBackdrop(client, entry)} background={`linear-gradient(158deg, ${posterColors(entryId(entry)).join(', ')})`} veil="spotlight" priority={false} />
+        </div>
+        <div className={layout.spotCopy}>
+          <Row wrap gap={8}>
+            <Text variant="overline">{section.title}</Text>
+            {note ? <Text variant="overline" color="textMuted">{note}</Text> : null}
+          </Row>
+          <h2 className={layout.title}>{entryTitle(entry)}</h2>
+          <Row wrap gap={8} mb={10}>
+            {meta?.rating ? <Text variant="meta" color="accentText">{`${meta.rating.toFixed(1)}★`}</Text> : null}
+            <Text variant="meta" color="textMuted">{entryFacts(t, entry).join(' · ')}</Text>
+          </Row>
+          {synopsis ? <HeroIntro>{synopsis}</HeroIntro> : null}
+          <SpotlightActions entry={entry} />
+        </div>
+      </div>
     </section>
   );
 }

@@ -154,7 +154,7 @@ export function CatalogGrid({ entries }: Readonly<{ entries: CatalogEntry[] }>) 
   return (
     <VirtualTileGrid
       data={entries}
-      keyOf={(e) => (e.kind === 'movie' ? e.movie.id : e.show.id)}
+      keyOf={(e) => (e.kind === 'movie' ? `movie:${e.movie.id}` : `show:${e.show.id}`)}
       renderItem={(e, width) =>
         e.kind === 'movie' ? (
           <MoviePoster item={e.movie} width={width} />

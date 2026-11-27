@@ -1,64 +1,61 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { UserId } from '@kromatv/client/accounts';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useResumeAnchor } from '#web/features/playback/use-resume-anchor.hook';
 import { movie } from '#web/features/playback/use-video-playback.fixture';
+import { WebRuntimeProvider } from '#web/shared/lib/web-runtime';
+import { createWebTestRuntime } from '#web/shared/lib/web-runtime.fixture';
 
 const itemProgress = vi.fn();
-const save = vi.fn(() => Promise.resolve({ watched: false }));
-interface StubAuth {
-  client: { playback: { itemProgress: typeof itemProgress; save: typeof save } };
-  user: { id: string } | null;
+const item = movie();
+const first = UserId.parse('u1');
+function setup() {
+  const runtime = createWebTestRuntime({ playback: { itemProgress } });
+  const open = () => runtime.queryClient.prefetchQuery(runtime.queries.catalogQueries.resumeProgress(item.id, first));
+  const render = () => renderHook(({ viewer }) => useResumeAnchor(item, viewer), {
+    initialProps: { viewer: first },
+    wrapper: ({ children }: { children: ReactNode }) => createElement(WebRuntimeProvider, { value: runtime }, children),
+  });
+  return { open, render };
 }
-const auth: StubAuth = { client: { playback: { itemProgress, save } }, user: null };
+afterEach(() => { cleanup(); itemProgress.mockReset(); });
 
-vi.mock('#web/shared/lib/auth', () => ({ useAuth: () => auth }));
-vi.mock('#web/shared/lib/watched', () => ({
-  useWatched: () => ({ setWatched: vi.fn(), noteWatched: vi.fn() }),
-}));
-
-const { useResumeProgress } = await import('#web/features/playback/use-resume-progress.hook');
-
-const settle = () => act(() => new Promise<void>((r) => setTimeout(r, 0)));
-
-function render() {
-  const item = movie();
-  const videoRef = { current: null };
-  return renderHook(() => useResumeProgress(videoRef, item));
-}
-
-afterEach(() => {
-  cleanup();
-  itemProgress.mockReset();
-});
-
-describe('useResumeProgress across a session refresh', () => {
-  it('offers the resume once when the refresh hands the same account back', async () => {
-    auth.user = { id: 'u1' };
-    itemProgress.mockResolvedValue({ positionMs: 40_000, durationMs: 100_000 });
+describe('resume snapshot per opening', () => {
+  it('shares the loader read and never reapplies it over a seek or session refresh', async () => {
+    const { open, render } = setup();
+    itemProgress.mockResolvedValue({ positionMs: 40_000 });
+    await open();
     const view = render();
-    await settle();
-    itemProgress.mockResolvedValue({ positionMs: 52_000, durationMs: 100_000 });
-
-    auth.user = { id: 'u1' };
-    view.rerender();
-    await settle();
-
+    expect(view.result.current.bootAnchor).toBe(40);
+    act(() => view.result.current.setAnchor(65));
+    view.rerender({ viewer: first });
+    expect(view.result.current.anchor).toBe(65);
+    expect(view.result.current.bootAnchor).toBe(40);
     expect(itemProgress).toHaveBeenCalledTimes(1);
-    expect(view.result.current).toBe(40);
+    itemProgress.mockResolvedValue({ positionMs: 52_000 });
+    view.rerender({ viewer: UserId.parse('u2') });
+    await waitFor(() => expect(view.result.current.anchor).toBe(52));
+    expect(itemProgress).toHaveBeenCalledTimes(2);
   });
 
-  it('asks again for another account', async () => {
-    auth.user = { id: 'u1' };
-    itemProgress.mockResolvedValue({ positionMs: 40_000, durationMs: 100_000 });
-    const view = render();
-    await settle();
-    itemProgress.mockResolvedValue({ positionMs: 52_000, durationMs: 100_000 });
-
-    auth.user = { id: 'u2' };
-    view.rerender();
-    await settle();
-
+  it.each([false, true])('waits for the new read on immediate reopen (failure: %s)', async (fails) => {
+    const { open, render } = setup();
+    itemProgress.mockResolvedValue({ positionMs: 40_000 });
+    await open();
+    const previous = render();
+    expect(previous.result.current.anchor).toBe(40);
+    previous.unmount();
+    let finish!: () => void;
+    itemProgress.mockImplementationOnce(() => new Promise((resolve, reject) => {
+      finish = () => fails ? reject(new Error('offline')) : resolve({ positionMs: 72_000 });
+    }));
+    const pending = open();
+    const next = render();
+    expect(next.result.current.bootAnchor).toBeNull();
+    await act(async () => { finish(); await pending; });
+    await waitFor(() => expect(next.result.current.bootAnchor).toBe(fails ? 0 : 72));
     expect(itemProgress).toHaveBeenCalledTimes(2);
-    expect(view.result.current).toBe(52);
   });
 });

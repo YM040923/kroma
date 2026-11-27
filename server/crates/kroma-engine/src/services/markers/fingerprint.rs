@@ -40,7 +40,7 @@ pub fn fingerprint_window(
 ) -> Result<WindowFp> {
     let cfg = config();
     let sr = cfg.sample_rate();
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = kroma_primitives::process::new("ffmpeg");
     cmd.args(decode_args(path, secs, from_end, sr))
         .stdout(Stdio::piped())
         .stderr(Stdio::null());

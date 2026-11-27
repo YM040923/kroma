@@ -1,95 +1,16 @@
-// The url is a trust boundary: an unrecognised `sort` renders an empty grid that
-// reads as an empty library, and a bookmark reopens it broken every time.
+import { expect, it } from 'vitest';
+import { browseDestination } from './browse-search';
 
-import { describe, expect, it } from 'vitest';
-import { validateBrowseSearch } from './browse-search';
+it('preserves the raw library ID and prioritizes its scope over genre', () => {
+  expect(browseDestination({ library: '电影 %201', genre: 'drama', sort: 'rating' }))
+    .toEqual({ to: '/libraries/$id', params: { id: '电影 %201' } });
+});
 
-describe('validateBrowseSearch', () => {
-  it('keeps a sort mode the page understands', () => {
-    const kept = validateBrowseSearch({ sort: 'added' });
-    expect(kept.sort).toBe('added');
-  });
+it('opens the genre route for an old genre-only link', () => {
+  expect(browseDestination({ genre: 'science-fiction' }))
+    .toEqual({ to: '/genres/$id', params: { id: 'science-fiction' } });
+});
 
-  it('drops a sort mode it does not', () => {
-    expect(validateBrowseSearch({ sort: 'sideways' })).toEqual({});
-  });
-
-  it('drops a sort that is not even a string', () => {
-    for (const sort of [42, null, undefined, {}, ['added']]) {
-      expect(validateBrowseSearch({ sort })).toEqual({});
-    }
-  });
-
-  it('keeps a genre', () => {
-    expect(validateBrowseSearch({ genre: 'Science Fiction' })).toEqual({
-      genre: 'Science Fiction',
-    });
-  });
-
-  it('drops an EMPTY genre rather than filtering on nothing', () => {
-    // `?genre=` is what a cleared filter leaves behind.
-    expect(validateBrowseSearch({ genre: '' })).toEqual({});
-  });
-
-  it('drops a genre that is not a string', () => {
-    for (const genre of [1, true, null, {}, ['Drama']]) {
-      expect(validateBrowseSearch({ genre })).toEqual({});
-    }
-  });
-
-  it('keeps both together', () => {
-    expect(validateBrowseSearch({ sort: 'added', genre: 'Drama' })).toEqual({
-      sort: 'added',
-      genre: 'Drama',
-    });
-  });
-
-  it('keeps a library id', () => {
-    expect(validateBrowseSearch({ library: 'lib-anime' })).toEqual({ library: 'lib-anime' });
-  });
-
-  it('drops an EMPTY library rather than scoping to nothing', () => {
-    expect(validateBrowseSearch({ library: '' })).toEqual({});
-  });
-
-  it('drops a library that is not a string', () => {
-    for (const library of [7, false, null, {}, ['lib']]) {
-      expect(validateBrowseSearch({ library })).toEqual({});
-    }
-  });
-
-  it('keeps library, genre and sort together', () => {
-    expect(
-      validateBrowseSearch({ sort: 'rating', genre: 'Drama', library: 'lib-anime' }),
-    ).toEqual({ sort: 'rating', genre: 'Drama', library: 'lib-anime' });
-  });
-
-  it('keeps the good half of a half-valid url', () => {
-    expect(validateBrowseSearch({ sort: 'nope', genre: 'Drama' })).toEqual({ genre: 'Drama' });
-  });
-
-  it('ignores parameters it was never asked about', () => {
-    expect(validateBrowseSearch({ utm_source: 'x', page: '3', genre: 'Drama' })).toEqual({
-      genre: 'Drama',
-    });
-  });
-
-  it('is empty for an empty url', () => {
-    expect(validateBrowseSearch({})).toEqual({});
-  });
-
-  it('drops a genre longer than any the catalogue names', () => {
-    expect(validateBrowseSearch({ genre: 'a'.repeat(65) })).toEqual({});
-  });
-
-  it('keeps a genre right at the bound', () => {
-    expect(validateBrowseSearch({ genre: 'a'.repeat(64) })).toEqual({ genre: 'a'.repeat(64) });
-  });
-
-  it('OMITS a dropped key rather than setting it undefined', () => {
-    // The router serialises the result back into the url; an explicit
-    // `undefined` is a `?sort=` that comes straight back here next navigation.
-    const out = validateBrowseSearch({ sort: 'nope' });
-    expect(Object.hasOwn(out, 'sort')).toBe(false);
-  });
+it('does not turn a sort or unrelated parameter into navigation', () => {
+  expect(browseDestination({ sort: 'rating', library: '', page: 2 })).toBeUndefined();
 });

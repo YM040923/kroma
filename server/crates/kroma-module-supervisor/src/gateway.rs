@@ -49,10 +49,43 @@ impl Drop for Running {
 pub(crate) type Slot = OnceLock<Wiring>;
 
 impl Supervisor {
+    /// The runtime modules run on: a multi-thread runtime of their own, created
+    /// once and kept for the process's life. `None` if it could not be built, in
+    /// which case the caller falls back to the host runtime.
+    pub(crate) fn module_runtime(&self) -> Option<Arc<tokio::runtime::Runtime>> {
+        if let Some(runtime) = self.runtime.get() {
+            return Some(Arc::clone(runtime));
+        }
+        let built = tokio::runtime::Builder::new_multi_thread()
+            // Two workers is plenty for a module turning on its own clock; the
+            // point is the separate blocking pool, not raw parallelism.
+            .worker_threads(2)
+            .enable_all()
+            .thread_name("kroma-module-rt")
+            .build()
+            .map_err(|error| tracing::error!(%error, "the module runtime could not be built"))
+            .ok()
+            .map(Arc::new);
+        if let Some(runtime) = &built {
+            let _ = self.runtime.set(Arc::clone(runtime));
+            return Some(Arc::clone(runtime));
+        }
+        None
+    }
+
     /// Give every module started from here on a gateway ruled by `network`,
     /// served on `runtime`. `folders` answers where the named folder roots are. A
     /// supervisor never told this starts no module.
-    pub fn serve_gateways(&self, network: NetworkPolicyOf, runtime: Handle, folders: FolderRoots) {
+    pub fn serve_gateways(&self, network: NetworkPolicyOf, _host: Handle, folders: FolderRoots) {
+        // Modules get their own runtime, never the server's. A module's wasm runs
+        // inside `spawn_blocking`; on the host runtime that pool is shared with
+        // one-shot heavy work (scans, ffprobe, TMDB enrichment), so a busy server
+        // can leave a module call queued behind it with no bound. This runtime is
+        // created once and held by the supervisor for the process's life.
+        let runtime = self
+            .module_runtime()
+            .map(|runtime| runtime.handle().clone())
+            .unwrap_or(_host);
         let wired = self.gateway.set(Wiring {
             network,
             runtime,

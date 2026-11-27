@@ -5,6 +5,7 @@
 pub mod allocator;
 pub mod background;
 pub mod folders;
+pub mod folder_picker;
 #[cfg(feature = "hotpatch")]
 pub mod hot;
 pub mod https;
@@ -15,3 +16,5 @@ pub mod startup;
 pub mod state;
 pub mod tracing;
 pub mod transcriber;
+#[cfg(windows)]
+pub mod tray_windows;

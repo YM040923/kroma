@@ -9,7 +9,8 @@ mod restart;
 pub use channel::channel;
 pub use install::{install, install_automatically, recover, Installer, Operation, Target};
 pub use restart::{
-    restart, restart_requested, restartable, wait_for_restart, Refusal, RESTART_EXIT_CODE,
+    request_stop, restart, restart_requested, restartable, wait_for_restart, Refusal,
+    RESTART_EXIT_CODE,
 };
 
 use anyhow::{Context, Result};
@@ -28,7 +29,11 @@ pub const OPERATION_KEY: &str = "update.operation";
 pub const STATUS_KEY: &str = "update.status";
 pub const DETECTED_KEY: &str = "update.detectedChannel";
 
-const RELEASES_URL: &str = "https://api.github.com/repos/kromatv/kroma/releases";
+pub const MANUAL_PACKAGE_HINT: &str = "Use the update package for the Windows edition.";
+
+pub fn feed_setting(key: &str) -> bool {
+    matches!(key, CHANNEL_KEY | AUTO_KEY | AUTO_INSTALL_KEY)
+}
 const MAX_FEED_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Which feed the owner follows: tagged releases, or every build of main.
@@ -42,7 +47,8 @@ pub enum Channel {
 /// owner's choice or, until they make one, whether this server can replace
 /// itself without a host updater.
 pub fn auto_install(state: &SharedState) -> bool {
-    state.settings.get_bool(AUTO_KEY, true)
+    state.config.server_updates.feed().is_some()
+        && state.settings.get_bool(AUTO_KEY, true)
         && state
             .settings
             .get(AUTO_INSTALL_KEY)
@@ -64,9 +70,12 @@ pub struct Checked {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_source: Option<&'static str>,
     pub version: String,
     pub build: u64,
-    pub channel: Channel,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channel: Option<Channel>,
     pub auto: bool,
     pub auto_install: bool,
     pub latest: Option<Latest>,
@@ -88,17 +97,19 @@ fn stored(settings: &Settings, channel: Channel) -> Option<Checked> {
 /// than the one now chosen is not shown: it answered a different question.
 pub fn status(state: &SharedState) -> Status {
     let build = build_info();
-    let channel = channel(&state.settings);
-    let checked = stored(&state.settings, channel);
+    let online = state.config.server_updates.feed().is_some();
+    let channel = online.then(|| channel(&state.settings));
+    let checked = channel.and_then(|selected| stored(&state.settings, selected));
     let latest = checked.as_ref().and_then(|c| c.latest.clone());
     Status {
+        update_source: (!online).then_some("windows-package"),
         available: latest
             .as_ref()
             .is_some_and(|l| is_newer(l, &build.version, build.number)),
         version: build.version,
         build: build.number,
         channel,
-        auto: state.settings.get_bool(AUTO_KEY, true),
+        auto: online && state.settings.get_bool(AUTO_KEY, true),
         auto_install: auto_install(state),
         latest,
         checked_at: checked.as_ref().map(|c| c.checked_at.clone()),
@@ -113,7 +124,7 @@ pub fn status(state: &SharedState) -> Status {
 /// channel gave and records the error beside it, and an answer for a channel
 /// the owner left while the request was out is dropped.
 pub fn check(state: &SharedState) -> Result<Status> {
-    let base = releases(state);
+    let base = state.config.server_updates.feed().context(MANUAL_PACKAGE_HINT)?;
     let build = build_info();
     channel::detect(state, base, &build.version, build.number);
     let asked = channel(&state.settings);
@@ -145,15 +156,12 @@ fn package_of(state: &SharedState, target: &Target) -> Result<feed::Package> {
         Channel::Stable => format!("tags/v{}", target.version),
         Channel::Canary => "tags/canary".to_owned(),
     };
-    let release = get(releases(state), &tag)?
+    let base = state.config.server_updates.feed().context(MANUAL_PACKAGE_HINT)?;
+    let release = get(base, &tag)?
         .ensure_ok()?
         .json::<feed::Release>()?;
     feed::package(&release, target, std::env::consts::ARCH)
         .context("This server build is not published for this machine.")
-}
-
-fn releases(state: &SharedState) -> &str {
-    state.config.releases_url.as_deref().unwrap_or(RELEASES_URL)
 }
 
 fn get(base: &str, path: &str) -> Result<kroma_http::Response> {

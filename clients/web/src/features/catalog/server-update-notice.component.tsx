@@ -37,7 +37,7 @@ function useServerUpdateNotice() {
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   });
-  if (!allowed || !data) {
+  if (!allowed || !data || data.updateSource === 'windows-package') {
     return null;
   }
   const operation = data.operation;

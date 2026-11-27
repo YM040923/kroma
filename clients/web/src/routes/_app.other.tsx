@@ -14,7 +14,7 @@ export const Route = createFileRoute('/_app/other')({
   component: OtherPage,
 });
 
-function OtherRow({ item }: Readonly<{ item: MediaItem }>) {
+export function OtherRow({ item }: Readonly<{ item: MediaItem }>) {
   const t = useT();
   return (
     <Surface tone="outline" pad="sm">

@@ -98,7 +98,7 @@ fn an_entry_carries_the_full_path_the_scanner_will_use() {
     assert_eq!(entry["name"], "Films");
     assert_eq!(
         entry["path"].as_str().unwrap(),
-        films.canonicalize().unwrap().to_string_lossy()
+        picker_path(&films.canonicalize().unwrap()).to_string_lossy()
     );
 }
 
@@ -113,7 +113,7 @@ fn the_path_returned_is_the_resolved_one_not_the_one_asked_for() {
     let body = browse(&asked);
     assert_eq!(
         body["path"].as_str().unwrap(),
-        t.0.canonicalize().unwrap().to_string_lossy()
+        picker_path(&t.0.canonicalize().unwrap()).to_string_lossy()
     );
 }
 
@@ -127,7 +127,7 @@ fn a_child_points_back_at_its_parent_so_the_picker_can_go_up() {
     assert_eq!(names(&body), ["2024"]);
     assert_eq!(
         body["parent"].as_str().unwrap(),
-        t.0.canonicalize().unwrap().to_string_lossy()
+        picker_path(&t.0.canonicalize().unwrap()).to_string_lossy()
     );
 }
 
@@ -185,6 +185,74 @@ fn a_path_that_merely_starts_with_a_root_name_is_not_inside_it() {
     assert!(!within_roots(Path::new("/volume1x"), &roots));
 }
 
+#[cfg(windows)]
+#[test]
+fn local_drive_and_unicode_child_round_trip_through_the_picker() {
+    let t = Tree::new("picker");
+    let child = t.dir("电影 Films");
+    let resolved = child.canonicalize().unwrap();
+    let target = picker_path(&resolved);
+    let volumes = browse("");
+    assert_eq!(volumes["path"], "");
+    assert!(volumes["parent"].is_null());
+    let mut path = target.ancestors().last().unwrap().to_path_buf();
+    assert!(volumes["entries"].as_array().unwrap().iter().any(|entry| {
+        entry["name"] == entry["path"] && entry["path"].as_str() == path.to_str()
+    }));
+    let mut body = browse(path.to_str().unwrap());
+    for part in target.strip_prefix(&path).unwrap().components() {
+        path.push(part);
+        let entry = body["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["path"].as_str() == path.to_str())
+            .unwrap();
+        body = browse(entry["path"].as_str().unwrap());
+        assert_eq!(body["path"].as_str(), path.to_str());
+        assert!(!path.to_str().unwrap().starts_with(r"\\?\"));
+    }
+    while path.pop() {
+        assert_eq!(body["parent"].as_str(), path.to_str());
+        body = browse(body["parent"].as_str().unwrap());
+    }
+    assert_eq!(body["parent"], "");
+    assert_eq!(browse(body["parent"].as_str().unwrap()), volumes);
+    assert!(matches!(
+        browse_dirs(child.join("missing").display().to_string()),
+        Err(BrowseErr::NotFound)
+    ));
+}
+
+#[cfg(windows)]
+#[test]
+fn only_advertised_drive_paths_may_be_resolved() {
+    let roots = [PathBuf::from(r"E:\")];
+    for name in [
+        r"movies",
+        r"E:movies",
+        r"\movies",
+        r"Z:\movies",
+        r"\\server\share",
+        r"\\.\C:",
+        r"\\?\E:\movies",
+    ] {
+        assert!(!within_roots(Path::new(name), &roots), "{name}");
+    }
+    assert!(has_dos_device_name(Path::new(r"E:\movies\nul.txt")));
+    assert!(!has_dos_device_name(Path::new(r"E:\movies\console")));
+    assert!(!within_roots(Path::new(r"E:\movies"), &[]));
+    assert!(within_roots(
+        picker_path(Path::new(r"\\?\E:\movies")),
+        &roots
+    ));
+    assert!(!within_roots(
+        picker_path(Path::new(r"\\?\UNC\host\share")),
+        &roots
+    ));
+}
+
+#[cfg(not(windows))]
 #[test]
 fn with_no_volumes_at_all_the_dev_box_may_browse_anywhere() {
     assert!(within_roots(Path::new("/etc"), &[]));

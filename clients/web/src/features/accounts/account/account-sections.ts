@@ -1,5 +1,7 @@
 export const ACCOUNT_SECTIONS = [
   'profile',
+  'home',
+  'sidebar',
   'preferences',
   'notifications',
   'security',

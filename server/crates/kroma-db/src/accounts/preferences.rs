@@ -1,9 +1,46 @@
-//! What a user chose: their avatar and their languages.
+//! The account's own profile and display preferences.
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
+use kroma_domain::{HomeLayout, SidebarLayout};
 use rusqlite::params;
 
 use crate::Pool;
+
+pub fn home_layout(pool: &Pool, user_id: &str) -> Result<HomeLayout> {
+    let json: String = pool.get()?.query_row(
+        "SELECT home_layout FROM users WHERE id = ?1",
+        params![user_id],
+        |row| row.get(0),
+    )?;
+    Ok(serde_json::from_str(&json)?)
+}
+
+pub fn set_home_layout(pool: &Pool, user_id: &str, layout: &HomeLayout) -> Result<()> {
+    let changed = pool.get()?.execute(
+        "UPDATE users SET home_layout = ?2 WHERE id = ?1",
+        params![user_id, serde_json::to_string(layout)?],
+    )?;
+    ensure!(changed == 1, "account not found");
+    Ok(())
+}
+
+pub fn sidebar_layout(pool: &Pool, user_id: &str) -> Result<SidebarLayout> {
+    let json: String = pool.get()?.query_row(
+        "SELECT sidebar_layout FROM users WHERE id = ?1",
+        params![user_id],
+        |row| row.get(0),
+    )?;
+    Ok(serde_json::from_str(&json)?)
+}
+
+pub fn set_sidebar_layout(pool: &Pool, user_id: &str, layout: &SidebarLayout) -> Result<()> {
+    let changed = pool.get()?.execute(
+        "UPDATE users SET sidebar_layout = ?2 WHERE id = ?1",
+        params![user_id, serde_json::to_string(layout)?],
+    )?;
+    ensure!(changed == 1, "account not found");
+    Ok(())
+}
 
 /// Uploaded avatars live in the same `images` dir as the regenerable art cache,
 /// so the cleanup job uses this to spare them — they can't be re-downloaded.
@@ -101,6 +138,37 @@ mod tests {
         );
         set_user_avatar(&p, &u.id, None).unwrap();
         assert!(avatar_urls(&p).unwrap().is_empty());
+    }
+
+    #[test]
+    fn home_layout_upgrades_existing_accounts_and_survives_reopening() {
+        let dir = kroma_testing::temp_dir("account-home-layout");
+        let path = dir.path().join("kroma.db");
+        let legacy = crate::schema::legacy_database(&path);
+        let alice = mk_user(&legacy, "a@b.c", "alice");
+        let bob = mk_user(&legacy, "b@b.c", "bob");
+        drop(legacy);
+
+        let p = crate::init(&path).unwrap();
+        let original = HomeLayout::default();
+        let custom: HomeLayout = serde_json::from_value(serde_json::json!({
+            "order": ["for-you", "hero"], "hidden": ["for-you"]
+        }))
+        .unwrap();
+        assert_eq!(home_layout(&p, &alice.id).unwrap(), original);
+        set_home_layout(&p, &alice.id, &custom).unwrap();
+        drop(p);
+
+        let p = crate::init(&path).unwrap();
+        assert_eq!(home_layout(&p, &alice.id).unwrap(), custom);
+        assert_eq!(home_layout(&p, &bob.id).unwrap(), original);
+        set_home_layout(&p, &bob.id, &custom).unwrap();
+        set_home_layout(&p, &alice.id, &original).unwrap();
+        drop(p);
+
+        let p = crate::init(&path).unwrap();
+        assert_eq!(home_layout(&p, &alice.id).unwrap(), original);
+        assert_eq!(home_layout(&p, &bob.id).unwrap(), custom);
     }
 
     #[test]

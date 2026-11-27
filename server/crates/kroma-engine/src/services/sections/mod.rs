@@ -22,7 +22,7 @@ mod themes;
 pub mod world;
 
 pub use cache::VectorCache;
-pub use memo::{hero, home, HomeMemo};
+pub use memo::{discovery, hero, home, HomeMemo};
 pub use page::{adapt, Accepts};
 
 use crate::db::{self, Pool};
@@ -38,13 +38,25 @@ use context::Context;
 /// Build the ordered, de-duplicated home for one user. Infallible: any step that
 /// fails (or comes up thin) simply contributes no section.
 pub fn build_home(state: &SharedState, pool: &Pool, locale: &str, user_id: &str) -> Vec<Section> {
+    with_board(state, pool, locale, user_id, &state.home.world.ranked(state), |board| {
+        page::compose(board, state.settings.get_bool("showRecentHome", true))
+    })
+}
+
+fn with_board<R>(
+    state: &SharedState,
+    pool: &Pool,
+    locale: &str,
+    user_id: &str,
+    world: &[world::Ranked],
+    select: impl FnOnce(&Board<'_>) -> R,
+) -> R {
     let _ = state.vectors.refresh_if_stale(pool);
     let ctx = Context::build(pool, user_id, settings::played_percent(&state.settings));
     let catalog = state.home.catalog.get(state, pool);
     let now = crate::services::jobs::now_ms().div_euclid(1000);
-    let viewer = Viewer::read(state, pool, &catalog, user_id, now);
-    let board = Board::new(state, pool, locale, &catalog, &viewer, &ctx);
-    page::compose(&board, state.settings.get_bool("showRecentHome", true))
+    let viewer = Viewer::with_world(state, pool, &catalog, user_id, now, world);
+    select(&Board::new(state, pool, locale, &catalog, &viewer, &ctx))
 }
 
 // Logs before falling back to empty: swallowing the error made a broken query

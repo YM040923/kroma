@@ -7,7 +7,7 @@ use std::sync::Arc;
 use kroma_config::Config;
 use kroma_engine::state::SharedState;
 use kroma_module_host::HostCtx;
-use kroma_module_supervisor::{FolderRoots, Folders};
+use kroma_module_supervisor::{FolderRoots, Folders, SelectedRoot, SelectedRoots};
 
 const DOWNLOAD_FOLDERS: &str = "downloadFolders";
 const RECYCLE_BIN: &str = "acqRecycleBin";
@@ -18,6 +18,7 @@ pub fn folder_roots(state: &SharedState) -> FolderRoots {
     FolderRoots {
         media: media_roots(state),
         downloads: download_folders(state),
+        selected: selected_roots(state),
         server_dirs: server_dirs(&state.config),
     }
 }
@@ -33,6 +34,19 @@ fn media_roots(state: &SharedState) -> Folders {
         roots.sort();
         roots.dedup();
         roots
+    })
+}
+
+fn selected_roots(state: &SharedState) -> SelectedRoots {
+    let state = state.clone();
+    Arc::new(move |module_id| {
+        kroma_engine::modules::selected_folders(&state.settings, module_id)
+            .into_iter()
+            .map(|(guest, host)| SelectedRoot {
+                host: PathBuf::from(host),
+                guest,
+            })
+            .collect()
     })
 }
 

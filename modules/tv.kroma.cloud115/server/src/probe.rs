@@ -84,8 +84,8 @@ impl Probed {
 
 /// Sign a link and read the container. `size` is from the listing, used for the
 /// suffix range an MP4 needs when its `moov` sits at the end.
-pub async fn probe(cookie: &str, pick_code: &str, size: i64) -> Result<Option<Probed>, ApiError> {
-    let link = client::sign(cookie, MODULE_UA, pick_code).await?;
+pub async fn probe(grant: &str, pick_code: &str, size: i64) -> Result<Option<Probed>, ApiError> {
+    let link = client::sign(grant, MODULE_UA, pick_code).await?;
     if link.needs_cookie {
         return Ok(None);
     }

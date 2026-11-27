@@ -1,12 +1,17 @@
 import { useT } from '@kromatv/ui';
-import { EmptyState } from '@kromatv/ui/kit';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { Button, EmptyState, styles, useStyles } from '@kromatv/ui/kit';
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
-import { type ReactNode, Suspense } from 'react';
+import { Suspense } from 'react';
 import { ContinueRow } from '#web/features/catalog/continue-row.component';
 import { Hero, HeroSkeleton } from '#web/features/catalog/featured-hero.component';
 import { HeroCarousel } from '#web/features/catalog/home/hero-carousel.component';
-import { HomeSections, SectionsSkeleton } from '#web/features/catalog/home/home-sections.component';
+import { HomeSectionView, SectionsSkeleton } from '#web/features/catalog/home/home-sections.component';
+import { CONTINUE_SLOT, HERO_SLOT, homeSlots, orderedModules } from '#web/features/catalog/home/home-layout';
+import { LibraryHomeRow } from '#web/features/catalog/home/library-home-row.component';
+import { leadId } from '#web/features/catalog/home/home-leads';
+import { useHomeLeads } from '#web/features/catalog/home/use-home-leads.hook';
+import { RouteLink } from '#web/shared/ui/route-link.component';
 import { isAuthed } from '#web/shared/lib/api';
 import { useAuth } from '#web/shared/lib/auth';
 import { useHomeLiveRefresh } from '#web/shared/lib/use-live-refresh.hook';
@@ -27,34 +32,71 @@ export const Route = createFileRoute('/_app/')({
   component: HomePage,
 });
 
+const homeStyles = styles({ frame: { overflowX: 'hidden' } });
+
 function HomePage() {
   useHomeLiveRefresh();
+  const s = useStyles(homeStyles);
+  const { user, ready } = useAuth();
+  const runtime = useWebRuntime();
   return (
-    <PageFrame>
-      <SignedIn fallback={<HeroSkeleton />}>
-        <Suspense fallback={<HeroSkeleton />}>
-          <HeroSlot />
-        </Suspense>
-      </SignedIn>
-      <ContinueRow />
-      <SignedIn fallback={<SectionsSkeleton />}>
-        <Suspense fallback={<SectionsSkeleton />}>
-          <HomeSections />
-        </Suspense>
-      </SignedIn>
+    <PageFrame style={s.frame}>
+      {ready && user ? <AccountHome key={JSON.stringify([runtime.client.baseUrl, user.id])} viewer={user.id} /> : <><HeroSkeleton /><SectionsSkeleton /></>}
     </PageFrame>
   );
 }
 
-function SignedIn({ fallback, children }: Readonly<{ fallback: ReactNode; children: ReactNode }>) {
-  const { user, ready } = useAuth();
-  return ready && user ? children : fallback;
-}
-
-function HeroSlot() {
-  const { data: sections } = useSuspenseQuery(useWebRuntime().queries.userQueries.home());
-  const hero = sections.find((section) => section.layout === 'hero' && section.items.length > 0);
-  return hero ? <HeroCarousel section={hero} /> : <FeaturedHero />;
+function AccountHome({ viewer }: Readonly<{ viewer: string }>) {
+  const t = useT();
+  const runtime = useWebRuntime();
+  const { userQueries } = runtime.queries;
+  const layout = useQuery(userQueries.homeLayout(viewer));
+  const home = useQuery(userQueries.home());
+  const libraries = useQuery(runtime.queries.catalogQueries.libraries(viewer));
+  const slots = orderedModules(homeSlots(home.data ?? [], libraries.isSuccess ? libraries.data : []), layout.data?.order ?? []).filter(({ id }) => !layout.data?.hidden.includes(id));
+  const hero = slots.find((slot) => slot.id === HERO_SLOT)?.section;
+  const spot = slots.find((slot) => slot.section?.layout === 'spotlight')?.section;
+  const discover = useQuery({ ...userQueries.homeDiscovery(viewer), enabled: !!layout.data && !!(hero || spot) });
+  const leads = useHomeLeads(runtime, viewer, hero, spot, discover.data ?? [], !discover.isPending);
+  const onlyContinue = slots.length === 1 && slots[0]?.id === CONTINUE_SLOT;
+  const resume = useQuery({ ...userQueries.continueWatching(), enabled: !!home.data && !!layout.data && onlyContinue });
+  if (!layout.data) {
+    return layout.isError ? (
+      <EmptyState.Root icon="adjustments-horizontal">
+        <EmptyState.Title>{t('account.homeLoadFailed')}</EmptyState.Title>
+        <EmptyState.Actions><Button label={t('error.retry')} onPress={() => void layout.refetch()} /></EmptyState.Actions>
+      </EmptyState.Root>
+    ) : <><HeroSkeleton /><SectionsSkeleton /></>;
+  }
+  if (home.isError && !home.data) throw home.error;
+  if (home.data && (!slots.length || (onlyContinue && resume.data?.length === 0))) {
+    if (libraries.isPending) return <SectionsSkeleton />;
+    if (libraries.isError) return <EmptyState.Root icon="library">
+      <EmptyState.Title>{t('error.serverTitle')}</EmptyState.Title>
+      <EmptyState.Actions><Button label={t('error.retry')} onPress={() => void libraries.refetch()} /></EmptyState.Actions>
+    </EmptyState.Root>;
+    return <EmptyState.Root icon="adjustments-horizontal">
+      <EmptyState.Title>{t('account.homeHidden')}</EmptyState.Title>
+      <EmptyState.Actions><Button label={t('account.homeModules')} asChild><RouteLink to="/account" search={{ section: 'home' }} /></Button></EmptyState.Actions>
+    </EmptyState.Root>;
+  }
+  return <>
+    {slots.map(({ id, section, library }) => {
+      if (library) return <LibraryHomeRow key={id} library={library} viewer={viewer} />;
+      if (id === CONTINUE_SLOT) return <ContinueRow key={id} />;
+      if (id === HERO_SLOT) return (
+        <Suspense key={id} fallback={<HeroSkeleton />}>
+          {!home.data ? <HeroSkeleton /> : leads.hero ? (
+            <HeroCarousel key={JSON.stringify(leads.hero.items.map(leadId))} section={leads.hero} onShuffle={leads.shuffle} />
+          ) : <FeaturedHero />}
+        </Suspense>
+      );
+      if (!section) return null;
+      if (section.layout === 'spotlight') return leads.spotlight && !discover.isPending ? <HomeSectionView key={id} section={leads.spotlight} /> : null;
+      return <HomeSectionView key={id} section={section} />;
+    })}
+    {!home.data && <SectionsSkeleton />}
+  </>;
 }
 
 function FeaturedHero() {

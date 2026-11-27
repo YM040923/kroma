@@ -80,6 +80,7 @@ impl Server {
         Self::at(dir, data_dir, NetworkAction::Direct, folders)
     }
 
+    #[cfg(unix)]
     pub fn behind_an_absolute_link(tag: &str, action: NetworkAction) -> Self {
         let dir = kroma_testing::temp_dir(tag);
         let volume = dir.path().join("volume");
@@ -222,6 +223,7 @@ impl Server {
         rusqlite::Connection::open(self.data_dir.join("kroma.db")).unwrap()
     }
 
+    #[cfg(unix)]
     pub fn core_hearing(&self) -> Heard {
         let socket = self.supervisor.prepare_host_socket().unwrap();
         let heard = Heard::default();
@@ -269,6 +271,10 @@ pub fn place_component(module: &Path, component: &[u8], origin: &str) {
 }
 
 pub fn http_server(body: &'static str) -> (u16, Arc<AtomicUsize>) {
+    http_server_status("200 OK", body)
+}
+
+pub fn http_server_status(status: &'static str, body: &'static str) -> (u16, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let hits = Arc::new(AtomicUsize::new(0));
@@ -280,7 +286,7 @@ pub fn http_server(body: &'static str) -> (u16, Arc<AtomicUsize>) {
             let mut asked = [0u8; 4096];
             let _ = stream.read(&mut asked);
             let answer = format!(
-                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                "HTTP/1.1 {status}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
                 body.len()
             );
             let _ = stream.write_all(answer.as_bytes());

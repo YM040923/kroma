@@ -6,6 +6,8 @@ import { z } from 'zod';
 export const CloudLibrary = z.object({
   remote: z.string(),
   local: z.string(),
+  fastSync: z.boolean().default(true),
+  localDisplay: z.string().default(''),
 });
 export type CloudLibrary = z.infer<typeof CloudLibrary>;
 
@@ -41,10 +43,9 @@ export const FolderView = z.object({
 export type FolderView = z.infer<typeof FolderView>;
 
 export const CloudSettingsView = z.object({
-  hasCookie: z.boolean(),
+  authorized: z.boolean(),
+  appId: z.string(),
   baseUrl: z.string(),
-  /** Where acquisitions land before the organiser classifies them. */
-  transitFolder: z.string().default(''),
   libraries: z.array(CloudLibrary),
   options: CloudOptions,
   libraryFolders: z.array(FolderView),
@@ -52,7 +53,26 @@ export const CloudSettingsView = z.object({
 });
 export type CloudSettingsView = z.infer<typeof CloudSettingsView>;
 
+export const MappingProgress = z.object({
+  remote: z.string(),
+  localDisplay: z.string(),
+  state: z.enum(['queued', 'discovering', 'processing', 'completed', 'partial', 'failed', 'paused', 'interrupted']),
+  discoveredDirs: z.number(),
+  totalDirs: z.number().nullable(),
+  doneDirs: z.number(),
+  files: z.number(),
+  written: z.number(),
+  errorCount: z.number(),
+  errors: z.array(z.object({
+    path: z.string(),
+    stage: z.enum(['list', 'mkdir', 'strm', 'asset', 'metadata', 'budget', 'mapping', 'other']),
+    message: z.string(),
+  })),
+});
+export type MappingProgress = z.infer<typeof MappingProgress>;
+
 export const SyncReport = z.object({
+  mappings: z.array(MappingProgress).optional(),
   startedAt: z.number().nullish(),
   finishedAt: z.number().nullish(),
   current: z.string(),
@@ -73,6 +93,7 @@ export const SyncReport = z.object({
 export type SyncReport = z.infer<typeof SyncReport>;
 
 export const CloudHistoryEntry = z.object({
+  mappings: z.array(MappingProgress).optional(),
   at: z.number(),
   dirs: z.number(),
   files: z.number(),
@@ -82,39 +103,6 @@ export const CloudHistoryEntry = z.object({
   truncated: z.boolean(),
 });
 export type CloudHistoryEntry = z.infer<typeof CloudHistoryEntry>;
-
-export const TransferEntryView = z.object({
-  at: z.number(),
-  code: z.string(),
-  title: z.string(),
-  files: z.number(),
-  ok: z.boolean(),
-  message: z.string(),
-});
-export type TransferEntryView = z.infer<typeof TransferEntryView>;
-
-export const ShareEntryView = z.object({
-  id: z.string(),
-  name: z.string(),
-  isDir: z.boolean(),
-  size: z.number(),
-});
-export type ShareEntryView = z.infer<typeof ShareEntryView>;
-
-export const ShareView = z.object({
-  code: z.string(),
-  password: z.string(),
-  title: z.string(),
-  totalSize: z.number(),
-  entries: z.array(ShareEntryView),
-});
-export type ShareView = z.infer<typeof ShareView>;
-
-export const ReceiveReport = z.object({
-  files: z.number(),
-  message: z.string(),
-});
-export type ReceiveReport = z.infer<typeof ReceiveReport>;
 
 export const ReplaceSample = z.object({
   path: z.string(),
@@ -133,14 +121,17 @@ export const CloudStatusView = z.object({
   linkCache: z.number(),
   soonestLinkSecs: z.number().nullish(),
   pausedSecs: z.number().nullish(),
-  cookieSet: z.boolean(),
+  authorized: z.boolean(),
   baseUrl: z.string(),
   watchEnabled: z.boolean(),
   watchIntervalSecs: z.number(),
-  lastPollAt: z.number(),
-  lastEvents: z.number(),
-  gateOk: z.boolean().nullish(),
-  indexedDirs: z.number(),
+  fastSync: z.object({
+    lastPollAt: z.number(), lastAdded: z.number(), indexedDirs: z.number(), lastError: z.string(),
+    mappings: z.array(z.object({
+      remote: z.string(), state: z.string(), lastCheckedAt: z.number(), lastAdded: z.number(),
+      nextOffset: z.number(), total: z.number().nullable(),
+    })),
+  }),
   lastPlayError: z.string(),
   lastPlayAt: z.number().default(0),
   lastPlayMode: z.string().default(''),
@@ -148,7 +139,6 @@ export const CloudStatusView = z.object({
   playCount: z.number().default(0),
   signCount: z.number().default(0),
   history: z.array(CloudHistoryEntry).default([]),
-  transfers: z.array(TransferEntryView).default([]),
   alias: z.string().default(''),
   dailyCallBudget: z.number().default(0),
   callsToday: z.number().default(0),
@@ -192,14 +182,14 @@ export const LoginStarted = z.object({
   qr: z.string(),
   svg: z.string(),
   status: z.string(),
-  app: z.string(),
+  appId: z.string(),
 });
 export type LoginStarted = z.infer<typeof LoginStarted>;
 
 export const LoginState = z.object({
   status: z.string(),
   message: z.string(),
-  hasCookie: z.boolean(),
+  authorized: z.boolean(),
 });
 export type LoginState = z.infer<typeof LoginState>;
 
@@ -226,10 +216,11 @@ export const RapidView = z.object({
 });
 export type RapidView = z.infer<typeof RapidView>;
 
-export const CookieImported = z.object({ ok: z.boolean(), message: z.string() });
-export type CookieImported = z.infer<typeof CookieImported>;
-
-export const SavedView = z.object({ saved: z.boolean(), errors: z.array(z.string()) });
+export const SavedView = z.object({
+  saved: z.boolean(),
+  errors: z.array(z.string()),
+  restartRequired: z.boolean().default(false),
+});
 export const StartedView = z.object({ started: z.boolean() });
 
 export const BrowseEntry = z.object({

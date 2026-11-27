@@ -92,9 +92,42 @@ function PhotoLightbox({ item, onClose }: Readonly<{ item: MediaItem | null; onC
   );
 }
 
+export function PhotoGrid({ photos, photo, onSelect }: Readonly<{
+  photos: readonly MediaItem[];
+  photo?: string;
+  onSelect?: (id?: string) => void;
+}>) {
+  const { client } = useAuth();
+  const locale = useLocale();
+  const [local, setLocal] = useState<string>();
+  const select = onSelect ?? setLocal;
+  const selected = photos.find(item => item.id === (onSelect ? photo : local)) ?? null;
+  useEffect(() => {
+    if (!selected) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') select(undefined);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [selected, select]);
+  return <>
+    <div style={masonry}>
+      {photos.map((item) => (
+        <button key={item.id} type="button" style={tile} onClick={() => select(item.id)}>
+          <Image src={client.media.artwork.photoUrl(item.id, 520)} alt={item.title} style={photoImage} />
+          <Box px={12} py={10}>
+            <Text variant="meta" numberOfLines={1}>{item.title}</Text>
+            <Text variant="meta" color="textDim" mt={2}>{labelMonth(monthOf(item.addedAt), locale)}</Text>
+          </Box>
+        </button>
+      ))}
+    </div>
+    <PhotoLightbox item={selected} onClose={() => select(undefined)} />
+  </>;
+}
+
 function PhotosPage() {
   const t = useT();
-  const { client } = useAuth();
   const runtime = useWebRuntime();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -110,16 +143,7 @@ function PhotosPage() {
   });
   const { data: allPhotos = [] } = allLibraryPhotos;
   const { data: photos = [], isPending } = libraryPhotos;
-  const [selected, setSelected] = useState<MediaItem | null>(null);
   const locale = useLocale();
-  useEffect(() => {
-    if (!selected) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSelected(null);
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [selected]);
   const months = useMemo(
     () => [...new Set(allPhotos.map((item) => monthOf(item.addedAt)))].sort().reverse(),
     [allPhotos],
@@ -159,7 +183,7 @@ function PhotosPage() {
               active={lib.id === search.library}
               variant="subtle"
               label={lib.name}
-              onPress={() => navigate({ search: (prev) => ({ ...prev, library: lib.id, month: undefined })})}
+              onPress={() => navigate({ search: (prev) => ({ ...prev, library: lib.id, month: undefined }) })}
             />
           ))}
         </Row>
@@ -183,19 +207,7 @@ function PhotosPage() {
           </Row>
         ) : null}
         {photos?.length ? (
-          <div style={masonry}>
-            {photos.map((item) => (
-              <button key={item.id} type="button" style={tile} onClick={() => setSelected(item)}>
-                <Image src={client.media.artwork.photoUrl(item.id, 520)} alt={item.title} style={photoImage} />
-                <Box px={12} py={10}>
-                  <Text variant="meta" numberOfLines={1}>{item.title}</Text>
-                  <Text variant="meta" color="textDim" mt={2}>
-                    {labelMonth(monthOf(item.addedAt), locale)}
-                  </Text>
-                </Box>
-              </button>
-            ))}
-          </div>
+          <PhotoGrid photos={photos} />
         ) : (
           <EmptyState.Root icon="photo">
             <EmptyState.Title>{t('browse.photosEmpty')}</EmptyState.Title>
@@ -203,7 +215,6 @@ function PhotosPage() {
           </EmptyState.Root>
         )}
       </PageFrame>
-      <PhotoLightbox item={selected} onClose={() => setSelected(null)} />
     </>
   );
 }

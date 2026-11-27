@@ -70,7 +70,7 @@ pub fn extract_vtt(
 // Text-subtitle decode is trivial; the cost is the demux read, so one thread
 // keeps this from competing with a live remux for cores.
 fn pass(input: &str, tracks: &[(usize, PathBuf)], tmps: &[PathBuf]) -> Command {
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = kroma_primitives::process::new("ffmpeg");
     cmd.args(["-v", "error", "-nostdin", "-threads", "1", "-y"]);
     cmd.args(input::file(input));
     for ((track, _), tmp) in tracks.iter().zip(tmps) {

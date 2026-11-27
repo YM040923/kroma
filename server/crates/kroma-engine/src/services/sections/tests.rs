@@ -9,6 +9,19 @@ use crate::services::reco::genre::{ANIMATION, COMEDY, FAMILY, HORROR, SCIENCE_FI
 use crate::test_support::{self, now_secs};
 
 #[test]
+fn discovery_has_spares_without_claiming_other_rows_and_respects_visibility() {
+    let state = test_support::test_state();
+    seed_many(&state, "m", 12, &[COMEDY]);
+    let viewer = db::create_user(&state.db, "pool@t.dev", "pool", "h", &[]).unwrap();
+    finish(&state, &viewer.id, "m0");
+    let cards = discovery(&state, &state.db, "en", &viewer, |_, _| true).unwrap();
+    assert_eq!(cards.len(), 11);
+    assert!(cards.iter().all(|card| matches!(card, crate::model::SectionCard::Movie { item } if item.id != "m0")));
+    assert!(discovery(&state, &state.db, "en", &viewer, |_, _| false).unwrap().is_empty());
+    assert!(row(&home(&state, &state.db, "en", &viewer.id), "for-you").is_some());
+}
+
+#[test]
 fn somebody_with_no_history_still_opens_on_a_full_page() {
     let state = test_support::test_state();
     seed_many(&state, "m", 14, &[COMEDY]);

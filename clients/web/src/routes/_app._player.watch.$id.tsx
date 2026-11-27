@@ -1,25 +1,32 @@
+import { loadSession } from '@kromatv/client/accounts';
 import { ItemId } from '@kromatv/client/media';
 import { Box, styles, useStyles } from '@kromatv/ui/kit';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { Player } from '#web/features/playback/player.component';
-import { isAuthed } from '#web/shared/lib/api';
+import { toMovieView } from '#web/shared/lib/api';
 import { useWebRuntime } from '#web/shared/lib/web-runtime';
 
 const sDefinition = styles({ black: { position: 'fixed', inset: 0, bg: 'black' } });
 export const Route = createFileRoute('/_app/_player/watch/$id')({
-  loader: async ({ params, context: { runtime: webRuntime, queryClient } }) => {
-    if (!isAuthed()) {
+  loader: async ({ cause, preload, params, context: { runtime: webRuntime, queryClient } }) => {
+    const session = loadSession();
+    if (!session) {
       throw redirect({ to: '/' });
     }
-    // The next episode (for the Netflix-style "up next" autoplay) is sequence-based
-    // and public, so it loads alongside the item.
-    await queryClient.ensureQueryData(
-      webRuntime.queries.catalogQueries.watch(ItemId.parse(params.id)),
-    );
+    const id = ItemId.parse(params.id);
+    const { catalogQueries } = webRuntime.queries;
+    if (!preload && cause !== 'stay') {
+      void queryClient.prefetchQuery(catalogQueries.resumeProgress(id, session.user.id));
+    }
+    const item = await queryClient.fetchQuery(catalogQueries.item(id));
+    if (item.kind === 'episode') {
+      void queryClient.prefetchQuery(catalogQueries.following(id));
+    }
   },
-  // Player is fullscreen with its own buffering spinner; a black hold beats a
-  // structural skeleton here.
+
+  pendingMs: 0,
+  pendingMinMs: 0,
   pendingComponent: PendingPlayer,
   component: WatchPage,
 });
@@ -28,9 +35,13 @@ function WatchPage() {
   const webRuntime = useWebRuntime();
 
   const id = ItemId.parse(Route.useParams().id);
-  const {
-    data: { item, next, following },
-  } = useSuspenseQuery(webRuntime.queries.catalogQueries.watch(id));
+  const { data: raw } = useSuspenseQuery(webRuntime.queries.catalogQueries.item(id));
+  const item = toMovieView(webRuntime.client, raw);
+  const { data: following = [] } = useQuery({
+    ...webRuntime.queries.catalogQueries.following(id),
+    enabled: item.kind === 'episode',
+  });
+  const next = following[0] ?? null;
   const navigate = useNavigate();
   return (
     <Player

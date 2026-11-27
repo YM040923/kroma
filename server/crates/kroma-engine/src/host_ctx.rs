@@ -84,6 +84,10 @@ impl HostCtx for AppState {
         self.settings.set_patch(&self.db, patch);
     }
 
+    fn commit_selected_folders(&self, module_id: &str, folders: &[String]) -> Result<bool, String> {
+        crate::modules::commit_selected_folders(&self.settings, &self.db, module_id, folders)
+    }
+
     fn publish(&self, event: Event) {
         // Bus wire shape is one flat object: `{ "type": <topic>, ...fields }`.
         let serde_json::Value::Object(mut obj) = event.payload else {

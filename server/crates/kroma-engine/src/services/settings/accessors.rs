@@ -154,6 +154,20 @@ pub struct LibraryDef {
     pub auto_scan: bool,
 }
 
+impl LibraryDef {
+    pub fn catalog_kind(&self, detected: crate::model::LibraryKind) -> crate::model::LibraryKind {
+        use crate::model::LibraryKind;
+        match self.kind.as_str() {
+            "movies" => LibraryKind::Movies,
+            "shows" => LibraryKind::Shows,
+            "mixed" => LibraryKind::Mixed,
+            "photos" | "photo" => LibraryKind::Photos,
+            "other" => LibraryKind::Other,
+            _ => detected,
+        }
+    }
+}
+
 fn default_true() -> bool {
     true
 }

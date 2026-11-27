@@ -7,6 +7,8 @@ import {
   ACCOUNT_SECTIONS,
   type AccountSection,
 } from '#web/features/accounts/account/account-sections';
+import { HomeLayoutCard } from '#web/features/accounts/account/home-layout-card.component';
+import { SidebarLayoutCard } from '#web/features/accounts/account/sidebar-layout-card.component';
 import { IdentitiesCard } from '#web/features/accounts/account/identities-card.component';
 import { NotificationsCard } from '#web/features/accounts/account/notifications-card.component';
 import { PasskeysCard } from '#web/features/accounts/account/passkeys-card.component';
@@ -20,6 +22,8 @@ import { PageFrame } from '#web/shared/ui';
 
 const LABEL: Record<AccountSection, MessageKey> = {
   profile: 'account.profile',
+  home: 'account.homeModules',
+  sidebar: 'account.sidebar',
   preferences: 'account.preferences',
   notifications: 'account.sectionNotifications',
   security: 'account.sectionSecurity',
@@ -28,6 +32,8 @@ const LABEL: Record<AccountSection, MessageKey> = {
 
 const ICON: Record<AccountSection, IconName> = {
   profile: 'user',
+  home: 'home',
+  sidebar: 'layout-sidebar',
   preferences: 'adjustments-horizontal',
   notifications: 'bell',
   security: 'shield-lock',
@@ -102,6 +108,8 @@ export function AccountPage({ section, onSection }: Readonly<AccountPageProps>) 
         {/* Keyed by account id so switching profiles re-seeds every form. */}
         <Box key={user.id} gap={16}>
           {section === 'profile' ? <ProfileSection /> : null}
+          {section === 'home' ? <HomeLayoutCard viewer={user.id} /> : null}
+          {section === 'sidebar' ? <SidebarLayoutCard viewer={user.id} /> : null}
           {section === 'preferences' ? <PreferencesCard /> : null}
           {section === 'notifications' ? <NotificationsCard /> : null}
           {section === 'security' ? (

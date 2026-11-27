@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import type { MovieView } from '#web/shared/lib/api';
 import { useAuth } from '#web/shared/lib/auth';
 import { useWatched } from '#web/shared/lib/watched';
 
 /**
- * Per-user resume + progress persistence for the player. Answers the second the
- * film opened on, and writes progress every 10 s / on pause / on close. The server
+ * Writes per-user progress every 10 s / on pause / on close. The server
  * decides when a position counts as watched and says so in its answer.
  */
 export function useResumeProgress(
@@ -14,34 +13,10 @@ export function useResumeProgress(
   // Offset-aware position from useVideoPlayback; falls back to the raw <video>
   // timeline when omitted (single-stream direct-play).
   position?: { getPosition: () => number },
-): number | null {
+): void {
   const { client, user } = useAuth();
   const viewer = user?.id ?? null;
   const { setWatched, noteWatched } = useWatched();
-  const [resumeAt, setResumeAt] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!viewer) {
-      return undefined;
-    }
-    let cancelled = false;
-    client.playback
-      .itemProgress(item.id)
-      .then((p) => {
-        if (cancelled || !p) {
-          return;
-        }
-        const durMs = p.durationMs ?? item.durationMs ?? 0;
-        const posSec = p.positionMs / 1000;
-        if (posSec > 15 && (!durMs || p.positionMs < durMs * 0.95)) {
-          setResumeAt(posSec);
-        }
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [client, viewer, item.id, item.durationMs]);
 
   const saveProgress = useCallback(() => {
     const v = videoRef.current;
@@ -84,6 +59,4 @@ export function useResumeProgress(
       saveProgress(); // final save when leaving the player
     };
   }, [videoRef, viewer, saveProgress, setWatched, item.id]);
-
-  return resumeAt;
 }

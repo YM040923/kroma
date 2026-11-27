@@ -12,6 +12,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 form_urlencoded = "1"
 http = "1"
+# `process::new` gives the curl child no console window (GUI-subsystem server).
+kroma-primitives = { workspace = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 # curl's header dump goes to a guarded temp file, so a failed spawn leaves none.

@@ -35,7 +35,7 @@ mod tokens;
 mod watch;
 
 pub use asked::{Asked, AskedSink};
-pub use component::{FolderRoots, Folders};
+pub use component::{FolderRoots, Folders, SelectedRoot, SelectedRoots};
 pub use endpoint::Endpoint;
 pub use frontend::Frontend;
 pub use host_api::host_router;
@@ -90,6 +90,12 @@ pub struct Supervisor {
     catalog_cache: RwLock<HashMap<String, (std::time::Instant, Value)>>,
     registry_clients: registry::Clients,
     gateway: gateway::Slot,
+    /// The runtime modules run on, kept apart from the server's own. A module's
+    /// wasm calls sit in `spawn_blocking`, and a host runtime busy with scans,
+    /// ffprobe and TMDB would starve them — the request then waits forever. Its
+    /// own multi-thread runtime (its own worker and blocking pools) keeps a
+    /// module responsive whatever the server is doing.
+    runtime: std::sync::OnceLock<Arc<tokio::runtime::Runtime>>,
     wasm: std::sync::OnceLock<kroma_wasm_host::WasmHost>,
     worker_lifetime: RwLock<std::time::Duration>,
     watching: std::sync::OnceLock<AskedSink>,
@@ -115,6 +121,7 @@ impl Supervisor {
             catalog_cache: RwLock::new(HashMap::new()),
             registry_clients: registry::Clients::default(),
             gateway: gateway::Slot::new(),
+            runtime: std::sync::OnceLock::new(),
             wasm: std::sync::OnceLock::new(),
             worker_lifetime: RwLock::new(component::WORKER_LIFETIME),
             watching: std::sync::OnceLock::new(),

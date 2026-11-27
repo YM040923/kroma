@@ -79,9 +79,31 @@ impl SeamSocket {
 
     #[cfg(not(unix))]
     pub fn serve(&self, app: axum::Router) -> Option<Served> {
-        let listener = self.bound.as_ref()?.try_clone().ok()?;
-        let listener = tokio::net::TcpListener::from_std(listener).ok()?;
+        let Some(bound) = self.bound.as_ref() else {
+            tracing::error!("the module seam cannot serve: nothing was bound");
+            return None;
+        };
+        let listener = match bound.try_clone() {
+            Ok(listener) => listener,
+            Err(error) => {
+                tracing::error!("the module seam cannot serve: cloning its listener failed: {error}");
+                return None;
+            }
+        };
+        if let Err(error) = listener.set_nonblocking(true) {
+            tracing::error!("the module seam cannot serve: non-blocking mode failed: {error}");
+            return None;
+        }
+        let listener = match tokio::net::TcpListener::from_std(listener) {
+            Ok(listener) => listener,
+            Err(error) => {
+                tracing::error!("the module seam cannot serve: handing it to tokio failed: {error}");
+                return None;
+            }
+        };
+        let address = listener.local_addr().ok();
         Some(Served(tokio::spawn(async move {
+            tracing::info!(?address, "the module seam is accepting");
             if let Err(e) = axum::serve(listener, app).await {
                 tracing::error!("the module seam stopped serving: {e}");
             }

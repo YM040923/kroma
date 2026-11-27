@@ -115,6 +115,13 @@ it('stays quiet when the server is already up to date', async () => {
   expect(screen.queryByRole('link')).toBeNull();
 });
 
+it('does not announce old channel data on the Windows package edition', async () => {
+  mocks.updates.mockResolvedValue({ ...status(), updateSource: 'windows-package' });
+  show();
+  await waitFor(() => expect(queryClient.getQueryState(['admin', 'updates'])?.status).toBe('success'));
+  expect(screen.queryByRole('link')).toBeNull();
+});
+
 it('keeps the library usable when the status request fails', async () => {
   mocks.updates.mockRejectedValue(new TypeError('offline'));
   show();
